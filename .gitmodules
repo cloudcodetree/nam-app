@@ -1,0 +1,3 @@
+[submodule "extern/NeuralAudio"]
+	path = extern/NeuralAudio
+	url = https://github.com/mikeoliphant/NeuralAudio
