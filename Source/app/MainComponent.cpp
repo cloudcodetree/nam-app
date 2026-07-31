@@ -6,7 +6,11 @@ MainComponent::MainComponent() {
     deviceManager_.addAudioCallback(&adapter_);
     adapter_.onDeviceChanged = [this](int sr, int mb) {
         // Message-thread reload so the model is re-baked at the device sample rate.
-        juce::MessageManager::callAsync([this, sr, mb]{ reloadCurrentModelAt(sr, mb); });
+        juce::Component::SafePointer<MainComponent> safe(this);
+        juce::MessageManager::callAsync([safe, sr, mb]{
+            if (auto* self = safe.getComponent())
+                self->reloadCurrentModelAt(sr, mb);
+        });
     };
 
     addAndMakeVisible(selector_);
@@ -29,6 +33,7 @@ MainComponent::MainComponent() {
 }
 
 MainComponent::~MainComponent() {
+    stopTimer();
     deviceManager_.removeAudioCallback(&adapter_);
 }
 
@@ -48,11 +53,14 @@ void MainComponent::loadButtonClicked() {
                                 juce::dontSendNotification);
             host_.requestLoad(currentModelPath_.toStdString(),
                 [this, name = f.getFileName()](std::shared_ptr<nam::NamModel> m) {
-                    juce::MessageManager::callAsync([this, m, name]{
-                        engine_.setModel(m);
-                        modelLabel_.setText(m ? ("Loaded: " + name)
-                                              : ("Failed to load " + name),
-                                            juce::dontSendNotification);
+                    juce::Component::SafePointer<MainComponent> safe(this);
+                    juce::MessageManager::callAsync([safe, m, name]{
+                        if (auto* self = safe.getComponent()) {
+                            self->engine_.setModel(m);
+                            self->modelLabel_.setText(m ? ("Loaded: " + name)
+                                                  : ("Failed to load " + name),
+                                                juce::dontSendNotification);
+                        }
                     });
                 });
         });
@@ -63,7 +71,11 @@ void MainComponent::reloadCurrentModelAt(int sampleRate, int maxBlock) {
     host_.configure(sampleRate, maxBlock);
     host_.requestLoad(currentModelPath_.toStdString(),
         [this](std::shared_ptr<nam::NamModel> m) {
-            juce::MessageManager::callAsync([this, m]{ engine_.setModel(m); });
+            juce::Component::SafePointer<MainComponent> safe(this);
+            juce::MessageManager::callAsync([safe, m]{
+                if (auto* self = safe.getComponent())
+                    self->engine_.setModel(m);
+            });
         });
 }
 
