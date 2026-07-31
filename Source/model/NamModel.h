@@ -17,11 +17,15 @@ public:
     float recommendedInputDb()  const { return inputDb_; }
     float recommendedOutputDb() const { return outputDb_; }
     int   sampleRate() const { return sampleRate_; }
+    // Max block this model instance was loaded/prepared with (SetMaxAudioBufferSize).
+    // Plain int read - lock-free, safe to call on the audio thread.
+    int   maxBlock() const { return maxBlock_; }
 
 private:
     NamModel() = default;
     void* model_ = nullptr;   // NeuralAudio::NeuralModel* (opaque to keep header JUCE/dep-free)
     int   sampleRate_ = 0;
+    int   maxBlock_ = 0;
     float inputDb_  = 0.0f;
     float outputDb_ = 0.0f;
 };

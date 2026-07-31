@@ -1,4 +1,5 @@
 #include "dsp/ToneEngine.h"
+#include <algorithm>
 #include <atomic>
 
 namespace dsp {
@@ -37,7 +38,15 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
         // must be <= the maxBlock passed to prepare(); guard defensively
         // against a caller violating that contract so we never overflow
         // scratch_ (heap-overflow found by review).
-        const int n = numSamples <= (int) scratch_.size() ? numSamples : (int) scratch_.size();
+        //
+        // Additionally clamp to the ACTIVE MODEL's own prepared max block:
+        // prepare() can resize scratch_ larger (e.g. device buffer size
+        // increased) before the async model reload completes, leaving an
+        // old model - still prepared/asserting on a smaller maxBlock -
+        // active. NAM-core (non-internal) models do not chunk internally
+        // and will write out of bounds if fed more than their prepared
+        // capacity, so scratch_'s size alone is not a sufficient bound.
+        const int n = std::min({numSamples, (int) scratch_.size(), m->maxBlock()});
 
         for (int i = 0; i < n; ++i)
             scratch_[i] = inGain_.applyNext(in[i]);

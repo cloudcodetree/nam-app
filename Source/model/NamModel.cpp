@@ -24,6 +24,7 @@ std::unique_ptr<NamModel> NamModel::load(const std::string& path,
         std::unique_ptr<NamModel> m(new NamModel());
         m->model_      = raw;
         m->sampleRate_ = sampleRate;
+        m->maxBlock_   = maxBlock;
         m->inputDb_    = raw->GetRecommendedInputDBAdjustment();
         m->outputDb_   = raw->GetRecommendedOutputDBAdjustment();
         return m;

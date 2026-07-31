@@ -65,3 +65,29 @@ TEST_CASE("ToneEngine handles numSamples greater than maxBlock and reclaims reti
     e.render(in.data(), out.data(), 256);
     for (float v : out) REQUIRE(std::isfinite(v));
 }
+
+TEST_CASE("ToneEngine clamps render to the active model's max block during a buffer-size increase") {
+    // Reproduces the hazardous window: prepare() resizes scratch_ for a new
+    // (larger) device buffer size immediately, but the model reload is
+    // asynchronous, so the OLD model - still prepared/asserting on the
+    // SMALLER maxBlock - remains active for a short time. render() must not
+    // feed that model more frames than it was prepared for.
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
+
+    auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m != nullptr);
+    REQUIRE(m->maxBlock() == 128);
+    e.setModel(std::move(m));
+
+    // Simulate a device buffer-size increase without reloading the model:
+    // prepare() clears retired_ and resizes scratch_ to 512, but does NOT
+    // change the active model, so the old 128-capacity model stays active.
+    e.prepare(48000, 512);
+
+    std::vector<float> in(512), out(512);
+    for (int i = 0; i < 512; ++i) in[i] = 0.05f * std::sin(i * 0.2f);
+
+    e.render(in.data(), out.data(), 512);
+    for (float v : out) REQUIRE(std::isfinite(v));
+}
