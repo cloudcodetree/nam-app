@@ -20,6 +20,7 @@ juce_add_gui_app(NamPlayer PRODUCT_NAME "NAM Player")
 target_compile_features(NamPlayer PRIVATE cxx_std_17)
 target_sources(NamPlayer PRIVATE
     Source/app/AudioDeviceCallbackAdapter.cpp
+    Source/app/MainComponent.cpp
     Source/dsp/ToneEngine.cpp
     Source/model/NamModel.cpp
     Source/model/ModelHost.cpp)
