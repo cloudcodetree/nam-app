@@ -18,6 +18,11 @@ public:
     float applyNext(float x) {
         const float tgt = target_.load(std::memory_order_relaxed);
         current_ = tgt + coeff_ * (current_ - tgt);
+        // Anti-denormal flush: during long silence current_ can decay into
+        // subnormal territory, which is extremely slow on some FPUs. This
+        // add/subtract round-trip is a no-op numerically but forces the
+        // value back to zero/normal range instead of lingering subnormal.
+        current_ += 1.0e-20f; current_ -= 1.0e-20f;
         return x * current_;
     }
 private:
