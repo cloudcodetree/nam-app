@@ -18,7 +18,10 @@ target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/model/NamModel.cpp)
 target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/dsp/ToneEngine.cpp)
 target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/model/ModelHost.cpp)
 target_compile_definitions(nam_tests PRIVATE
-    NAM_FIXTURE_A2="${CMAKE_SOURCE_DIR}/tests/fixtures/example_a2.nam")
+    NAM_FIXTURE_A2="${CMAKE_SOURCE_DIR}/tests/fixtures/example_a2.nam"
+    # A real A2 amp capture (SlimmableContainer architecture) for auditioning
+    # and for regression coverage of the production A2 format.
+    NAM_MODEL_A2_REAL="${CMAKE_SOURCE_DIR}/models/A2.nam")
 
 include(CTest)
 include(Catch)
