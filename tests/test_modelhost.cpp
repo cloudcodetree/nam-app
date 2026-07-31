@@ -1,6 +1,8 @@
 #include <catch2/catch_all.hpp>
 #include <future>
 #include <chrono>
+#include <fstream>
+#include <filesystem>
 #include "model/ModelHost.h"
 
 TEST_CASE("ModelHost loadNow succeeds on valid file") {
@@ -26,4 +28,26 @@ TEST_CASE("ModelHost requestLoad eventually calls back") {
     auto fut = done.get_future();
     REQUIRE(fut.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
     REQUIRE(fut.get() == true);
+}
+
+TEST_CASE("ModelHost surfaces nullptr and does not crash on a corrupt file") {
+    auto path = std::filesystem::temp_directory_path() / "nam_corrupt_test.nam";
+    {
+        std::ofstream f(path, std::ios::binary | std::ios::trunc);
+        f << "this is not valid json / nam model content {{{";
+    }
+
+    nam::ModelHost host; host.configure(48000, 128);
+    bool called = false; std::shared_ptr<nam::NamModel> got;
+    host.loadNow(path.string(), [&](auto m){ called = true; got = m; });
+    REQUIRE(called);
+    REQUIRE(got == nullptr);
+
+    std::promise<bool> done;
+    host.requestLoad(path.string(), [&](auto m){ done.set_value(m != nullptr); });
+    auto fut = done.get_future();
+    REQUIRE(fut.wait_for(std::chrono::seconds(10)) == std::future_status::ready);
+    REQUIRE(fut.get() == false);
+
+    std::filesystem::remove(path);
 }

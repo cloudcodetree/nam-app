@@ -1,6 +1,8 @@
 #include <catch2/catch_all.hpp>
 #include <cmath>
 #include <vector>
+#include <fstream>
+#include <filesystem>
 #include "model/NamModel.h"
 
 using Catch::Approx;
@@ -18,6 +20,19 @@ TEST_CASE("NamModel loads a valid A2 file") {
 TEST_CASE("NamModel returns nullptr on bad path") {
     auto m = nam::NamModel::load("does/not/exist.nam", 48000, 128);
     REQUIRE(m == nullptr);
+}
+
+TEST_CASE("NamModel returns nullptr on a corrupt existing file") {
+    auto path = std::filesystem::temp_directory_path() / "nam_corrupt_test.nam";
+    {
+        std::ofstream f(path, std::ios::binary | std::ios::trunc);
+        f << "this is not valid json / nam model content {{{";
+    }
+
+    auto m = nam::NamModel::load(path.string(), 48000, 128);
+    REQUIRE(m == nullptr);
+
+    std::filesystem::remove(path);
 }
 
 TEST_CASE("NamModel processing is deterministic") {
