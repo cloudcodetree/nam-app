@@ -8,8 +8,10 @@ MainComponent::MainComponent() {
         // Message-thread reload so the model is re-baked at the device sample rate.
         juce::Component::SafePointer<MainComponent> safe(this);
         juce::MessageManager::callAsync([safe, sr, mb]{
-            if (auto* self = safe.getComponent())
+            if (auto* self = safe.getComponent()) {
                 self->reloadCurrentModelAt(sr, mb);
+                self->reloadCurrentIrAt(sr);
+            }
         });
     };
 
@@ -74,20 +76,22 @@ MainComponent::~MainComponent() {
 void MainComponent::loadButtonClicked() {
     chooser_ = std::make_unique<juce::FileChooser>(
         "Select a NAM model", juce::File{}, "*.nam");
+    juce::Component::SafePointer<MainComponent> safe(this);
     chooser_->launchAsync(juce::FileBrowserComponent::openMode
                         | juce::FileBrowserComponent::canSelectFiles,
-        [this](const juce::FileChooser& fc) {
+        [safe](const juce::FileChooser& fc) {
+            auto* self = safe.getComponent();
+            if (self == nullptr) return;
             auto f = fc.getResult();
             if (f == juce::File{}) return;
-            currentModelPath_ = f.getFullPathName();
-            auto* dev = deviceManager_.getCurrentAudioDevice();
-            host_.configure(dev ? (int) dev->getCurrentSampleRate() : 48000,
+            self->currentModelPath_ = f.getFullPathName();
+            auto* dev = self->deviceManager_.getCurrentAudioDevice();
+            self->host_.configure(dev ? (int) dev->getCurrentSampleRate() : 48000,
                             dev ? dev->getCurrentBufferSizeSamples() : 128);
-            modelLabel_.setText("Loading " + f.getFileName() + "...",
+            self->modelLabel_.setText("Loading " + f.getFileName() + "...",
                                 juce::dontSendNotification);
-            host_.requestLoad(currentModelPath_.toStdString(),
-                [this, name = f.getFileName()](std::shared_ptr<nam::NamModel> m) {
-                    juce::Component::SafePointer<MainComponent> safe(this);
+            self->host_.requestLoad(self->currentModelPath_.toStdString(),
+                [safe, name = f.getFileName()](std::shared_ptr<nam::NamModel> m) {
                     juce::MessageManager::callAsync([safe, m, name]{
                         if (auto* self = safe.getComponent()) {
                             self->engine_.setModel(m);
@@ -103,24 +107,26 @@ void MainComponent::loadButtonClicked() {
 void MainComponent::loadIrClicked() {
     irChooser_ = std::make_unique<juce::FileChooser>(
         "Select a cab IR", juce::File{}, "*.wav");
+    juce::Component::SafePointer<MainComponent> safe(this);
     irChooser_->launchAsync(juce::FileBrowserComponent::openMode
                         | juce::FileBrowserComponent::canSelectFiles,
-        [this](const juce::FileChooser& fc) {
+        [safe](const juce::FileChooser& fc) {
+            auto* self = safe.getComponent();
+            if (self == nullptr) return;
             auto f = fc.getResult();
             if (f == juce::File{}) return;
-            currentIrPath_ = f.getFullPathName();
-            auto* dev = deviceManager_.getCurrentAudioDevice();
+            self->currentIrPath_ = f.getFullPathName();
+            auto* dev = self->deviceManager_.getCurrentAudioDevice();
             const int sr = dev ? (int) dev->getCurrentSampleRate() : 48000;
 
             // IR files are tiny, so loading synchronously here (already off
             // the UI paint path, inside the async chooser callback) is fine.
-            auto ir = nam::loadImpulseResponse(currentIrPath_.toStdString(), sr, dsp::kMaxIrTaps);
+            auto ir = nam::loadImpulseResponse(self->currentIrPath_.toStdString(), sr, dsp::kMaxIrTaps);
 
-            juce::Component::SafePointer<MainComponent> safe(this);
             juce::MessageManager::callAsync([safe, ir, name = f.getFileName()]{
-                if (auto* self = safe.getComponent()) {
-                    self->engine_.setImpulse(ir);
-                    self->irLabel_.setText(ir ? ("Loaded: " + name)
+                if (auto* self2 = safe.getComponent()) {
+                    self2->engine_.setImpulse(ir);
+                    self2->irLabel_.setText(ir ? ("Loaded: " + name)
                                           : ("Failed to load " + name),
                                         juce::dontSendNotification);
                 }
@@ -139,6 +145,12 @@ void MainComponent::reloadCurrentModelAt(int sampleRate, int maxBlock) {
                     self->engine_.setModel(m);
             });
         });
+}
+
+void MainComponent::reloadCurrentIrAt(int sampleRate) {
+    if (currentIrPath_.isEmpty()) return;
+    auto ir = nam::loadImpulseResponse(currentIrPath_.toStdString(), sampleRate, dsp::kMaxIrTaps);
+    engine_.setImpulse(ir);
 }
 
 void MainComponent::timerCallback() {

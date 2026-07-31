@@ -21,6 +21,7 @@ private:
     void loadIrClicked();
     void timerCallback() override;          // repaint meter + latency + telemetry
     void reloadCurrentModelAt(int sampleRate, int maxBlock);
+    void reloadCurrentIrAt(int sampleRate);
 
     juce::AudioDeviceManager deviceManager_;
     dsp::ToneEngine engine_;
