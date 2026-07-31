@@ -40,9 +40,13 @@ TEST_CASE("NamModel silence in stays bounded") {
     // NOTE: this fixture (wavenet_a2_max.nam) is a synthetic A2 conformance
     // test model (its own metadata: "meant as a 'test case' ... generated
     // WaveNet model"), not a trained amp capture. Measured behavior for
-    // silence-in is a stable, deterministic ~9.27 DC bias (verified via a
+    // silence-in is a stable, deterministic DC bias (verified via a
     // standalone NeuralAudio diagnostic outside this wrapper), not a runaway.
-    // The bound below is set with headroom above that observed value; the
-    // real "doesn't blow up" guarantee is the isfinite check above.
-    for (float v : out) REQUIRE(std::abs(v) < 15.0f);
+    // This is a characterization assertion: it pins that exact deterministic
+    // constant (measured as 9.26655483f) with a tight tolerance, so any
+    // regression that perturbs the fixture's behavior is caught, while the
+    // isfinite check above remains the "doesn't blow up" guarantee.
+    constexpr float kExpectedSilenceDcBias = 9.26655f;
+    constexpr float kTolerance = 0.05f;
+    for (float v : out) REQUIRE(std::abs(v - kExpectedSilenceDcBias) < kTolerance);
 }
