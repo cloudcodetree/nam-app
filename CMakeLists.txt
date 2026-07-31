@@ -16,7 +16,12 @@ FetchContent_MakeAvailable(JUCE)
 add_subdirectory(extern/NeuralAudio)
 
 # --- App target ---
-juce_add_gui_app(NamPlayer PRODUCT_NAME "NAM Player")
+juce_add_gui_app(NamPlayer
+    PRODUCT_NAME "NAM Player"
+    # Required so macOS/iOS grant audio-input (guitar) access; without a
+    # microphone usage description the OS terminates the app on input open.
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "NAM Player needs audio input access to process your guitar signal in real time.")
 target_compile_features(NamPlayer PRIVATE cxx_std_17)
 target_sources(NamPlayer PRIVATE
     Source/app/AudioDeviceCallbackAdapter.cpp
