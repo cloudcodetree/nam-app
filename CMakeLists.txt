@@ -39,8 +39,9 @@ target_sources(NamPlayer PRIVATE
     Source/app/Main.cpp
     Source/dsp/ToneEngine.cpp
     Source/model/NamModel.cpp
-    Source/model/ModelHost.cpp)
-target_include_directories(NamPlayer PRIVATE Source)
+    Source/model/ModelHost.cpp
+    Source/model/IrLoader.cpp)
+target_include_directories(NamPlayer PRIVATE Source ${CMAKE_SOURCE_DIR}/extern/dr_wav)
 target_link_libraries(NamPlayer PRIVATE
     NeuralAudio
     melatonin_inspector

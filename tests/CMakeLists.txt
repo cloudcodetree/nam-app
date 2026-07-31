@@ -13,9 +13,11 @@ add_executable(nam_tests
     test_modelhost.cpp
     test_noisegate.cpp
     test_toneeq.cpp
-    test_ircab.cpp)
+    test_ircab.cpp
+    test_irloader.cpp
+    ${CMAKE_SOURCE_DIR}/Source/model/IrLoader.cpp)
 target_compile_features(nam_tests PRIVATE cxx_std_17)
-target_include_directories(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source)
+target_include_directories(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/extern/dr_wav)
 target_link_libraries(nam_tests PRIVATE NeuralAudio Catch2::Catch2WithMain)
 target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/model/NamModel.cpp)
 target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/dsp/ToneEngine.cpp)
