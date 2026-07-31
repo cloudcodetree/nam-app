@@ -8,8 +8,10 @@ MainComponent::MainComponent() {
         // Message-thread reload so the model is re-baked at the device sample rate.
         juce::Component::SafePointer<MainComponent> safe(this);
         juce::MessageManager::callAsync([safe, sr, mb]{
-            if (auto* self = safe.getComponent())
+            if (auto* self = safe.getComponent()) {
                 self->reloadCurrentModelAt(sr, mb);
+                self->reloadCurrentIrAt(sr);
+            }
         });
     };
 
@@ -34,8 +36,36 @@ MainComponent::MainComponent() {
     outGain_.onValueChange = [this]{ engine_.setOutputDb((float) outGain_.getValue()); };
 
     loadButton_.onClick = [this]{ loadButtonClicked(); };
+
+    // Noise gate.
+    addAndMakeVisible(gateEnable_); gateEnable_.setButtonText("Gate");
+    gateEnable_.onClick = [this]{ engine_.setGateEnabled(gateEnable_.getToggleState()); };
+    gateThresh_.setSliderStyle(juce::Slider::LinearHorizontal);
+    gateThresh_.setRange(-80.0, 0.0, 0.5); gateThresh_.setValue(-60.0);
+    gateThresh_.setTextValueSuffix(" dB"); addAndMakeVisible(gateThresh_);
+    gateThresh_.onValueChange = [this]{ engine_.setGateThresholdDb((float) gateThresh_.getValue()); };
+
+    // 3-band EQ.
+    addAndMakeVisible(eqEnable_); eqEnable_.setButtonText("EQ");
+    eqEnable_.onClick = [this]{ engine_.setEqEnabled(eqEnable_.getToggleState()); };
+    for (auto* s : { &eqLow_, &eqMid_, &eqHigh_ }) {
+        s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        s->setRange(-12.0, 12.0, 0.1); s->setValue(0.0);
+        s->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 48, 16);
+        addAndMakeVisible(*s);
+    }
+    eqLow_.onValueChange  = [this]{ engine_.setLowDb((float) eqLow_.getValue()); };
+    eqMid_.onValueChange  = [this]{ engine_.setMidDb((float) eqMid_.getValue()); };
+    eqHigh_.onValueChange = [this]{ engine_.setHighDb((float) eqHigh_.getValue()); };
+
+    // IR cab.
+    addAndMakeVisible(irEnable_); irEnable_.setButtonText("Cab IR");
+    irEnable_.onClick = [this]{ engine_.setIrEnabled(irEnable_.getToggleState()); };
+    addAndMakeVisible(loadIrButton_); addAndMakeVisible(irLabel_);
+    loadIrButton_.onClick = [this]{ loadIrClicked(); };
+
     startTimerHz(15);
-    setSize(560, 640);
+    setSize(560, 900);
 }
 
 MainComponent::~MainComponent() {
@@ -46,20 +76,22 @@ MainComponent::~MainComponent() {
 void MainComponent::loadButtonClicked() {
     chooser_ = std::make_unique<juce::FileChooser>(
         "Select a NAM model", juce::File{}, "*.nam");
+    juce::Component::SafePointer<MainComponent> safe(this);
     chooser_->launchAsync(juce::FileBrowserComponent::openMode
                         | juce::FileBrowserComponent::canSelectFiles,
-        [this](const juce::FileChooser& fc) {
+        [safe](const juce::FileChooser& fc) {
+            auto* self = safe.getComponent();
+            if (self == nullptr) return;
             auto f = fc.getResult();
             if (f == juce::File{}) return;
-            currentModelPath_ = f.getFullPathName();
-            auto* dev = deviceManager_.getCurrentAudioDevice();
-            host_.configure(dev ? (int) dev->getCurrentSampleRate() : 48000,
+            self->currentModelPath_ = f.getFullPathName();
+            auto* dev = self->deviceManager_.getCurrentAudioDevice();
+            self->host_.configure(dev ? (int) dev->getCurrentSampleRate() : 48000,
                             dev ? dev->getCurrentBufferSizeSamples() : 128);
-            modelLabel_.setText("Loading " + f.getFileName() + "...",
+            self->modelLabel_.setText("Loading " + f.getFileName() + "...",
                                 juce::dontSendNotification);
-            host_.requestLoad(currentModelPath_.toStdString(),
-                [this, name = f.getFileName()](std::shared_ptr<nam::NamModel> m) {
-                    juce::Component::SafePointer<MainComponent> safe(this);
+            self->host_.requestLoad(self->currentModelPath_.toStdString(),
+                [safe, name = f.getFileName()](std::shared_ptr<nam::NamModel> m) {
                     juce::MessageManager::callAsync([safe, m, name]{
                         if (auto* self = safe.getComponent()) {
                             self->engine_.setModel(m);
@@ -69,6 +101,36 @@ void MainComponent::loadButtonClicked() {
                         }
                     });
                 });
+        });
+}
+
+void MainComponent::loadIrClicked() {
+    irChooser_ = std::make_unique<juce::FileChooser>(
+        "Select a cab IR", juce::File{}, "*.wav");
+    juce::Component::SafePointer<MainComponent> safe(this);
+    irChooser_->launchAsync(juce::FileBrowserComponent::openMode
+                        | juce::FileBrowserComponent::canSelectFiles,
+        [safe](const juce::FileChooser& fc) {
+            auto* self = safe.getComponent();
+            if (self == nullptr) return;
+            auto f = fc.getResult();
+            if (f == juce::File{}) return;
+            self->currentIrPath_ = f.getFullPathName();
+            auto* dev = self->deviceManager_.getCurrentAudioDevice();
+            const int sr = dev ? (int) dev->getCurrentSampleRate() : 48000;
+
+            // IR files are tiny, so loading synchronously here (already off
+            // the UI paint path, inside the async chooser callback) is fine.
+            auto ir = nam::loadImpulseResponse(self->currentIrPath_.toStdString(), sr, dsp::kMaxIrTaps);
+
+            juce::MessageManager::callAsync([safe, ir, name = f.getFileName()]{
+                if (auto* self2 = safe.getComponent()) {
+                    self2->engine_.setImpulse(ir);
+                    self2->irLabel_.setText(ir ? ("Loaded: " + name)
+                                          : ("Failed to load " + name),
+                                        juce::dontSendNotification);
+                }
+            });
         });
 }
 
@@ -83,6 +145,12 @@ void MainComponent::reloadCurrentModelAt(int sampleRate, int maxBlock) {
                     self->engine_.setModel(m);
             });
         });
+}
+
+void MainComponent::reloadCurrentIrAt(int sampleRate) {
+    if (currentIrPath_.isEmpty()) return;
+    auto ir = nam::loadImpulseResponse(currentIrPath_.toStdString(), sampleRate, dsp::kMaxIrTaps);
+    engine_.setImpulse(ir);
 }
 
 void MainComponent::timerCallback() {
@@ -147,6 +215,36 @@ void MainComponent::resized() {
     inGain_.setBounds(r.removeFromTop(32));
     outGain_.setBounds(r.removeFromTop(32));
     r.removeFromTop(8);
+
+    // Noise gate row.
+    {
+        auto row = r.removeFromTop(32);
+        gateEnable_.setBounds(row.removeFromLeft(80));
+        gateThresh_.setBounds(row);
+    }
+    r.removeFromTop(8);
+
+    // EQ row: enable + 3 rotary knobs.
+    {
+        auto row = r.removeFromTop(90);
+        eqEnable_.setBounds(row.removeFromLeft(80));
+        const int knobW = row.getWidth() / 3;
+        eqLow_.setBounds(row.removeFromLeft(knobW));
+        eqMid_.setBounds(row.removeFromLeft(knobW));
+        eqHigh_.setBounds(row);
+    }
+    r.removeFromTop(8);
+
+    // IR cab row.
+    {
+        auto row = r.removeFromTop(32);
+        irEnable_.setBounds(row.removeFromLeft(80));
+        loadIrButton_.setBounds(row.removeFromLeft(140));
+        row.removeFromLeft(8);
+        irLabel_.setBounds(row);
+    }
+    r.removeFromTop(8);
+
     meterBounds_ = r.removeFromTop(22);
     statsLabel_.setBounds(r.removeFromTop(22));
 #if JUCE_DEBUG

@@ -1,7 +1,9 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "dsp/ToneEngine.h"
+#include "dsp/IrCab.h"
 #include "model/ModelHost.h"
+#include "model/IrLoader.h"
 #include "app/AudioDeviceCallbackAdapter.h"
 
 #if JUCE_DEBUG
@@ -16,8 +18,10 @@ public:
     void paint(juce::Graphics&) override;
 private:
     void loadButtonClicked();
+    void loadIrClicked();
     void timerCallback() override;          // repaint meter + latency + telemetry
     void reloadCurrentModelAt(int sampleRate, int maxBlock);
+    void reloadCurrentIrAt(int sampleRate);
 
     juce::AudioDeviceManager deviceManager_;
     dsp::ToneEngine engine_;
@@ -33,6 +37,21 @@ private:
     juce::Label      statsLabel_;             // peak / load / blocks / xruns
     std::unique_ptr<juce::FileChooser> chooser_;
     juce::String currentModelPath_;
+
+    // Noise gate.
+    juce::ToggleButton gateEnable_;
+    juce::Slider       gateThresh_;
+
+    // 3-band EQ.
+    juce::ToggleButton eqEnable_;
+    juce::Slider       eqLow_, eqMid_, eqHigh_;
+
+    // IR cab.
+    juce::ToggleButton irEnable_;
+    juce::TextButton   loadIrButton_ { "Load IR (.wav)" };
+    juce::Label        irLabel_ { {}, "No IR" };
+    std::unique_ptr<juce::FileChooser> irChooser_;
+    juce::String currentIrPath_;
 
     // UI-thread meter state (read from engine telemetry each timer tick).
     juce::Rectangle<int> meterBounds_;

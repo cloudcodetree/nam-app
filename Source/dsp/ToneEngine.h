@@ -4,6 +4,9 @@
 #include <memory>
 #include <vector>
 #include "dsp/Gain.h"
+#include "dsp/NoiseGate.h"
+#include "dsp/IrCab.h"
+#include "dsp/ToneEq.h"
 #include "model/NamModel.h"
 
 namespace dsp {
@@ -13,6 +16,17 @@ public:
     void setModel(std::shared_ptr<nam::NamModel> m);  // hand-off (see .cpp)
     void setInputDb(float db)  { inGain_.setDb(db); }
     void setOutputDb(float db) { outGain_.setDb(db); }
+
+    // Signal-chain stage controls (forward to the nodes).
+    void setGateEnabled(bool on)        { gate_.setEnabled(on); }
+    void setGateThresholdDb(float db)   { gate_.setThresholdDb(db); }
+    void setIrEnabled(bool on)          { irCab_.setEnabled(on); }
+    void setImpulse(std::shared_ptr<const std::vector<float>> ir) { irCab_.setImpulse(std::move(ir)); }
+    void setEqEnabled(bool on)          { eq_.setEnabled(on); }
+    void setLowDb(float db)  { eq_.setLowDb(db); }
+    void setMidDb(float db)  { eq_.setMidDb(db); }
+    void setHighDb(float db) { eq_.setHighDb(db); }
+
     // Real-time safe. Mono in -> mono out. May be called with model==null.
     // Contract: prepare(maxBlock) must be called before render(), and every
     // render() call must have numSamples <= maxBlock.
@@ -28,6 +42,9 @@ public:
     uint64_t blockCount()        const { return blockCount_.load(std::memory_order_relaxed); } // total render() calls
 private:
     Gain inGain_, outGain_;
+    NoiseGate gate_;
+    IrCab     irCab_;
+    ToneEq    eq_;
 
     // --- RT-safe model ownership contract ---------------------------------
     // The audio thread must never touch a std::shared_ptr's control block

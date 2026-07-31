@@ -17,6 +17,10 @@ void ToneEngine::prepare(int sampleRate, int maxBlock) {
     // be concurrently reading a retired raw pointer. Dropping these
     // shared_ptrs may run ~NamModel, but that happens on the control thread.
     retired_.clear();
+
+    gate_.prepare(sampleRate);
+    irCab_.prepare(sampleRate, maxBlock);
+    eq_.prepare(sampleRate);
 }
 
 void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
@@ -38,7 +42,7 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
 
     nam::NamModel* m = active_.load(std::memory_order_acquire);
     if (m) {
-        // Signal order: input gain -> model -> output gain.
+        // Signal order: input gain -> gate -> model -> IR cab -> EQ -> output gain.
         // scratch_ is preallocated in prepare() so this stays
         // allocation-free on the audio thread. Contract: numSamples
         // must be <= the maxBlock passed to prepare(); guard defensively
@@ -59,18 +63,28 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
         if (n < numSamples)
             overCap_.fetch_add(1, std::memory_order_relaxed);
 
+        // Signal order: input gain -> gate -> model -> IR cab -> EQ -> output gain.
         for (int i = 0; i < n; ++i)
             scratch_[i] = inGain_.applyNext(in[i]);
-        m->process(scratch_.data(), out, n);
+        gate_.process(scratch_.data(), scratch_.data(), n);   // gate before amp
+        m->process(scratch_.data(), out, n);                  // amp
+        irCab_.process(out, out, n);                          // cab
+        eq_.process(out, n);                                  // tone
         for (int i = 0; i < n; ++i)
             out[i] = outGain_.applyNext(out[i]);
         for (int i = n; i < numSamples; ++i)
             out[i] = 0.0f;
     } else {
-        // No model: in-gain -> passthrough -> out-gain. Reads `in`/writes `out`
-        // directly (not scratch_-backed), so it is not bounds-limited here.
+        // No model: in-gain -> gate -> IR cab -> EQ -> out-gain. Reads `in`/
+        // writes `out` directly (not scratch_-backed), so it is not
+        // bounds-limited here.
         for (int i = 0; i < numSamples; ++i)
-            out[i] = outGain_.applyNext(inGain_.applyNext(in[i]));
+            out[i] = inGain_.applyNext(in[i]);
+        gate_.process(out, out, numSamples);
+        irCab_.process(out, out, numSamples);
+        eq_.process(out, numSamples);
+        for (int i = 0; i < numSamples; ++i)
+            out[i] = outGain_.applyNext(out[i]);
     }
 
     // --- Lock-free telemetry tail (still on the audio thread, RT-safe) ------

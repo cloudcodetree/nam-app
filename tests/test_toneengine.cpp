@@ -118,3 +118,55 @@ TEST_CASE("ToneEngine reports lock-free telemetry") {
     e.render(big_in.data(), big_out.data(), 512);
     REQUIRE(e.overCapacityCount() == before + 1u);
 }
+
+TEST_CASE("ToneEngine chain: gate+IR+EQ all bypassed equals Phase-1 behavior") {
+    dsp::ToneEngine e; e.prepare(48000, 128);
+    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    // all stages default-disabled; passthrough with no model
+    std::vector<float> in(128, 0.25f), out(128);
+    for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128);
+    for (int i = 0; i < 128; ++i) REQUIRE(out[i] == Catch::Approx(0.25f).epsilon(0.01));
+}
+
+TEST_CASE("ToneEngine chain with a unit-impulse IR is transparent") {
+    dsp::ToneEngine e; e.prepare(48000, 128);
+    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    e.setIrEnabled(true);
+    e.setImpulse(std::make_shared<std::vector<float>>(std::vector<float>{1.0f}));
+    std::vector<float> in(128, 0.2f), out(128);
+    for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128);
+    for (int i = 0; i < 128; ++i) REQUIRE(std::isfinite(out[i]));
+    REQUIRE(out[64] == Catch::Approx(0.2f).epsilon(0.02));
+}
+
+TEST_CASE("ToneEngine chain with a real model + gate + EQ stays finite") {
+    dsp::ToneEngine e; e.prepare(48000, 128);
+    auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m != nullptr);
+    e.setModel(std::move(m));
+    e.setGateEnabled(true); e.setGateThresholdDb(-50.0f);
+    e.setEqEnabled(true); e.setHighDb(6.0f); e.setLowDb(3.0f);
+    std::vector<float> in(128), out(128);
+    for (int i = 0; i < 128; ++i) in[i] = 0.05f * std::sin(i * 0.2f);
+    for (int b = 0; b < 8; ++b) e.render(in.data(), out.data(), 128);
+    for (float v : out) REQUIRE(std::isfinite(v));
+}
+
+TEST_CASE("ToneEngine full chain: model + gate + IR cab + EQ all active stays finite") {
+    // The exact end-to-end integration Phase 2 delivers: every stage on, with
+    // a real A2 model. Guards against a regression where two stages interact
+    // badly (buffer sizing, ordering) that single-stage tests would miss.
+    dsp::ToneEngine e; e.prepare(48000, 128);
+    auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m != nullptr);
+    e.setModel(std::move(m));
+    e.setGateEnabled(true);  e.setGateThresholdDb(-55.0f);
+    e.setIrEnabled(true);    e.setImpulse(std::make_shared<std::vector<float>>(
+                                 std::vector<float>{0.5f, 0.3f, 0.2f}));
+    e.setEqEnabled(true);    e.setLowDb(3.0f); e.setMidDb(-2.0f); e.setHighDb(4.0f);
+    std::vector<float> in(128), out(128);
+    for (int i = 0; i < 128; ++i) in[i] = 0.1f * std::sin(i * 0.15f);
+    for (int b = 0; b < 16; ++b) e.render(in.data(), out.data(), 128);
+    for (float v : out) REQUIRE(std::isfinite(v));
+    REQUIRE(e.overCapacityCount() == 0u);   // no clamp events on a well-sized chain
+}
