@@ -15,6 +15,16 @@ FetchContent_MakeAvailable(JUCE)
 # --- NeuralAudio (submodule) ---
 add_subdirectory(extern/NeuralAudio)
 
+# --- Melatonin Inspector (DevTools-style live UI inspector; debug only) ---
+# SOURCE_DIR forces the folder name to `melatonin_inspector` so JUCE's
+# juce_add_module derives the module header name correctly (FetchContent's
+# default `-src` suffix would make it look for melatonin_inspector-src.h).
+FetchContent_Declare(melatonin_inspector
+    GIT_REPOSITORY https://github.com/sudara/melatonin_inspector.git
+    GIT_TAG main
+    SOURCE_DIR ${CMAKE_BINARY_DIR}/melatonin_inspector)
+FetchContent_MakeAvailable(melatonin_inspector)
+
 # --- App target ---
 juce_add_gui_app(NamPlayer
     PRODUCT_NAME "NAM Player"
@@ -33,6 +43,7 @@ target_sources(NamPlayer PRIVATE
 target_include_directories(NamPlayer PRIVATE Source)
 target_link_libraries(NamPlayer PRIVATE
     NeuralAudio
+    melatonin_inspector
     juce::juce_audio_utils
     juce::juce_gui_extra)
 target_compile_definitions(NamPlayer PRIVATE

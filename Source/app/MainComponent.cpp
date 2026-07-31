@@ -17,6 +17,12 @@ MainComponent::MainComponent() {
     addAndMakeVisible(loadButton_);
     addAndMakeVisible(modelLabel_);
     addAndMakeVisible(latencyLabel_);
+    addAndMakeVisible(statsLabel_);
+
+#if JUCE_DEBUG
+    addAndMakeVisible(inspectButton_);
+    inspectButton_.onClick = [this] { inspector_.setVisible(true); };
+#endif
 
     for (auto* s : { &inGain_, &outGain_ }) {
         s->setSliderStyle(juce::Slider::LinearHorizontal);
@@ -89,10 +95,45 @@ void MainComponent::timerCallback() {
             + " Hz  ~" + juce::String(ms, 1) + " ms/dir" + warn,
             juce::dontSendNotification);
     }
+
+    // Read lock-free telemetry the audio thread published (no lock/no stall).
+    const float    peak   = engine_.outputPeak();
+    const float    load   = engine_.cpuLoad();
+    const uint64_t blocks = engine_.blockCount();
+    const uint32_t xruns  = engine_.overCapacityCount();
+
+    // Peak meter with a decay so it reads like an analog meter.
+    const float peakDb = peak > 1.0e-6f ? juce::Decibels::gainToDecibels(peak) : -100.0f;
+    meterDb_ = juce::jmax(peakDb, meterDb_ - 3.0f);   // ~fast attack, decay 3 dB/tick
+
+    statsLabel_.setText("load " + juce::String(load * 100.0f, 0) + "%   "
+        + "blocks " + juce::String((juce::int64) blocks) + "   "
+        + "xruns " + juce::String((int) xruns),
+        juce::dontSendNotification);
+
+    repaint(meterBounds_);
 }
 
 void MainComponent::paint(juce::Graphics& g) {
     g.fillAll(juce::Colours::black);
+
+    // Output level meter: -60..0 dB mapped across meterBounds_.
+    if (! meterBounds_.isEmpty()) {
+        auto r = meterBounds_.toFloat();
+        g.setColour(juce::Colours::darkgrey.darker());
+        g.fillRoundedRectangle(r, 3.0f);
+        const float norm = juce::jlimit(0.0f, 1.0f, (meterDb_ + 60.0f) / 60.0f);
+        auto fill = r.withWidth(r.getWidth() * norm);
+        const juce::Colour c = meterDb_ > -3.0f ? juce::Colours::red
+                             : meterDb_ > -12.0f ? juce::Colours::yellow
+                                                 : juce::Colours::limegreen;
+        g.setColour(c);
+        g.fillRoundedRectangle(fill, 3.0f);
+        g.setColour(juce::Colours::white.withAlpha(0.7f));
+        g.setFont(12.0f);
+        g.drawText(juce::String(meterDb_, 1) + " dB", meterBounds_,
+                   juce::Justification::centred);
+    }
 }
 
 void MainComponent::resized() {
@@ -105,4 +146,11 @@ void MainComponent::resized() {
     r.removeFromTop(8);
     inGain_.setBounds(r.removeFromTop(32));
     outGain_.setBounds(r.removeFromTop(32));
+    r.removeFromTop(8);
+    meterBounds_ = r.removeFromTop(22);
+    statsLabel_.setBounds(r.removeFromTop(22));
+#if JUCE_DEBUG
+    r.removeFromTop(8);
+    inspectButton_.setBounds(r.removeFromTop(28).removeFromLeft(120));
+#endif
 }

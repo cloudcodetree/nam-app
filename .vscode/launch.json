@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug NAM Player",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build-debug/NamPlayer_artefacts/Debug/NAM Player.app/Contents/MacOS/NAM Player",
+      "preLaunchTask": "build: NamPlayer (debug)",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug nam_tests",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build-debug/tests/nam_tests",
+      "args": [],
+      "preLaunchTask": "build: nam_tests (debug)",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug nam_tests (filter)",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build-debug/tests/nam_tests",
+      "args": ["ToneEngine*"],
+      "preLaunchTask": "build: nam_tests (debug)",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
