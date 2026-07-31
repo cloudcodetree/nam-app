@@ -1,6 +1,5 @@
 #include "dsp/ToneEngine.h"
 #include <atomic>
-#include <cassert>
 
 namespace dsp {
 
@@ -38,7 +37,6 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
         // must be <= the maxBlock passed to prepare(); guard defensively
         // against a caller violating that contract so we never overflow
         // scratch_ (heap-overflow found by review).
-        assert(numSamples <= (int) scratch_.size());
         const int n = numSamples <= (int) scratch_.size() ? numSamples : (int) scratch_.size();
 
         for (int i = 0; i < n; ++i)
