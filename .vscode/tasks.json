@@ -1,0 +1,38 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cmake: configure (debug)",
+      "type": "shell",
+      "command": "cmake --preset debug",
+      "problemMatcher": []
+    },
+    {
+      "label": "build: NamPlayer (debug)",
+      "type": "shell",
+      "command": "cmake --build --preset debug --target NamPlayer -j4",
+      "dependsOn": "cmake: configure (debug)",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "build: nam_tests (debug)",
+      "type": "shell",
+      "command": "cmake --build --preset debug --target nam_tests -j4",
+      "dependsOn": "cmake: configure (debug)",
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "test: run (asan)",
+      "type": "shell",
+      "command": "cmake --preset asan && cmake --build --preset asan --target nam_tests -j4 && ./build-asan/tests/nam_tests",
+      "problemMatcher": []
+    },
+    {
+      "label": "test: run (tsan)",
+      "type": "shell",
+      "command": "cmake --preset tsan && cmake --build --preset tsan --target nam_tests -j4 && ./build-tsan/tests/nam_tests",
+      "problemMatcher": []
+    }
+  ]
+}

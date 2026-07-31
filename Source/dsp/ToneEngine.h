@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <vector>
 #include "dsp/Gain.h"
@@ -16,6 +17,15 @@ public:
     // Contract: prepare(maxBlock) must be called before render(), and every
     // render() call must have numSamples <= maxBlock.
     void render(const float* in, float* out, int numSamples);
+
+    // --- Lock-free debug/telemetry -----------------------------------------
+    // Written by the audio thread (relaxed atomics), read by the UI thread.
+    // This is how you "watch" the real-time path without ever stopping it:
+    // no breakpoint, no lock, no logging on the callback.
+    float    outputPeak()        const { return outPeak_.load(std::memory_order_relaxed); }   // linear, last block
+    float    cpuLoad()           const { return cpuLoad_.load(std::memory_order_relaxed); }    // render time / block period, 0..1+
+    uint32_t overCapacityCount() const { return overCap_.load(std::memory_order_relaxed); }    // blocks fed > model capacity (xrun-ish)
+    uint64_t blockCount()        const { return blockCount_.load(std::memory_order_relaxed); } // total render() calls
 private:
     Gain inGain_, outGain_;
 
@@ -43,5 +53,11 @@ private:
     int sampleRate_ = 48000;
     int maxBlock_   = 128;
     std::vector<float> scratch_;             // preallocated in prepare(); no audio-thread allocation
+
+    // Telemetry (audio thread writes, UI thread reads). See getters above.
+    std::atomic<float>    outPeak_{0.0f};
+    std::atomic<float>    cpuLoad_{0.0f};
+    std::atomic<uint32_t> overCap_{0};
+    std::atomic<uint64_t> blockCount_{0};
 };
 } // namespace dsp

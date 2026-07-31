@@ -2,6 +2,7 @@
 #include <catch2/catch_all.hpp>
 #include <vector>
 #include <cmath>
+#include <cstdint>
 #include <algorithm>
 #include "dsp/ToneEngine.h"
 
@@ -90,4 +91,30 @@ TEST_CASE("ToneEngine clamps render to the active model's max block during a buf
 
     e.render(in.data(), out.data(), 512);
     for (float v : out) REQUIRE(std::isfinite(v));
+}
+
+TEST_CASE("ToneEngine reports lock-free telemetry") {
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
+    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+
+    // Peak reflects the output level; blockCount increments; load is sane.
+    std::vector<float> in(128, 0.5f), out(128);
+    for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128); // settle gains
+    REQUIRE(e.blockCount() == 40u);
+    REQUIRE(e.outputPeak() == Approx(0.5f).epsilon(0.02));
+    REQUIRE(e.cpuLoad() >= 0.0f);
+    REQUIRE(std::isfinite(e.cpuLoad()));
+    REQUIRE(e.overCapacityCount() == 0u);
+
+    // Over-capacity counter increments when a block exceeds the active
+    // model's prepared capacity (the buffer-size-increase window).
+    auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m != nullptr);
+    e.setModel(std::move(m));
+    e.prepare(48000, 512);                 // grow scratch_, keep old 128-cap model
+    std::vector<float> big_in(512, 0.1f), big_out(512);
+    const uint32_t before = e.overCapacityCount();
+    e.render(big_in.data(), big_out.data(), 512);
+    REQUIRE(e.overCapacityCount() == before + 1u);
 }

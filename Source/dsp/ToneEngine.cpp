@@ -1,6 +1,8 @@
 #include "dsp/ToneEngine.h"
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cmath>
 
 namespace dsp {
 
@@ -30,6 +32,10 @@ void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
 }
 
 void ToneEngine::render(const float* in, float* out, int numSamples) {
+    // RT-safe timing: a steady_clock read is a non-blocking, allocation-free
+    // counter read (mach_absolute_time on macOS). Used only to report load.
+    const auto t0 = std::chrono::steady_clock::now();
+
     nam::NamModel* m = active_.load(std::memory_order_acquire);
     if (m) {
         // Signal order: input gain -> model -> output gain.
@@ -48,6 +54,11 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
         // capacity, so scratch_'s size alone is not a sufficient bound.
         const int n = std::min({numSamples, (int) scratch_.size(), m->maxBlock()});
 
+        // Telemetry: a block we had to clamp is a real problem signal
+        // (the active model couldn't take the whole buffer) -- track it.
+        if (n < numSamples)
+            overCap_.fetch_add(1, std::memory_order_relaxed);
+
         for (int i = 0; i < n; ++i)
             scratch_[i] = inGain_.applyNext(in[i]);
         m->process(scratch_.data(), out, n);
@@ -55,12 +66,25 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
             out[i] = outGain_.applyNext(out[i]);
         for (int i = n; i < numSamples; ++i)
             out[i] = 0.0f;
-        return;
+    } else {
+        // No model: in-gain -> passthrough -> out-gain. Reads `in`/writes `out`
+        // directly (not scratch_-backed), so it is not bounds-limited here.
+        for (int i = 0; i < numSamples; ++i)
+            out[i] = outGain_.applyNext(inGain_.applyNext(in[i]));
     }
-    // No model: in-gain -> passthrough -> out-gain. Reads `in`/writes `out`
-    // directly (not scratch_-backed), so it is not bounds-limited here.
+
+    // --- Lock-free telemetry tail (still on the audio thread, RT-safe) ------
+    float peak = 0.0f;
     for (int i = 0; i < numSamples; ++i)
-        out[i] = outGain_.applyNext(inGain_.applyNext(in[i]));
+        peak = std::max(peak, std::fabs(out[i]));
+    outPeak_.store(peak, std::memory_order_relaxed);
+
+    const auto t1 = std::chrono::steady_clock::now();
+    const double elapsed = std::chrono::duration<double>(t1 - t0).count();
+    const double period  = sampleRate_ > 0 ? (double) numSamples / sampleRate_ : 0.0;
+    if (period > 0.0)
+        cpuLoad_.store((float) (elapsed / period), std::memory_order_relaxed);
+    blockCount_.fetch_add(1, std::memory_order_relaxed);
 }
 
 } // namespace dsp
