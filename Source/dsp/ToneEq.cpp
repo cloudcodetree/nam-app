@@ -27,6 +27,8 @@ void ToneEq::process(float* buf, int numSamples) {
         y = high_.processSample(y);
         buf[i] = y;
     }
+    // Anti-denormal flush: once per block, not per-sample (matches Gain/NoiseGate).
+    low_.flushDenormals(); mid_.flushDenormals(); high_.flushDenormals();
 }
 
 } // namespace dsp

@@ -14,6 +14,14 @@ struct Biquad {
     }
     void reset() { z1 = z2 = 0.0f; }
 
+    // Flush TDF2 state to zero once it has decayed into subnormal range.
+    // Call once per block (not per-sample) after processing — cheap insurance
+    // against slow subnormal FPU ops during silence.
+    inline void flushDenormals() {
+        if (std::fabs(z1) < 1.0e-15f) z1 = 0.0f;
+        if (std::fabs(z2) < 1.0e-15f) z2 = 0.0f;
+    }
+
     // RBJ Audio EQ Cookbook formulas. Returns coeffs with a0 normalized to 1.
     static Biquad lowShelf(float sr, float freq, float gainDb) {
         Biquad bq; const float A = std::pow(10.0f, gainDb / 40.0f);

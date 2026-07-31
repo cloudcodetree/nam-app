@@ -1,6 +1,7 @@
 #include <catch2/catch_all.hpp>
 #include <vector>
 #include <cmath>
+#include <algorithm>
 #include "dsp/ToneEq.h"
 using Catch::Approx;
 
@@ -36,4 +37,31 @@ TEST_CASE("ToneEq high-shelf boost increases HF energy") {
     auto in = sine(8000, 48000, 8192); auto buf = in;
     eq.process(buf.data(), (int) buf.size());
     REQUIRE(rms(buf, 4096) > rms(in, 4096) * 1.5f);
+}
+
+TEST_CASE("ToneEq flushes denormal state to exact zero after silence") {
+    dsp::ToneEq eq; eq.prepare(48000); eq.setEnabled(true);
+    eq.setHighDb(6.0f);
+
+    // Short burst of signal to excite the biquad state.
+    auto burst = sine(8000, 48000, 512);
+    eq.process(burst.data(), (int) burst.size());
+    for (float v : burst) REQUIRE(std::isfinite(v));
+
+    // ~200 ms of silence, processed in small blocks (denormal decay is
+    // otherwise expected within ~180 ms per the code-review report).
+    const int blockSize = 64;
+    const int numBlocks = (48000 * 200 / 1000) / blockSize; // 150 blocks
+    std::vector<float> block(blockSize, 0.0f);
+    for (int b = 0; b < numBlocks; ++b) {
+        std::fill(block.begin(), block.end(), 0.0f);
+        eq.process(block.data(), (int) block.size());
+        for (float v : block) REQUIRE(std::isfinite(v));
+    }
+
+    // With state flushed to exact zero once per block, continued zero input
+    // must produce an exact 0.0f output, not a lingering subnormal.
+    std::vector<float> tail(blockSize, 0.0f);
+    eq.process(tail.data(), (int) tail.size());
+    for (float v : tail) REQUIRE(v == 0.0f);
 }
