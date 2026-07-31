@@ -1,5 +1,6 @@
 // tests/test_irloader.cpp
 #include <catch2/catch_all.hpp>
+#include <cmath>
 #include <filesystem>
 #include <memory>
 #include "model/IrLoader.h"
@@ -29,6 +30,49 @@ TEST_CASE("IrLoader truncates to maxTaps") {
     std::filesystem::remove(path);
     REQUIRE(ir != nullptr);
     REQUIRE((int) ir->size() == 4096);
+}
+
+TEST_CASE("IrLoader downsamples 96k to 48k") {
+    const int N = 2000;
+    std::vector<float> s(N);
+    for (int i = 0; i < N; ++i) s[(size_t) i] = std::sin(0.05f * (float) i);
+    auto path = writeWav("ir_test_96k.wav", s, 96000);
+    auto ir = nam::loadImpulseResponse(path, 48000, 1'000'000);
+    std::filesystem::remove(path);
+    REQUIRE(ir != nullptr);
+    for (float v : *ir) REQUIRE(std::isfinite(v));
+    const int expected = N / 2;
+    REQUIRE((int) ir->size() >= expected - 2);
+    REQUIRE((int) ir->size() <= expected + 2);
+}
+
+TEST_CASE("IrLoader upsamples 44100 to 48000") {
+    const int N = 2000;
+    std::vector<float> s(N);
+    for (int i = 0; i < N; ++i) s[(size_t) i] = std::sin(0.05f * (float) i);
+    auto path = writeWav("ir_test_44100.wav", s, 44100);
+    auto ir = nam::loadImpulseResponse(path, 48000, 1'000'000);
+    std::filesystem::remove(path);
+    REQUIRE(ir != nullptr);
+    for (float v : *ir) REQUIRE(std::isfinite(v));
+    const int expected = (int) ((double) N * 48000.0 / 44100.0);
+    REQUIRE((int) ir->size() >= expected - 2);
+    REQUIRE((int) ir->size() <= expected + 2);
+}
+
+TEST_CASE("IrLoader guards invalid maxTaps/targetSampleRate without throwing") {
+    std::vector<float> s{0.0f, 1.0f, -0.5f, 0.25f};
+    auto path = writeWav("ir_test_guard.wav", s, 48000);
+
+    std::shared_ptr<const std::vector<float>> ir1;
+    REQUIRE_NOTHROW(ir1 = nam::loadImpulseResponse(path, 48000, -1));
+    REQUIRE(ir1 == nullptr);
+
+    std::shared_ptr<const std::vector<float>> ir2;
+    REQUIRE_NOTHROW(ir2 = nam::loadImpulseResponse(path, 0, 4096));
+    REQUIRE(ir2 == nullptr);
+
+    std::filesystem::remove(path);
 }
 
 #include "dr_wav.h"

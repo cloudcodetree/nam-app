@@ -7,6 +7,8 @@ namespace nam {
 
 std::shared_ptr<const std::vector<float>>
 loadImpulseResponse(const std::string& path, int targetSampleRate, int maxTaps) {
+    if (maxTaps <= 0 || targetSampleRate <= 0) return nullptr;
+
     unsigned int channels = 0, sampleRate = 0;
     drwav_uint64 frameCount = 0;
     float* raw = drwav_open_file_and_read_pcm_frames_f32(
