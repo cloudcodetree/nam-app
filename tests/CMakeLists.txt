@@ -17,12 +17,15 @@ add_executable(nam_tests
     test_irloader.cpp
     test_librarystore.cpp
     test_libraryimporter.cpp
+    test_pkce.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/IrLoader.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryStore.cpp
-    ${CMAKE_SOURCE_DIR}/Source/model/LibraryImporter.cpp)
+    ${CMAKE_SOURCE_DIR}/Source/model/LibraryImporter.cpp
+    ${CMAKE_SOURCE_DIR}/Source/net/Pkce.cpp)
 target_compile_features(nam_tests PRIVATE cxx_std_17)
 target_include_directories(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/extern/dr_wav
-    ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann)
+    ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann
+    ${CMAKE_SOURCE_DIR}/extern/picosha2)
 target_link_libraries(nam_tests PRIVATE NeuralAudio Catch2::Catch2WithMain)
 target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/model/NamModel.cpp)
 target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/dsp/ToneEngine.cpp)
