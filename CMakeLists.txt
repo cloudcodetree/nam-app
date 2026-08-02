@@ -36,14 +36,18 @@ target_compile_features(NamPlayer PRIVATE cxx_std_17)
 target_sources(NamPlayer PRIVATE
     Source/app/AudioDeviceCallbackAdapter.cpp
     Source/app/MainComponent.cpp
+    Source/app/LibraryPanel.cpp
     Source/app/Main.cpp
     Source/dsp/ToneEngine.cpp
     Source/dsp/IrCab.cpp
     Source/dsp/ToneEq.cpp
     Source/model/NamModel.cpp
     Source/model/ModelHost.cpp
-    Source/model/IrLoader.cpp)
-target_include_directories(NamPlayer PRIVATE Source ${CMAKE_SOURCE_DIR}/extern/dr_wav)
+    Source/model/IrLoader.cpp
+    Source/model/LibraryStore.cpp
+    Source/model/LibraryImporter.cpp)
+target_include_directories(NamPlayer PRIVATE Source ${CMAKE_SOURCE_DIR}/extern/dr_wav
+    ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann)
 target_link_libraries(NamPlayer PRIVATE
     NeuralAudio
     melatonin_inspector
