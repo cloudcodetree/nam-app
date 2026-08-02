@@ -18,10 +18,12 @@ add_executable(nam_tests
     test_librarystore.cpp
     test_libraryimporter.cpp
     test_pkce.cpp
+    test_tone3000api.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/IrLoader.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryStore.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryImporter.cpp
-    ${CMAKE_SOURCE_DIR}/Source/net/Pkce.cpp)
+    ${CMAKE_SOURCE_DIR}/Source/net/Pkce.cpp
+    ${CMAKE_SOURCE_DIR}/Source/net/Tone3000Api.cpp)
 target_compile_features(nam_tests PRIVATE cxx_std_17)
 target_include_directories(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/extern/dr_wav
     ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann
