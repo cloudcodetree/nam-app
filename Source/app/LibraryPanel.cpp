@@ -101,11 +101,16 @@ LibraryPanel::~LibraryPanel() {
 
 std::vector<nam::LibraryEntry> LibraryPanel::sortedFavoritesFirst(
     std::vector<nam::LibraryEntry> entries) {
-    // store.all() already sorts by displayName (case-insensitive); a stable
-    // sort on favorite-desc preserves that as the secondary key.
+    // Order: favorites first, then most-recently-used, then alphabetical.
+    // Entries never used have lastUsedAt == 0 and naturally sort last within
+    // their favorite group; displayName (case-insensitive) is the stable
+    // tiebreaker for entries with equal/zero lastUsedAt.
     std::stable_sort(entries.begin(), entries.end(),
                       [](const nam::LibraryEntry& a, const nam::LibraryEntry& b) {
-                          return a.favorite && ! b.favorite;
+                          if (a.favorite != b.favorite) return a.favorite;
+                          if (a.lastUsedAt != b.lastUsedAt) return a.lastUsedAt > b.lastUsedAt;
+                          return juce::String(a.displayName).compareIgnoreCase(
+                                     juce::String(b.displayName)) < 0;
                       });
     return entries;
 }
