@@ -99,8 +99,12 @@ void MainComponent::loadButtonClicked() {
 
             // Copy the picked file into the local library (best-effort; the
             // immediate load below still uses the original path).
-            nam::importIntoLibrary(self->library_, self->currentModelPath_.toStdString(),
+            auto* entry = nam::importIntoLibrary(self->library_, self->currentModelPath_.toStdString(),
                                     nam::LibraryType::Model, MainComponent::nowSeconds());
+            if (entry != nullptr) {
+                self->library_.markUsed(entry->id, MainComponent::nowSeconds());
+                self->library_.save();
+            }
             self->libraryPanel_.refresh();
 
             auto* dev = self->deviceManager_.getCurrentAudioDevice();
@@ -137,8 +141,12 @@ void MainComponent::loadIrClicked() {
 
             // Copy the picked file into the local library (best-effort; the
             // immediate load below still uses the original path).
-            nam::importIntoLibrary(self->library_, self->currentIrPath_.toStdString(),
+            auto* entry = nam::importIntoLibrary(self->library_, self->currentIrPath_.toStdString(),
                                     nam::LibraryType::Ir, MainComponent::nowSeconds());
+            if (entry != nullptr) {
+                self->library_.markUsed(entry->id, MainComponent::nowSeconds());
+                self->library_.save();
+            }
             self->libraryPanel_.refresh();
 
             auto* dev = self->deviceManager_.getCurrentAudioDevice();

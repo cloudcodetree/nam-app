@@ -31,7 +31,21 @@ TEST_CASE("LibraryStore add/find/list round-trips") {
 
 TEST_CASE("LibraryStore persists across save/load") {
     auto dir = tmpLib();
-    { LibraryStore s(dir); auto e = model("x.nam","X"); e.arch="SlimmableContainer"; e.loudness=-26.4; s.add(e); s.setFavorite("x.nam", true); REQUIRE(s.save()); }
+    {
+        LibraryStore s(dir);
+        auto e = model("x.nam", "X");
+        e.type = LibraryType::Ir;
+        e.arch = "SlimmableContainer";
+        e.loudness = -26.4;
+        e.fileName = "x.wav";
+        e.addedAt = 1000;
+        e.lastUsedAt = 2000;
+        e.frames = 4410;
+        e.sampleRate = 48000;
+        s.add(e);
+        s.setFavorite("x.nam", true);
+        REQUIRE(s.save());
+    }
     LibraryStore s2(dir);
     REQUIRE(s2.load());
     auto* e = s2.find("x.nam");
@@ -39,6 +53,13 @@ TEST_CASE("LibraryStore persists across save/load") {
     REQUIRE(e->favorite == true);
     REQUIRE(e->arch == "SlimmableContainer");
     REQUIRE(e->loudness == Catch::Approx(-26.4));
+    REQUIRE(e->type == LibraryType::Ir);
+    REQUIRE(e->displayName == "X");
+    REQUIRE(e->fileName == "x.wav");
+    REQUIRE(e->addedAt == 1000);
+    REQUIRE(e->lastUsedAt == 2000);
+    REQUIRE(e->frames == 4410);
+    REQUIRE(e->sampleRate == 48000);
 }
 
 TEST_CASE("LibraryStore favorites and recents") {
