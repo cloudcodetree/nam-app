@@ -4,7 +4,10 @@
 #include "dsp/IrCab.h"
 #include "model/ModelHost.h"
 #include "model/IrLoader.h"
+#include "model/LibraryStore.h"
+#include "model/LibraryEntry.h"
 #include "app/AudioDeviceCallbackAdapter.h"
+#include "app/LibraryPanel.h"
 
 #if JUCE_DEBUG
 #include "melatonin_inspector/melatonin_inspector.h"
@@ -22,6 +25,9 @@ private:
     void timerCallback() override;          // repaint meter + latency + telemetry
     void reloadCurrentModelAt(int sampleRate, int maxBlock);
     void reloadCurrentIrAt(int sampleRate);
+    void handleLibraryEntryLoad(const nam::LibraryEntry& e);  // libraryPanel_.onLoadEntry
+    static std::string defaultLibraryDir();
+    static long long nowSeconds();          // std::chrono::system_clock, app layer only
 
     juce::AudioDeviceManager deviceManager_;
     dsp::ToneEngine engine_;
@@ -52,6 +58,11 @@ private:
     juce::Label        irLabel_ { {}, "No IR" };
     std::unique_ptr<juce::FileChooser> irChooser_;
     juce::String currentIrPath_;
+
+    // Local library of imported/favorited models + IRs. Constructed before
+    // libraryPanel_ (declaration order), which holds a reference to it.
+    nam::LibraryStore library_ { defaultLibraryDir() };
+    LibraryPanel libraryPanel_ { library_ };
 
     // UI-thread meter state (read from engine telemetry each timer tick).
     juce::Rectangle<int> meterBounds_;

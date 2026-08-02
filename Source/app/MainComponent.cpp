@@ -1,6 +1,12 @@
 #include "app/MainComponent.h"
 
+#include "model/LibraryImporter.h"
+
+#include <chrono>
+
 MainComponent::MainComponent() {
+    library_.load();
+
     deviceManager_.initialiseWithDefaultDevices(1, 2);
     engine_.prepare(48000, 128);
     deviceManager_.addAudioCallback(&adapter_);
@@ -64,8 +70,13 @@ MainComponent::MainComponent() {
     addAndMakeVisible(loadIrButton_); addAndMakeVisible(irLabel_);
     loadIrButton_.onClick = [this]{ loadIrClicked(); };
 
+    // Library panel: favorites/recents list for models + IRs, click-to-load.
+    addAndMakeVisible(libraryPanel_);
+    libraryPanel_.onLoadEntry = [this](const nam::LibraryEntry& e) { handleLibraryEntryLoad(e); };
+    libraryPanel_.refresh();
+
     startTimerHz(15);
-    setSize(560, 900);
+    setSize(880, 900);
 }
 
 MainComponent::~MainComponent() {
@@ -85,6 +96,17 @@ void MainComponent::loadButtonClicked() {
             auto f = fc.getResult();
             if (f == juce::File{}) return;
             self->currentModelPath_ = f.getFullPathName();
+
+            // Copy the picked file into the local library (best-effort; the
+            // immediate load below still uses the original path).
+            auto* entry = nam::importIntoLibrary(self->library_, self->currentModelPath_.toStdString(),
+                                    nam::LibraryType::Model, MainComponent::nowSeconds());
+            if (entry != nullptr) {
+                self->library_.markUsed(entry->id, MainComponent::nowSeconds());
+                self->library_.save();
+            }
+            self->libraryPanel_.refresh();
+
             auto* dev = self->deviceManager_.getCurrentAudioDevice();
             self->host_.configure(dev ? (int) dev->getCurrentSampleRate() : 48000,
                             dev ? dev->getCurrentBufferSizeSamples() : 128);
@@ -116,6 +138,17 @@ void MainComponent::loadIrClicked() {
             auto f = fc.getResult();
             if (f == juce::File{}) return;
             self->currentIrPath_ = f.getFullPathName();
+
+            // Copy the picked file into the local library (best-effort; the
+            // immediate load below still uses the original path).
+            auto* entry = nam::importIntoLibrary(self->library_, self->currentIrPath_.toStdString(),
+                                    nam::LibraryType::Ir, MainComponent::nowSeconds());
+            if (entry != nullptr) {
+                self->library_.markUsed(entry->id, MainComponent::nowSeconds());
+                self->library_.save();
+            }
+            self->libraryPanel_.refresh();
+
             auto* dev = self->deviceManager_.getCurrentAudioDevice();
             const int sr = dev ? (int) dev->getCurrentSampleRate() : 48000;
 
@@ -151,6 +184,56 @@ void MainComponent::reloadCurrentIrAt(int sampleRate) {
     if (currentIrPath_.isEmpty()) return;
     auto ir = nam::loadImpulseResponse(currentIrPath_.toStdString(), sampleRate, dsp::kMaxIrTaps);
     engine_.setImpulse(ir);
+}
+
+std::string MainComponent::defaultLibraryDir() {
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("NAM Player/library").getFullPathName().toStdString();
+}
+
+long long MainComponent::nowSeconds() {
+    using namespace std::chrono;
+    return (long long) duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+}
+
+void MainComponent::handleLibraryEntryLoad(const nam::LibraryEntry& e) {
+    const std::string absolutePath = library_.subdir(e.type) + "/" + e.fileName;
+
+    if (e.type == nam::LibraryType::Model) {
+        currentModelPath_ = juce::String(absolutePath);
+        auto* dev = deviceManager_.getCurrentAudioDevice();
+        host_.configure(dev ? (int) dev->getCurrentSampleRate() : 48000,
+                        dev ? dev->getCurrentBufferSizeSamples() : 128);
+        modelLabel_.setText("Loading " + juce::String(e.displayName) + "...",
+                            juce::dontSendNotification);
+        juce::Component::SafePointer<MainComponent> safe(this);
+        host_.requestLoad(absolutePath,
+            [safe, name = juce::String(e.displayName)](std::shared_ptr<nam::NamModel> m) {
+                juce::MessageManager::callAsync([safe, m, name]{
+                    if (auto* self = safe.getComponent()) {
+                        self->engine_.setModel(m);
+                        self->modelLabel_.setText(m ? ("Loaded: " + name)
+                                              : ("Failed to load " + name),
+                                            juce::dontSendNotification);
+                    }
+                });
+            });
+    } else {
+        currentIrPath_ = juce::String(absolutePath);
+        auto* dev = deviceManager_.getCurrentAudioDevice();
+        const int sr = dev ? (int) dev->getCurrentSampleRate() : 48000;
+        auto ir = nam::loadImpulseResponse(absolutePath, sr, dsp::kMaxIrTaps);
+        engine_.setImpulse(ir);
+        irLabel_.setText(ir ? ("Loaded: " + juce::String(e.displayName))
+                             : ("Failed to load " + juce::String(e.displayName)),
+                          juce::dontSendNotification);
+        irEnable_.setToggleState(true, juce::sendNotification);
+        engine_.setIrEnabled(true);
+    }
+
+    library_.markUsed(e.id, nowSeconds());
+    library_.save();
+    libraryPanel_.refresh();
 }
 
 void MainComponent::timerCallback() {
@@ -205,7 +288,12 @@ void MainComponent::paint(juce::Graphics& g) {
 }
 
 void MainComponent::resized() {
-    auto r = getLocalBounds().reduced(12);
+    auto full = getLocalBounds().reduced(12);
+    auto libraryArea = full.removeFromRight(300);
+    full.removeFromRight(12);
+    libraryPanel_.setBounds(libraryArea);
+
+    auto r = full;
     selector_.setBounds(r.removeFromTop(300));
     r.removeFromTop(8);
     loadButton_.setBounds(r.removeFromTop(32));
