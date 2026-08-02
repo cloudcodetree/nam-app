@@ -16,8 +16,10 @@ add_executable(nam_tests
     test_ircab.cpp
     test_irloader.cpp
     test_librarystore.cpp
+    test_libraryimporter.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/IrLoader.cpp
-    ${CMAKE_SOURCE_DIR}/Source/model/LibraryStore.cpp)
+    ${CMAKE_SOURCE_DIR}/Source/model/LibraryStore.cpp
+    ${CMAKE_SOURCE_DIR}/Source/model/LibraryImporter.cpp)
 target_compile_features(nam_tests PRIVATE cxx_std_17)
 target_include_directories(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source ${CMAKE_SOURCE_DIR}/extern/dr_wav
     ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann)

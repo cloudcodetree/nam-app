@@ -1,4 +1,5 @@
 #pragma once
+#include <deque>
 #include <string>
 #include <vector>
 #include "model/LibraryEntry.h"
@@ -31,7 +32,10 @@ public:
 
 private:
     std::string dir_;
-    std::vector<LibraryEntry> entries_;
+    // deque (not vector): add()/find() return pointers into this container
+    // that callers may hold across subsequent add() calls; deque guarantees
+    // push_back never invalidates existing element pointers/references.
+    std::deque<LibraryEntry> entries_;
 };
 
 }
