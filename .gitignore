@@ -3,3 +3,8 @@ build/
 build-debug/
 build-asan/
 build-tsan/
+
+# secrets — never commit
+.env
+.env.*
+!.env.example
