@@ -1,5 +1,5 @@
 #pragma once
-#include <deque>
+#include <list>
 #include <string>
 #include <vector>
 #include "model/LibraryEntry.h"
@@ -32,10 +32,11 @@ public:
 
 private:
     std::string dir_;
-    // deque (not vector): add()/find() return pointers into this container
-    // that callers may hold across subsequent add() calls; deque guarantees
-    // push_back never invalidates existing element pointers/references.
-    std::deque<LibraryEntry> entries_;
+    // std::list: add()/find() return const LibraryEntry* that callers may hold.
+    // push_back never invalidates any element pointer/reference; erase invalidates
+    // only the removed element's, so a held pointer stays valid until THAT entry is
+    // removed. (deque/vector would not give the second half of this guarantee.)
+    std::list<LibraryEntry> entries_;
 };
 
 }

@@ -98,7 +98,7 @@ bool LibraryStore::load() {
             entries_.clear();
             return false;
         }
-        std::deque<LibraryEntry> loaded;
+        std::list<LibraryEntry> loaded;
         for (const auto& item : j) {
             loaded.push_back(entryFromJson(item));
         }
