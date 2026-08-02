@@ -59,6 +59,33 @@ TEST_CASE("LibraryStore load with no index file is empty, not an error") {
     REQUIRE(s.all(LibraryType::Model).empty());
 }
 
+TEST_CASE("LibraryStore load with wrong-shape JSON (object, not array) fails") {
+    auto dir = tmpLib();
+    LibraryStore s(dir);
+    std::filesystem::create_directories(dir);
+    { std::ofstream f(std::filesystem::path(dir) / "library.json"); f << R"({"foo":1})"; }
+    REQUIRE_FALSE(s.load());
+    REQUIRE(s.all(LibraryType::Model).empty());
+    REQUIRE(s.all(LibraryType::Ir).empty());
+}
+
+TEST_CASE("LibraryStore load with garbage non-JSON file fails") {
+    auto dir = tmpLib();
+    LibraryStore s(dir);
+    std::filesystem::create_directories(dir);
+    { std::ofstream f(std::filesystem::path(dir) / "library.json"); f << "not valid json {{{"; }
+    REQUIRE_FALSE(s.load());
+    REQUIRE(s.all(LibraryType::Model).empty());
+}
+
+TEST_CASE("LibraryStore recents with negative limit returns empty") {
+    LibraryStore s(tmpLib());
+    s.add(model("a.nam", "A"));
+    s.markUsed("a.nam", 100);
+    auto r = s.recents(LibraryType::Model, -1);
+    REQUIRE(r.empty());
+}
+
 TEST_CASE("LibraryStore remove deletes the file") {
     auto dir = tmpLib();
     LibraryStore s(dir);

@@ -4,7 +4,6 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
-#include <sstream>
 
 #include "json.hpp"
 
@@ -95,11 +94,13 @@ bool LibraryStore::load() {
         }
         json j;
         in >> j;
+        if (!j.is_array()) {
+            entries_.clear();
+            return false;
+        }
         std::vector<LibraryEntry> loaded;
-        if (j.is_array()) {
-            for (const auto& item : j) {
-                loaded.push_back(entryFromJson(item));
-            }
+        for (const auto& item : j) {
+            loaded.push_back(entryFromJson(item));
         }
         entries_ = std::move(loaded);
         return true;
@@ -117,10 +118,18 @@ bool LibraryStore::save() const {
         }
         fs::path tmpPath = fs::path(dir_) / "library.json.tmp";
         fs::path finalPath = fs::path(dir_) / "library.json";
+        bool writeOk = false;
         {
             std::ofstream out(tmpPath);
             if (!out) return false;
             out << arr.dump(2);
+            out.flush();
+            writeOk = out.good();
+        }
+        if (!writeOk) {
+            std::error_code ec;
+            fs::remove(tmpPath, ec);
+            return false;
         }
         fs::rename(tmpPath, finalPath);
         return true;
@@ -201,13 +210,14 @@ std::vector<LibraryEntry> LibraryStore::favorites(LibraryType t) const {
 
 std::vector<LibraryEntry> LibraryStore::recents(LibraryType t, int limit) const {
     std::vector<LibraryEntry> result;
+    if (limit <= 0) return result;
     for (const auto& e : entries_) {
         if (e.type == t && e.lastUsedAt > 0) result.push_back(e);
     }
     std::sort(result.begin(), result.end(), [](const LibraryEntry& a, const LibraryEntry& b) {
         return a.lastUsedAt > b.lastUsedAt;
     });
-    if (limit >= 0 && static_cast<size_t>(limit) < result.size()) {
+    if (static_cast<size_t>(limit) < result.size()) {
         result.resize(static_cast<size_t>(limit));
     }
     return result;
