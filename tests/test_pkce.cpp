@@ -31,4 +31,29 @@ TEST_CASE("generatePkce yields a spec-legal verifier and matching challenge") {
 TEST_CASE("randomUrlToken is the requested length and url-safe") {
     auto t = randomUrlToken(32);
     REQUIRE(t.size() == 32);
+
+    const std::string allowed =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+    auto t64 = randomUrlToken(64);
+    REQUIRE(t64.size() == 64);
+    for (char c : t64) REQUIRE(allowed.find(c) != std::string::npos);
+
+    REQUIRE(randomUrlToken(0) == "");
+}
+
+TEST_CASE("PKCE random generation has enough distinct outputs to smoke-test entropy") {
+    // Not a proof of entropy, but a 32-bit-seeded generator would still
+    // likely be distinct across only 100 draws, so this mainly documents
+    // intent and guards against a degenerate (e.g. constant-output) RNG
+    // regression. Distinctness of 100 draws from a space this large is
+    // astronomically safe, so this should never be flaky.
+    std::set<std::string> verifiers;
+    for (int i = 0; i < 100; ++i)
+        verifiers.insert(generatePkce().verifier);
+    REQUIRE(verifiers.size() == 100);
+
+    std::set<std::string> tokens;
+    for (int i = 0; i < 100; ++i)
+        tokens.insert(randomUrlToken(43));
+    REQUIRE(tokens.size() == 100);
 }

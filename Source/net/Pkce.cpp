@@ -16,18 +16,26 @@ constexpr char kBase64UrlAlphabet[] =
 constexpr char kUnreservedCharset[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
 
-std::mt19937& rng() {
-    static std::mt19937 engine{std::random_device{}()};
-    return engine;
-}
-
+// Draws directly from std::random_device for every character rather than
+// seeding a std::mt19937 from it. A single random_device call only supplies
+// ~32 bits of seed entropy, which caps the entire token's entropy at 2^32
+// regardless of length -- brute-forceable from the (non-secret)
+// code_challenge, violating RFC 7636 §7.1's requirement of ~128-256 bits of
+// verifier entropy. Drawing per-character from random_device also avoids a
+// shared mutable std::mt19937 static, which was a data race under
+// concurrent use. This is only invoked once or twice per OAuth attempt (not
+// a hot path), so the extra cost of a "true" entropy source per character is
+// irrelevant.
 std::string randomFromCharset(const char* charset, int nChars) {
+    if (nChars <= 0)
+        return {};
     const auto charsetLen = static_cast<int>(std::char_traits<char>::length(charset));
+    std::random_device rd;
     std::uniform_int_distribution<int> dist(0, charsetLen - 1);
     std::string result;
     result.reserve(static_cast<size_t>(nChars));
     for (int i = 0; i < nChars; ++i)
-        result.push_back(charset[dist(rng())]);
+        result.push_back(charset[dist(rd)]);
     return result;
 }
 
