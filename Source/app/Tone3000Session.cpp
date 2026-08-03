@@ -4,11 +4,38 @@
 
 #include <juce_events/juce_events.h>
 
+#include <algorithm>
+#include <cctype>
+
 namespace nam {
 
 namespace {
 
 constexpr int kConnectTimeoutMs = 15000;
+
+// True if `url`'s host is tone3000.com or a subdomain of it (case-insensitive).
+// Used to decide whether it's safe to attach our Bearer access token: model_url
+// may be a pre-signed third-party storage URL (S3/CDN), and the token must
+// never be sent to a host that isn't TONE3000 itself.
+bool isTone3000Host(const std::string& url) {
+    const auto schemeEnd = url.find("://");
+    const std::string afterScheme = (schemeEnd == std::string::npos) ? url : url.substr(schemeEnd + 3);
+    const auto slashPos = afterScheme.find('/');
+    std::string host = (slashPos == std::string::npos) ? afterScheme : afterScheme.substr(0, slashPos);
+    const auto colonPos = host.find(':'); // strip a port, if any
+    if (colonPos != std::string::npos)
+        host = host.substr(0, colonPos);
+
+    std::transform(host.begin(), host.end(), host.begin(),
+                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    const std::string domain = "tone3000.com";
+    if (host == domain)
+        return true;
+    const std::string dotSuffix = "." + domain;
+    return host.size() > dotSuffix.size() &&
+           host.compare(host.size() - dotSuffix.size(), dotSuffix.size(), dotSuffix) == 0;
+}
 
 // Strips path separators and other filesystem-hostile characters from a
 // model name so it's safe to use as a filename component. Falls back to
@@ -128,17 +155,25 @@ private:
             return false;
         }
 
-        // --- Step 2: download the chosen model's bytes. Try with our
-        // bearer token first; model_url may be a pre-signed storage URL
-        // that rejects it (401/403), in which case retry without it. ---
+        // --- Step 2: download the chosen model's bytes. model_url may be a
+        // pre-signed third-party storage URL (S3/CDN) rather than a
+        // tone3000.com URL; only attach our bearer token when the host is
+        // actually tone3000.com, so the token is never leaked to a
+        // third-party host. For the tone3000.com case, retry once without
+        // the header if it's rejected (401/403). ---
         const juce::URL modelUrl{juce::String(best.modelUrl)};
+        const bool modelUrlIsT3k = isTone3000Host(best.modelUrl);
         juce::MemoryBlock bytes;
         juce::String downloadError;
-        bool downloaded = authenticatedGet(modelUrl, true, bytes, downloadError);
-        if (!downloaded && (downloadError == "401" || downloadError == "403"))
+        bool downloaded = authenticatedGet(modelUrl, modelUrlIsT3k, bytes, downloadError);
+        if (!downloaded && modelUrlIsT3k && (downloadError == "401" || downloadError == "403"))
             downloaded = authenticatedGet(modelUrl, false, bytes, downloadError);
         if (!downloaded) {
             outError = "failed to download the model file";
+            return false;
+        }
+        if (bytes.getSize() == 0) {
+            outError = "downloaded model was empty";
             return false;
         }
 

@@ -178,7 +178,12 @@ void MainComponent::loadIrClicked() {
 }
 
 void MainComponent::browseT3kButtonClicked() {
-    t3kStatus_.setText("Waiting for TONE3000 login...", juce::dontSendNotification);
+    // Disable the button for the whole flow so a second click can't stack a
+    // second auth/download flow (or Tone3000Session) on top of this one --
+    // that's what makes downloadToneModel()'s stopThread(20000) stall the
+    // message thread. Re-enabled on every completion path below.
+    browseT3kButton_.setEnabled(false);
+    t3kStatus_.setText("Working... (check your browser)", juce::dontSendNotification);
 
     juce::Component::SafePointer<MainComponent> safe(this);
     t3kAuth_.beginSelectToneFlow([safe](nam::Tone3000Auth::Result result) {
@@ -189,10 +194,12 @@ void MainComponent::browseT3kButtonClicked() {
             // result.error never contains the token/code (see Tone3000Auth).
             self->t3kStatus_.setText("TONE3000: " + juce::String(result.error),
                                       juce::dontSendNotification);
+            self->browseT3kButton_.setEnabled(true);
             return;
         }
         if (result.toneId.empty()) {
             self->t3kStatus_.setText("TONE3000: no tone was selected", juce::dontSendNotification);
+            self->browseT3kButton_.setEnabled(true);
             return;
         }
 
@@ -210,6 +217,7 @@ void MainComponent::browseT3kButtonClicked() {
                     // never contains the access token.
                     self2->t3kStatus_.setText("TONE3000 download failed: " + nameOrError,
                                                juce::dontSendNotification);
+                    self2->browseT3kButton_.setEnabled(true);
                     return;
                 }
 
@@ -220,6 +228,7 @@ void MainComponent::browseT3kButtonClicked() {
                 if (entry == nullptr) {
                     self2->t3kStatus_.setText("Failed to import the downloaded model into the library",
                                                juce::dontSendNotification);
+                    self2->browseT3kButton_.setEnabled(true);
                     return;
                 }
 
@@ -229,6 +238,7 @@ void MainComponent::browseT3kButtonClicked() {
                 self2->handleLibraryEntryLoad(*entry);
                 self2->t3kStatus_.setText("Loaded from TONE3000: " + juce::String(entry->displayName),
                                            juce::dontSendNotification);
+                self2->browseT3kButton_.setEnabled(true);
             });
     });
 }
