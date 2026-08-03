@@ -26,7 +26,10 @@ constexpr char kTokenUrl[] = "https://www.tone3000.com/api/v1/oauth/token";
 // A handful of loopback ports to try in turn in case one is already in use.
 constexpr int kCandidatePorts[] = {49222, 49223, 49224, 49225, 49226};
 
-constexpr int kAcceptTimeoutMs = 120000; // overall wait for the redirect
+// Overall wait for the browser redirect. Generous because the user logs into
+// TONE3000 and browses/picks a tone on their hosted site in between — a short
+// window closes the loopback port before a real pick arrives (ERR_CONNECTION_REFUSED).
+constexpr int kAcceptTimeoutMs = 600000; // 10 minutes
 constexpr int kAcceptPollMs = 250;       // poll granularity (also cancellation latency)
 constexpr int kRequestReadTimeoutMs = 5000;
 constexpr int kMaxRequestLineBytes = 8192;
