@@ -16,7 +16,10 @@ private:
             setUsingNativeTitleBar(true);
             setContentOwned(new MainComponent(), true);
             setResizable(true, true);
-            centreWithSize(560, 640);
+            setResizeLimits(640, 480, 1600, 1040);
+            // Size the window to the content (MainComponent::setSize), so the
+            // window grows with the UI instead of clipping newer controls.
+            centreWithSize(getWidth(), getHeight());
             setVisible(true);
         }
         void closeButtonPressed() override {
