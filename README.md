@@ -82,4 +82,6 @@ cp .env.example .env
 
 ## License
 
-**To be finalized.** Note: JUCE is dual-licensed (GPLv3 **or** a paid commercial license). A public, open-source JUCE application is normally distributed under **GPLv3**; a `LICENSE` file will be added to reflect the chosen terms. Until then, all rights reserved by the author.
+Licensed under the **GNU General Public License v3.0** — see [`LICENSE`](LICENSE).
+
+This is the standard open-source path for a [JUCE](https://juce.com/) application: JUCE is dual-licensed (GPLv3 **or** a paid commercial license), and using it for free requires the resulting app to be GPLv3. All other dependencies (NeuralAudio MIT, dr_wav public-domain, PicoSHA2 MIT, nlohmann/json MIT) are GPL-compatible.
