@@ -15,9 +15,14 @@ bool isUnreserved(unsigned char c) {
     return std::isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~';
 }
 
-// Lowercase, ASCII-only starts-with check for the "a2..." architecture
-// version prefix.
-bool startsWithA2CaseInsensitive(const std::string& s) {
+// True if `s` looks like an A2 architecture_version: either the "a2..."
+// prefix (case-insensitive) used by some responses, or a bare "2..." prefix
+// (the numeric-string form the API actually returns, e.g. "2").
+bool looksLikeA2(const std::string& s) {
+    if (s.empty())
+        return false;
+    if (s[0] == '2')
+        return true;
     if (s.size() < 2)
         return false;
     return std::tolower(static_cast<unsigned char>(s[0])) == 'a' &&
@@ -71,8 +76,9 @@ std::string buildTokenFormBody(const std::string& publishableKey,
     return body;
 }
 
-std::string modelsUrl(const std::string& toneId) {
-    return std::string(kBaseUrl) + "/models?tone_id=" + urlEncode(toneId);
+std::string modelsUrl(const std::string& toneId, const std::string& architecture) {
+    return std::string(kBaseUrl) + "/models?tone_id=" + urlEncode(toneId) +
+           "&architecture=" + urlEncode(architecture) + "&page_size=50";
 }
 
 TokenResponse parseTokenResponse(const std::string& json) {
@@ -117,7 +123,7 @@ bool pickBestModel(const std::vector<ModelInfo>& models, ModelInfo& out) {
     if (models.empty())
         return false;
     for (const auto& m : models) {
-        if (startsWithA2CaseInsensitive(m.architectureVersion)) {
+        if (looksLikeA2(m.architectureVersion)) {
             out = m;
             return true;
         }

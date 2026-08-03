@@ -191,20 +191,32 @@ private:
             return false;
         }
 
-        // --- Step 1: fetch the model list for this tone. ---
-        const juce::URL modelsUrl{juce::String(nam::modelsUrl(toneId_))};
-        juce::MemoryBlock listBytes;
-        juce::String listError;
-        if (!authenticatedGet(modelsUrl, true, listBytes, listError)) {
-            outError = (listError == "401" || listError == "403")
-                ? "TONE3000 authentication failed (please try Browse TONE3000 again)"
-                : "could not reach TONE3000 to list models";
-            return false;
+        // --- Step 1: fetch the model list for this tone. TONE3000 returns
+        // the legacy A1 list when no `architecture` param is given (empty
+        // for A2-format tones), so ask for A2 ("2") first and only fall
+        // back to A1 ("1") if that comes back empty. ---
+        std::vector<nam::ModelInfo> models;
+        for (const char* architecture : {"2", "1"}) {
+            const juce::URL modelsUrl{juce::String(nam::modelsUrl(toneId_, architecture))};
+            juce::MemoryBlock listBytes;
+            juce::String listError;
+            if (!authenticatedGet(modelsUrl, true, listBytes, listError)) {
+                outError = (listError == "401" || listError == "403")
+                    ? "TONE3000 authentication failed (please try Browse TONE3000 again)"
+                    : "could not reach TONE3000 to list models";
+                return false;
+            }
+            const juce::String body =
+                juce::String::createStringFromData(listBytes.getData(), (int) listBytes.getSize());
+            models = nam::parseModelList(body.toStdString());
+            if (!models.empty())
+                break;
+            if (threadShouldExit()) {
+                outError = "cancelled";
+                return false;
+            }
         }
-        const juce::String body =
-            juce::String::createStringFromData(listBytes.getData(), (int) listBytes.getSize());
 
-        const auto models = nam::parseModelList(body.toStdString());
         nam::ModelInfo best;
         if (!nam::pickBestModel(models, best)) {
             outError = "TONE3000 returned no models for this tone";

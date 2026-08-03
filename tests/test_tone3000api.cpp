@@ -49,8 +49,28 @@ TEST_CASE("parseModelList + pickBestModel prefers an A2 model") {
     REQUIRE(best.modelUrl == "https://x/m2.nam");
 }
 
+TEST_CASE("pickBestModel treats architecture_version \"2\" as A2") {
+    const char* json = R"({"data":[
+      {"id":"m1","name":"Amp A1","architecture_version":"1","model_url":"https://x/m1.nam","size":100},
+      {"id":"m2","name":"Amp A2","architecture_version":"2","model_url":"https://x/m2.nam","size":50}
+    ],"total":2})";
+    auto ms = parseModelList(json);
+    REQUIRE(ms.size() == 2);
+    ModelInfo best;
+    REQUIRE(pickBestModel(ms, best));
+    REQUIRE(best.id == "m2");
+    REQUIRE(best.modelUrl == "https://x/m2.nam");
+}
+
 TEST_CASE("parseModelList tolerates garbage without throwing") {
     REQUIRE(parseModelList("not json").empty());
     ModelInfo best;
     REQUIRE_FALSE(pickBestModel({}, best));
+}
+
+TEST_CASE("modelsUrl includes tone_id, architecture, and page_size") {
+    auto u = modelsUrl("79865", "2");
+    REQUIRE(u.find("tone_id=79865") != std::string::npos);
+    REQUIRE(u.find("architecture=2") != std::string::npos);
+    REQUIRE(u.find("page_size=50") != std::string::npos);
 }

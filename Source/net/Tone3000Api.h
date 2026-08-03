@@ -35,8 +35,12 @@ std::string buildTokenFormBody(const std::string& publishableKey,
                                 const std::string& code,
                                 const std::string& codeVerifier);
 
-// Full /api/v1/models?tone_id=... URL for a given tone id.
-std::string modelsUrl(const std::string& toneId);
+// Full /api/v1/models?tone_id=...&architecture=...&page_size=50 URL for a
+// given tone id. `architecture` is the TONE3000 API's numeric-string
+// architecture selector: "2" for A2 models, "1" for A1 models. Without this
+// param the API returns the legacy (A1) model list, which is empty for
+// A2-format tones.
+std::string modelsUrl(const std::string& toneId, const std::string& architecture);
 
 // Parses a token-endpoint JSON response. Never throws: malformed JSON or a
 // missing access_token yields ok=false.
@@ -46,9 +50,11 @@ TokenResponse parseTokenResponse(const std::string& json);
 // Never throws: malformed JSON yields an empty vector.
 std::vector<ModelInfo> parseModelList(const std::string& json);
 
-// Picks the first model whose architectureVersion starts with "a2"
-// (case-insensitive), falling back to the first model in the list. Returns
-// false (leaving `out` untouched) if `models` is empty.
+// Picks the first model whose architectureVersion indicates A2 — either
+// starting with "a2" (case-insensitive) or starting with "2" (the raw
+// numeric architecture_version the API returns, e.g. "2") — falling back to
+// the first model in the list. Returns false (leaving `out` untouched) if
+// `models` is empty.
 bool pickBestModel(const std::vector<ModelInfo>& models, ModelInfo& out);
 
 } // namespace nam
