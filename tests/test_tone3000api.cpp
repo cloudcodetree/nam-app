@@ -15,6 +15,15 @@ TEST_CASE("buildAuthorizeUrl includes all required PKCE params") {
     REQUIRE(u.find("redirect_uri=http%3A%2F%2F127.0.0.1%3A8912%2Fcallback") != std::string::npos);
 }
 
+TEST_CASE("buildAuthorizeUrl omits prompt entirely when empty (connect flow)") {
+    auto u = buildAuthorizeUrl("t3k_pub_x", "http://127.0.0.1:8912/callback",
+                               "CHALLENGE", "STATE123", "");
+    REQUIRE(u.find("prompt=") == std::string::npos);
+    // everything else is still present
+    REQUIRE(u.find("client_id=t3k_pub_x") != std::string::npos);
+    REQUIRE(u.find("state=STATE123") != std::string::npos);
+}
+
 TEST_CASE("buildTokenFormBody has the authorization_code grant fields") {
     auto b = buildTokenFormBody("t3k_pub_x", "http://127.0.0.1:8912/callback", "CODE", "VERIFIER");
     REQUIRE(b.find("grant_type=authorization_code") != std::string::npos);

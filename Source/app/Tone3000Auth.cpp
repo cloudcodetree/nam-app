@@ -148,11 +148,12 @@ void writeRedirectLandingResponse(juce::StreamingSocket& conn) {
 // caller's `done` callback via juce::MessageManager::callAsync.
 class Tone3000Auth::FlowThread : public juce::Thread {
 public:
-    FlowThread(Tone3000Auth& owner, std::function<void(Result)> done)
-        : juce::Thread("Tone3000AuthFlow"), owner_(owner), done_(std::move(done)) {}
+    FlowThread(Tone3000Auth& owner, std::string prompt, std::function<void(Result)> done)
+        : juce::Thread("Tone3000AuthFlow"), owner_(owner), prompt_(std::move(prompt)),
+          done_(std::move(done)) {}
 
     void run() override {
-        Result result = owner_.runFlowOnThread(*this);
+        Result result = owner_.runFlowOnThread(*this, prompt_);
         auto callback = std::move(done_);
         if (callback) {
             // Hop back to the message thread before invoking the caller's
@@ -163,6 +164,7 @@ public:
 
 private:
     Tone3000Auth& owner_;
+    std::string prompt_;
     std::function<void(Result)> done_;
 };
 
@@ -185,6 +187,14 @@ Tone3000Auth::~Tone3000Auth() {
 bool Tone3000Auth::isConfigured() const { return !publishableKey_.empty(); }
 
 void Tone3000Auth::beginSelectToneFlow(std::function<void(Result)> done) {
+    beginFlow("select_tone", std::move(done));
+}
+
+void Tone3000Auth::beginConnectFlow(std::function<void(Result)> done) {
+    beginFlow("", std::move(done));
+}
+
+void Tone3000Auth::beginFlow(std::string prompt, std::function<void(Result)> done) {
     if (flowThread_) {
         // A prior flow is still in flight (or just finished): stop it
         // before starting a new one so we never have two FlowThreads (or a
@@ -192,11 +202,11 @@ void Tone3000Auth::beginSelectToneFlow(std::function<void(Result)> done) {
         flowThread_->stopThread(20000);
         flowThread_.reset();
     }
-    flowThread_ = std::make_unique<FlowThread>(*this, std::move(done));
+    flowThread_ = std::make_unique<FlowThread>(*this, std::move(prompt), std::move(done));
     flowThread_->startThread();
 }
 
-Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread) {
+Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const std::string& prompt) {
     Result result;
 
     if (publishableKey_.empty()) {
@@ -222,7 +232,7 @@ Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread) {
 
     const std::string redirectUri = "http://127.0.0.1:" + std::to_string(boundPort) + "/callback";
     const std::string authorizeUrl =
-        buildAuthorizeUrl(publishableKey_, redirectUri, pkce.challenge, state, "select_tone");
+        buildAuthorizeUrl(publishableKey_, redirectUri, pkce.challenge, state, prompt);
 
     if (!juce::URL(authorizeUrl).launchInDefaultBrowser()) {
         result.error = "could not launch the system browser";

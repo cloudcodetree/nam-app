@@ -46,6 +46,17 @@ public:
     // prior flow first (its `done` callback is dropped, never invoked).
     void beginSelectToneFlow(std::function<void(Result)> done);
 
+    // Runs the same PKCE flow as beginSelectToneFlow(), but without the
+    // "select_tone" prompt: a standard authenticate that returns a Bearer
+    // token but no tone_id (Result.toneId is left empty). Used to get a
+    // token for in-app search without sending the user through TONE3000's
+    // tone-picker.
+    //
+    // Calling this again (or beginSelectToneFlow()) while a flow is already
+    // in progress cancels the prior flow first (its `done` callback is
+    // dropped, never invoked).
+    void beginConnectFlow(std::function<void(Result)> done);
+
     // The stored access token, or "" if none is stored or it has expired
     // (see hasValidToken()).
     std::string accessToken() const;
@@ -64,7 +75,12 @@ public:
 private:
     class FlowThread;
 
-    Result runFlowOnThread(juce::Thread& thread);
+    // Starts a background FlowThread running the PKCE flow with the given
+    // `prompt` ("select_tone" or "" for a plain authenticate). Shared by
+    // beginSelectToneFlow() and beginConnectFlow().
+    void beginFlow(std::string prompt, std::function<void(Result)> done);
+
+    Result runFlowOnThread(juce::Thread& thread, const std::string& prompt);
     void storeTokens(const TokenResponse& tokenResponse);
 
     // Publishable key from the TONE3000_PUBLISHABLE_KEY build def; "" if

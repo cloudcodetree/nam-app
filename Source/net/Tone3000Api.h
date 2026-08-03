@@ -31,7 +31,9 @@ struct ToneInfo {
 std::string urlEncode(const std::string& s);
 
 // Builds the TONE3000 OAuth authorize URL with PKCE params. `prompt` is a
-// TONE3000-specific hint, e.g. "select_tone".
+// TONE3000-specific hint, e.g. "select_tone". When `prompt` is empty, the
+// `prompt` param is omitted entirely (a standard authenticate with no
+// tone-picker).
 std::string buildAuthorizeUrl(const std::string& publishableKey,
                                const std::string& redirectUri,
                                const std::string& challenge,

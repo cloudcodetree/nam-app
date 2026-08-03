@@ -105,7 +105,8 @@ std::string buildAuthorizeUrl(const std::string& publishableKey,
     url += "&code_challenge=" + urlEncode(challenge);
     url += "&code_challenge_method=" + urlEncode("S256");
     url += "&state=" + urlEncode(state);
-    url += "&prompt=" + urlEncode(prompt);
+    if (!prompt.empty())
+        url += "&prompt=" + urlEncode(prompt);
     return url;
 }
 
