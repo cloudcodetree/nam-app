@@ -106,6 +106,7 @@ TEST_CASE("buildSearchUrl encodes query + paging + nam filter") {
 TEST_CASE("buildSearchUrl omits format when namOnly=false and query when empty") {
     auto u = nam::buildSearchUrl("", 1, 20, false);
     REQUIRE(u.find("format=") == std::string::npos);
+    REQUIRE(u.find("query=") == std::string::npos);   // empty query is omitted
     REQUIRE(u.find("page=1") != std::string::npos);
 }
 
