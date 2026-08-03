@@ -343,20 +343,37 @@ void Tone3000Auth::storeTokens(const TokenResponse& tokenResponse) {
     if (path.has_parent_path())
         fs::create_directories(path.parent_path(), ec);
 
+    // Write to a temp file in the same directory, lock it down to 0600
+    // while it is still empty, then write the token bytes -- this closes
+    // the TOCTOU window where a world-readable file briefly holds secrets.
+    // Once the write is confirmed good, atomically rename over the final
+    // path so a crash mid-write can never corrupt (or half-write) the real
+    // token file.
+    fs::path tmpPath = path;
+    tmpPath += ".tmp";
+
     bool wroteOk = false;
     {
-        std::ofstream out(path, std::ios::trunc | std::ios::binary);
+        std::ofstream out(tmpPath, std::ios::trunc | std::ios::binary);
         if (out) {
-            out << j.dump();
+            fs::permissions(tmpPath, fs::perms::owner_read | fs::perms::owner_write,
+                             fs::perm_options::replace, ec);
+            const std::string body = j.dump();
+            out << body;
             out.flush();
             wroteOk = out.good();
         }
     }
-    if (!wroteOk)
+    if (!wroteOk) {
+        fs::remove(tmpPath, ec);
         return;
+    }
 
-    // Owner read/write only -- tokens must never be group/other readable.
-    fs::permissions(path, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace, ec);
+    fs::rename(tmpPath, path, ec);
+    if (ec) {
+        fs::remove(tmpPath, ec);
+        return;
+    }
 
     {
         std::lock_guard<std::mutex> lock(tokenMutex_);
@@ -404,8 +421,22 @@ void Tone3000Auth::clearTokens() {
         refreshToken_.clear();
         expiryEpochSeconds_ = 0;
     }
+    const fs::path path(tokenStoreFile_.getFullPathName().toStdString());
     std::error_code ec;
-    fs::remove(fs::path(tokenStoreFile_.getFullPathName().toStdString()), ec);
+    fs::remove(path, ec);
+    if (!ec)
+        return;
+
+    // fs::remove failed (e.g. permissions weirdness): if the file is still
+    // there, best-effort truncate it to empty so a later loadTokens() can't
+    // resurrect stale tokens whose in-memory copy we just cleared. This is
+    // deliberately best-effort and stays exception-free.
+    std::error_code existsEc;
+    if (fs::exists(path, existsEc)) {
+        std::ofstream out(path, std::ios::trunc | std::ios::binary);
+        // Nothing further to do if this also fails -- there is no
+        // exception-free way to do better here.
+    }
 }
 
 std::string Tone3000Auth::accessToken() const {
