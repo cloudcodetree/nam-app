@@ -25,6 +25,20 @@ FetchContent_Declare(melatonin_inspector
     SOURCE_DIR ${CMAKE_BINARY_DIR}/melatonin_inspector)
 FetchContent_MakeAvailable(melatonin_inspector)
 
+# --- TONE3000 publishable key (build-time injection) ---
+# Reads .env (if present) for ONLY the publishable key. The confidential
+# client secret (TONE3000_CLIENT_SECRET) is never parsed or injected here --
+# a native OAuth2 PKCE client must not embed it.
+set(T3K_PUB "")
+if(EXISTS "${CMAKE_SOURCE_DIR}/.env")
+    file(STRINGS "${CMAKE_SOURCE_DIR}/.env" _envlines)
+    foreach(_l ${_envlines})
+        if(_l MATCHES "^TONE3000_PUBLISHABLE_KEY=(.*)$")
+            set(T3K_PUB "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+endif()
+
 # --- App target ---
 juce_add_gui_app(NamPlayer
     PRODUCT_NAME "NAM Player"
@@ -38,6 +52,7 @@ target_sources(NamPlayer PRIVATE
     Source/app/MainComponent.cpp
     Source/app/LibraryPanel.cpp
     Source/app/Main.cpp
+    Source/app/Tone3000Auth.cpp
     Source/dsp/ToneEngine.cpp
     Source/dsp/IrCab.cpp
     Source/dsp/ToneEq.cpp
@@ -45,9 +60,12 @@ target_sources(NamPlayer PRIVATE
     Source/model/ModelHost.cpp
     Source/model/IrLoader.cpp
     Source/model/LibraryStore.cpp
-    Source/model/LibraryImporter.cpp)
+    Source/model/LibraryImporter.cpp
+    Source/net/Pkce.cpp
+    Source/net/Tone3000Api.cpp)
 target_include_directories(NamPlayer PRIVATE Source ${CMAKE_SOURCE_DIR}/extern/dr_wav
-    ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann)
+    ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann
+    ${CMAKE_SOURCE_DIR}/extern/picosha2)
 target_link_libraries(NamPlayer PRIVATE
     NeuralAudio
     melatonin_inspector
@@ -55,7 +73,9 @@ target_link_libraries(NamPlayer PRIVATE
     juce::juce_gui_extra)
 target_compile_definitions(NamPlayer PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-    JUCE_APPLICATION_NAME_STRING="NAM Player")
+    JUCE_APPLICATION_NAME_STRING="NAM Player"
+    # Publishable key only (see T3K_PUB above); "" if .env is absent.
+    TONE3000_PUBLISHABLE_KEY="${T3K_PUB}")
 
 # --- Tests ---
 enable_testing()
