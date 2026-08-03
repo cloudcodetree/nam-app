@@ -75,6 +75,16 @@ MainComponent::MainComponent() {
     libraryPanel_.onLoadEntry = [this](const nam::LibraryEntry& e) { handleLibraryEntryLoad(e); };
     libraryPanel_.refresh();
 
+    // TONE3000 browse/download.
+    addAndMakeVisible(browseT3kButton_);
+    addAndMakeVisible(t3kStatus_);
+    if (!t3kAuth_.isConfigured()) {
+        browseT3kButton_.setEnabled(false);
+        t3kStatus_.setText("TONE3000 not configured (.env)", juce::dontSendNotification);
+    } else {
+        browseT3kButton_.onClick = [this] { browseT3kButtonClicked(); };
+    }
+
     startTimerHz(15);
     setSize(880, 900);
 }
@@ -165,6 +175,62 @@ void MainComponent::loadIrClicked() {
                 }
             });
         });
+}
+
+void MainComponent::browseT3kButtonClicked() {
+    t3kStatus_.setText("Waiting for TONE3000 login...", juce::dontSendNotification);
+
+    juce::Component::SafePointer<MainComponent> safe(this);
+    t3kAuth_.beginSelectToneFlow([safe](nam::Tone3000Auth::Result result) {
+        auto* self = safe.getComponent();
+        if (self == nullptr) return;
+
+        if (!result.ok) {
+            // result.error never contains the token/code (see Tone3000Auth).
+            self->t3kStatus_.setText("TONE3000: " + juce::String(result.error),
+                                      juce::dontSendNotification);
+            return;
+        }
+        if (result.toneId.empty()) {
+            self->t3kStatus_.setText("TONE3000: no tone was selected", juce::dontSendNotification);
+            return;
+        }
+
+        self->t3kStatus_.setText("Downloading model from TONE3000...", juce::dontSendNotification);
+        self->t3kSession_ = std::make_unique<nam::Tone3000Session>(self->t3kAuth_.accessToken());
+
+        const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+        self->t3kSession_->downloadToneModel(result.toneId, tempDir,
+            [safe](bool ok, juce::File file, juce::String nameOrError) {
+                auto* self2 = safe.getComponent();
+                if (self2 == nullptr) return;
+
+                if (!ok) {
+                    // nameOrError is Tone3000Session's error message, which
+                    // never contains the access token.
+                    self2->t3kStatus_.setText("TONE3000 download failed: " + nameOrError,
+                                               juce::dontSendNotification);
+                    return;
+                }
+
+                auto* entry = nam::importIntoLibrary(self2->library_, file.getFullPathName().toStdString(),
+                                    nam::LibraryType::Model, MainComponent::nowSeconds());
+                file.deleteFile(); // best-effort cleanup of the temp download
+
+                if (entry == nullptr) {
+                    self2->t3kStatus_.setText("Failed to import the downloaded model into the library",
+                                               juce::dontSendNotification);
+                    return;
+                }
+
+                // handleLibraryEntryLoad() marks it used, saves, refreshes
+                // the library panel, and loads it -- the same path the
+                // library panel's click-to-load uses.
+                self2->handleLibraryEntryLoad(*entry);
+                self2->t3kStatus_.setText("Loaded from TONE3000: " + juce::String(entry->displayName),
+                                           juce::dontSendNotification);
+            });
+    });
 }
 
 void MainComponent::reloadCurrentModelAt(int sampleRate, int maxBlock) {
@@ -330,6 +396,15 @@ void MainComponent::resized() {
         loadIrButton_.setBounds(row.removeFromLeft(140));
         row.removeFromLeft(8);
         irLabel_.setBounds(row);
+    }
+    r.removeFromTop(8);
+
+    // TONE3000 browse/download row.
+    {
+        auto row = r.removeFromTop(32);
+        browseT3kButton_.setBounds(row.removeFromLeft(160));
+        row.removeFromLeft(8);
+        t3kStatus_.setBounds(row);
     }
     r.removeFromTop(8);
 

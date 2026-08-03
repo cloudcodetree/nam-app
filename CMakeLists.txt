@@ -54,6 +54,7 @@ target_sources(NamPlayer PRIVATE
     Source/app/LibraryPanel.cpp
     Source/app/Main.cpp
     Source/app/Tone3000Auth.cpp
+    Source/app/Tone3000Session.cpp
     Source/dsp/ToneEngine.cpp
     Source/dsp/IrCab.cpp
     Source/dsp/ToneEq.cpp

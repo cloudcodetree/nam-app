@@ -8,6 +8,8 @@
 #include "model/LibraryEntry.h"
 #include "app/AudioDeviceCallbackAdapter.h"
 #include "app/LibraryPanel.h"
+#include "app/Tone3000Auth.h"
+#include "app/Tone3000Session.h"
 
 #if JUCE_DEBUG
 #include "melatonin_inspector/melatonin_inspector.h"
@@ -22,6 +24,7 @@ public:
 private:
     void loadButtonClicked();
     void loadIrClicked();
+    void browseT3kButtonClicked();
     void timerCallback() override;          // repaint meter + latency + telemetry
     void reloadCurrentModelAt(int sampleRate, int maxBlock);
     void reloadCurrentIrAt(int sampleRate);
@@ -63,6 +66,15 @@ private:
     // libraryPanel_ (declaration order), which holds a reference to it.
     nam::LibraryStore library_ { defaultLibraryDir() };
     LibraryPanel libraryPanel_ { library_ };
+
+    // TONE3000 browse/download: OAuth2 PKCE auth + authenticated model
+    // download, wired to the "Browse TONE3000" button below.
+    nam::Tone3000Auth t3kAuth_
+        { juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+              .getChildFile("NAM Player/tone3000_tokens.json") };
+    std::unique_ptr<nam::Tone3000Session> t3kSession_;
+    juce::TextButton browseT3kButton_ { "Browse TONE3000" };
+    juce::Label      t3kStatus_;
 
     // UI-thread meter state (read from engine telemetry each timer tick).
     juce::Rectangle<int> meterBounds_;
