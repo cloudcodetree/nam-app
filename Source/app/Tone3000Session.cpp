@@ -12,6 +12,7 @@ namespace nam {
 namespace {
 
 constexpr int kConnectTimeoutMs = 15000;
+constexpr int kMaxRedirects = 5;
 
 // True if `url`'s host is tone3000.com or a subdomain of it (case-insensitive).
 // Used to decide whether it's safe to attach our Bearer access token: model_url
@@ -35,6 +36,33 @@ bool isTone3000Host(const std::string& url) {
     const std::string dotSuffix = "." + domain;
     return host.size() > dotSuffix.size() &&
            host.compare(host.size() - dotSuffix.size(), dotSuffix.size(), dotSuffix) == 0;
+}
+
+// Resolves a redirect's `Location` header against the URL that produced it.
+// Returns an empty/invalid URL (toString() == "") if `location` is empty or
+// the base URL has no scheme to resolve a relative location against.
+juce::URL resolveRedirectLocation(const juce::URL& base, const juce::String& location) {
+    if (location.isEmpty())
+        return {};
+    if (location.startsWithIgnoreCase("http://") || location.startsWithIgnoreCase("https://"))
+        return juce::URL(location);
+
+    const juce::String scheme = base.getScheme();
+    if (scheme.isEmpty())
+        return {};
+
+    if (location.startsWith("//")) // protocol-relative: //host/path
+        return juce::URL(scheme + ":" + location);
+
+    const juce::String origin = base.getOrigin(); // scheme://domain[:port]
+    if (location.startsWithChar('/'))              // absolute path on the same origin
+        return juce::URL(origin + location);
+
+    // Relative path: resolve against the base URL's directory (RFC 3986 merge).
+    juce::String basePath = base.getSubPath(false);
+    const int lastSlash = basePath.lastIndexOfChar('/');
+    basePath = (lastSlash >= 0) ? basePath.substring(0, lastSlash + 1) : juce::String();
+    return juce::URL(origin + "/" + basePath + location);
 }
 
 // Strips path separators and other filesystem-hostile characters from a
@@ -94,34 +122,67 @@ public:
 
 private:
     // Performs a GET, optionally with a Bearer Authorization header, and
-    // returns the raw response bytes. On an HTTP error status, `outError`
-    // is set to the numeric status code as text (e.g. "401") so callers can
-    // detect the auth-retry case; on a connection failure it's a generic,
-    // token-free message. Never logs or includes the access token.
+    // returns the raw response bytes. On an HTTP error status (from the
+    // *first* hop), `outError` is set to the numeric status code as text
+    // (e.g. "401") so callers can detect the auth-retry case; on a
+    // connection failure it's a generic, token-free message. Never logs or
+    // includes the access token.
+    //
+    // Redirects are never auto-followed by the underlying stream
+    // (withNumRedirectsToFollow(0)): a 3xx is instead followed manually, one
+    // hop at a time, re-evaluating isTone3000Host() at every hop. The
+    // Authorization header is only ever attached when the *current* hop's
+    // host is tone3000.com; a redirect to any other host (e.g. a pre-signed
+    // S3/CDN URL) is requested without it, so the access token can never be
+    // leaked off-domain via a redirect. The chain is capped at
+    // kMaxRedirects hops.
     bool authenticatedGet(const juce::URL& url, bool withAuth, juce::MemoryBlock& outBytes,
                            juce::String& outError) {
-        if (threadShouldExit()) {
-            outError = "cancelled";
-            return false;
-        }
+        juce::URL currentUrl = url;
+        bool currentAuth = withAuth;
 
-        juce::WebInputStream stream(url, false);
-        if (withAuth)
-            stream.withExtraHeaders("Authorization: Bearer " + juce::String(accessToken_));
-        stream.withConnectionTimeout(kConnectTimeoutMs);
+        for (int hop = 0;; ++hop) {
+            if (threadShouldExit()) {
+                outError = "cancelled";
+                return false;
+            }
+            if (hop > kMaxRedirects) {
+                outError = "too many redirects";
+                return false;
+            }
 
-        if (!stream.connect(nullptr) || stream.isError()) {
-            outError = "connection failed";
-            return false;
+            juce::WebInputStream stream(currentUrl, false);
+            if (currentAuth)
+                stream.withExtraHeaders("Authorization: Bearer " + juce::String(accessToken_));
+            stream.withConnectionTimeout(kConnectTimeoutMs);
+            stream.withNumRedirectsToFollow(0);
+
+            if (!stream.connect(nullptr) || stream.isError()) {
+                outError = "connection failed";
+                return false;
+            }
+            const int status = stream.getStatusCode();
+
+            if (status >= 300 && status < 400) {
+                const juce::String location = stream.getResponseHeaders()["Location"];
+                const juce::URL nextUrl = resolveRedirectLocation(currentUrl, location);
+                if (nextUrl.isEmpty()) {
+                    outError = "redirect missing a usable Location header";
+                    return false;
+                }
+                currentUrl = nextUrl;
+                currentAuth = isTone3000Host(currentUrl.toString(false).toStdString());
+                continue;
+            }
+
+            if (status < 200 || status >= 300) {
+                outError = juce::String(status);
+                return false;
+            }
+            outBytes.reset();
+            stream.readIntoMemoryBlock(outBytes);
+            return true;
         }
-        const int status = stream.getStatusCode();
-        if (status < 200 || status >= 300) {
-            outError = juce::String(status);
-            return false;
-        }
-        outBytes.reset();
-        stream.readIntoMemoryBlock(outBytes);
-        return true;
     }
 
     bool doDownload(juce::File& outFile, juce::String& outName, juce::String& outError) {

@@ -14,7 +14,9 @@ namespace nam {
 //
 // SECURITY: the access token is only ever placed in an Authorization header
 // sent directly to TONE3000's servers; it is never logged, and any error
-// string surfaced to callers redacts it.
+// string surfaced to callers redacts it. HTTP redirects (e.g. a model_url
+// that 302s to a pre-signed S3/CDN URL) are followed manually, one hop at a
+// time, so the header is dropped the moment a redirect leaves tone3000.com.
 class Tone3000Session {
 public:
     explicit Tone3000Session(std::string accessToken);
