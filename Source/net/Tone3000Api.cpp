@@ -29,6 +29,52 @@ bool looksLikeA2(const std::string& s) {
            s[1] == '2';
 }
 
+// Reads `key` from `j` as a string regardless of the underlying JSON type.
+// The real TONE3000 API mixes types across fields (e.g. `id` is a JSON
+// integer, not a string) so callers must not assume a field's type from its
+// name. Returns "" if the key is missing or null.
+std::string asString(const nlohmann::json& j, const char* key) {
+    if (!j.contains(key) || j[key].is_null())
+        return {};
+    const auto& v = j[key];
+    if (v.is_string())
+        return v.get<std::string>();
+    if (v.is_boolean())
+        return v.get<bool>() ? "true" : "false";
+    if (v.is_number_integer())
+        return std::to_string(v.get<long long>());
+    if (v.is_number_unsigned())
+        return std::to_string(v.get<unsigned long long>());
+    if (v.is_number_float())
+        return std::to_string(v.get<double>());
+    return {};
+}
+
+// Reads `key` from `j` as a long long, tolerating both numeric and
+// stringified-numeric representations (the real API sends `size` as either
+// null, a number, or a string like "standard" depending on model
+// architecture). Returns 0 if missing, null, or unparsable.
+long long asLong(const nlohmann::json& j, const char* key) {
+    if (!j.contains(key) || j[key].is_null())
+        return 0;
+    const auto& v = j[key];
+    if (v.is_number()) {
+        try {
+            return v.get<long long>();
+        } catch (...) {
+            return 0;
+        }
+    }
+    if (v.is_string()) {
+        try {
+            return std::stoll(v.get<std::string>());
+        } catch (...) {
+            return 0;
+        }
+    }
+    return 0;
+}
+
 } // namespace
 
 std::string urlEncode(const std::string& s) {
@@ -105,13 +151,19 @@ std::vector<ModelInfo> parseModelList(const std::string& json) {
         if (!j.contains("data") || !j["data"].is_array())
             return models;
         for (const auto& entry : j["data"]) {
-            ModelInfo m;
-            m.id = entry.value("id", std::string());
-            m.name = entry.value("name", std::string());
-            m.modelUrl = entry.value("model_url", std::string());
-            m.architectureVersion = entry.value("architecture_version", std::string());
-            m.size = entry.value("size", static_cast<long long>(0));
-            models.push_back(std::move(m));
+            // Each entry is parsed independently: a single malformed/odd
+            // entry must not drop the rest of an otherwise-usable list.
+            try {
+                ModelInfo m;
+                m.id = asString(entry, "id");
+                m.name = asString(entry, "name");
+                m.modelUrl = asString(entry, "model_url");
+                m.architectureVersion = asString(entry, "architecture_version");
+                m.size = asLong(entry, "size");
+                models.push_back(std::move(m));
+            } catch (...) {
+                // Skip this entry; keep whatever else parsed successfully.
+            }
         }
     } catch (...) {
         return {};

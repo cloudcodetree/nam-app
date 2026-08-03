@@ -49,17 +49,36 @@ TEST_CASE("parseModelList + pickBestModel prefers an A2 model") {
     REQUIRE(best.modelUrl == "https://x/m2.nam");
 }
 
-TEST_CASE("pickBestModel treats architecture_version \"2\" as A2") {
+// Mirrors the REAL TONE3000 /models response shape (verified live): `id` is
+// a JSON integer (not a string), `architecture_version` is a numeric
+// string, and `size` is null for A2 models but a string like "standard" for
+// A1 models. parseModelList must tolerate all of this rather than throwing
+// a type_error and silently returning an empty list.
+TEST_CASE("pickBestModel treats architecture_version \"2\" as A2 (real API shape)") {
     const char* json = R"({"data":[
-      {"id":"m1","name":"Amp A1","architecture_version":"1","model_url":"https://x/m1.nam","size":100},
-      {"id":"m2","name":"Amp A2","architecture_version":"2","model_url":"https://x/m2.nam","size":50}
-    ],"total":2})";
+      {"id":381630,"name":"VOX_AC30_08","architecture_version":"1","model_url":"https://x/m1.nam","size":"standard"},
+      {"id":664349,"name":"RR AC30 NRM 160","architecture_version":"2","model_url":"https://x/m2.nam","size":null}
+    ],"total":2,"page":1,"page_size":50,"total_pages":1})";
     auto ms = parseModelList(json);
     REQUIRE(ms.size() == 2);
     ModelInfo best;
     REQUIRE(pickBestModel(ms, best));
-    REQUIRE(best.id == "m2");
+    REQUIRE(best.id == "664349");
     REQUIRE(best.modelUrl == "https://x/m2.nam");
+}
+
+TEST_CASE("parseModelList tolerates a mixed/oddly-typed entry without dropping the list") {
+    // id as an integer, size as a string: a real, differently-shaped entry
+    // (not garbage) must still parse rather than triggering the empty-list
+    // fallback.
+    const char* json = R"({"data":[
+      {"id":381630,"name":"VOX_AC30_08","architecture_version":"1","model_url":"https://x/m1.nam","size":"standard"}
+    ],"total":1})";
+    auto ms = parseModelList(json);
+    REQUIRE_FALSE(ms.empty());
+    REQUIRE(ms[0].id == "381630");
+    REQUIRE(ms[0].modelUrl == "https://x/m1.nam");
+    REQUIRE(ms[0].size == 0); // "standard" isn't numeric; asLong() falls back to 0
 }
 
 TEST_CASE("parseModelList tolerates garbage without throwing") {
