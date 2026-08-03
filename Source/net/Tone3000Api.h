@@ -16,6 +16,16 @@ struct ModelInfo {
     long long size = 0;
 };
 
+struct ToneInfo {
+    std::string id;      // stringified integer
+    std::string title;
+    std::string format;  // "nam" | "ir"
+    std::string gear;
+    long long   a2Count = 0;
+    long long   a1Count = 0;
+    long long   downloads = 0;
+};
+
 // Percent-encodes every byte except the unreserved set [A-Za-z0-9-._~]
 // (RFC 3986 §2.3). Space becomes %20 (not '+'); hex digits are uppercase.
 std::string urlEncode(const std::string& s);
@@ -56,5 +66,20 @@ std::vector<ModelInfo> parseModelList(const std::string& json);
 // the first model in the list. Returns false (leaving `out` untouched) if
 // `models` is empty.
 bool pickBestModel(const std::vector<ModelInfo>& models, ModelInfo& out);
+
+// Builds the /api/v1/tones/search URL. `query` is percent-encoded and
+// included only when non-empty (the server treats an unfiltered/empty query
+// as a trending-like listing). `page` and `page_size` are always included.
+// `format=nam` is appended only when `namOnly` is true.
+std::string buildSearchUrl(const std::string& query, int page, int pageSize, bool namOnly);
+
+// Full /api/v1/tones/trending URL.
+std::string buildTrendingUrl();
+
+// Parses the `data[]` array of a /tones search (or trending) response into
+// ToneInfo entries. Each entry is parsed independently: a single
+// malformed/odd entry must not drop the rest of an otherwise-usable list.
+// Never throws: malformed JSON yields an empty vector.
+std::vector<ToneInfo> parseToneList(const std::string& json);
 
 } // namespace nam

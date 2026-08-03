@@ -184,4 +184,48 @@ bool pickBestModel(const std::vector<ModelInfo>& models, ModelInfo& out) {
     return true;
 }
 
+std::string buildSearchUrl(const std::string& query, int page, int pageSize, bool namOnly) {
+    std::string url = std::string(kBaseUrl) + "/tones/search?";
+    if (!query.empty())
+        url += "query=" + urlEncode(query) + "&";
+    url += "page=" + std::to_string(page);
+    url += "&page_size=" + std::to_string(pageSize);
+    if (namOnly)
+        url += "&format=nam";
+    return url;
+}
+
+std::string buildTrendingUrl() {
+    return std::string(kBaseUrl) + "/tones/trending";
+}
+
+std::vector<ToneInfo> parseToneList(const std::string& json) {
+    std::vector<ToneInfo> tones;
+    try {
+        auto j = nlohmann::json::parse(json);
+        if (!j.contains("data") || !j["data"].is_array())
+            return tones;
+        for (const auto& entry : j["data"]) {
+            // Each entry is parsed independently: a single malformed/odd
+            // entry must not drop the rest of an otherwise-usable list.
+            try {
+                ToneInfo t;
+                t.id = asString(entry, "id");
+                t.title = asString(entry, "title");
+                t.format = asString(entry, "format");
+                t.gear = asString(entry, "gear");
+                t.a2Count = asLong(entry, "a2_models_count");
+                t.a1Count = asLong(entry, "a1_models_count");
+                t.downloads = asLong(entry, "downloads_count");
+                tones.push_back(std::move(t));
+            } catch (...) {
+                // Skip this entry; keep whatever else parsed successfully.
+            }
+        }
+    } catch (...) {
+        return {};
+    }
+    return tones;
+}
+
 } // namespace nam

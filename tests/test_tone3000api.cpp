@@ -93,3 +93,33 @@ TEST_CASE("modelsUrl includes tone_id, architecture, and page_size") {
     REQUIRE(u.find("architecture=2") != std::string::npos);
     REQUIRE(u.find("page_size=50") != std::string::npos);
 }
+
+TEST_CASE("buildSearchUrl encodes query + paging + nam filter") {
+    auto u = nam::buildSearchUrl("vox ac30", 2, 25, true);
+    REQUIRE(u.find("/api/v1/tones/search?") != std::string::npos);
+    REQUIRE(u.find("query=vox%20ac30") != std::string::npos);
+    REQUIRE(u.find("page=2") != std::string::npos);
+    REQUIRE(u.find("page_size=25") != std::string::npos);
+    REQUIRE(u.find("format=nam") != std::string::npos);
+}
+
+TEST_CASE("buildSearchUrl omits format when namOnly=false and query when empty") {
+    auto u = nam::buildSearchUrl("", 1, 20, false);
+    REQUIRE(u.find("format=") == std::string::npos);
+    REQUIRE(u.find("page=1") != std::string::npos);
+}
+
+TEST_CASE("parseToneList reads real tone shape (integer id, counts)") {
+    const char* j = R"({"data":[
+      {"id":75774,"title":"RR AC30 TB","format":"nam","gear":"amp","a2_models_count":3,"a1_models_count":2,"downloads_count":11081},
+      {"id":79866,"title":"IR only","format":"ir","a2_models_count":0}
+    ],"total":2})";
+    auto ts = nam::parseToneList(j);
+    REQUIRE(ts.size() == 2);
+    REQUIRE(ts[0].id == "75774");
+    REQUIRE(ts[0].title == "RR AC30 TB");
+    REQUIRE(ts[0].a2Count == 3);
+    REQUIRE(ts[1].format == "ir");
+}
+
+TEST_CASE("parseToneList tolerates garbage") { REQUIRE(nam::parseToneList("nope").empty()); }
