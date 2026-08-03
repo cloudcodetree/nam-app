@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ['**.md', 'docs/**', '.gitignore', '.env.example']
   pull_request:
     branches: [main]
 
@@ -20,23 +21,13 @@ jobs:
         with:
           submodules: recursive
 
-      # JUCE's CMake configures the (unbuilt) app target, which probes for
-      # Linux system libs even though nam_tests itself is JUCE-free.
-      - name: Install JUCE Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libasound2-dev libjack-jackd2-dev libfreetype6-dev \
-            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
-            libxinerama-dev libxrandr-dev libxrender-dev \
-            libglu1-mesa-dev mesa-common-dev
-
-      - name: Configure (Release)
-        run: cmake --preset default
+      # The JUCE-free core + tests need no JUCE and no GUI system libs:
+      # -DNAM_BUILD_APP=OFF skips fetching/configuring JUCE entirely.
+      - name: Configure (core + tests only, no JUCE)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DNAM_BUILD_APP=OFF
 
       - name: Build headless tests
-        run: cmake --build --preset default --target nam_tests -j
+        run: cmake --build build --target nam_tests -j
 
       - name: Run tests
-        run: ctest --preset default --output-on-failure
+        run: ctest --test-dir build --output-on-failure
