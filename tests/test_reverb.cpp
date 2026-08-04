@@ -77,6 +77,24 @@ TEST_CASE("Reverb larger room size yields a longer/louder tail") {
     REQUIRE(tailEnergy(0.9f) > tailEnergy(0.3f));
 }
 
+TEST_CASE("Reverb in-place process matches separate buffers") {
+    // ToneEngine calls reverb_.process(out, out, n): same pointer for in/out.
+    auto run = [](bool inPlace) {
+        dsp::Reverb r; r.prepare(48000, 128);
+        r.setEnabled(true); r.setRoomSize(0.7f); r.setDamping(0.4f); r.setMix(0.4f);
+        const int n = 4096;
+        std::vector<float> in(n, 0.0f);
+        in[0] = 1.0f; in[100] = -0.5f;
+        std::vector<float> out(n, 0.0f);
+        if (inPlace) { out = in; r.process(out.data(), out.data(), n); }
+        else         { r.process(in.data(), out.data(), n); }
+        return out;
+    };
+    const auto sep = run(false);
+    const auto ali = run(true);
+    for (size_t i = 0; i < sep.size(); ++i) REQUIRE(ali[i] == Approx(sep[i]));
+}
+
 TEST_CASE("Reverb stays finite and decays over long silence") {
     dsp::Reverb r; r.prepare(48000, 128);
     r.setEnabled(true); r.setRoomSize(0.9f); r.setDamping(0.4f); r.setMix(1.0f);

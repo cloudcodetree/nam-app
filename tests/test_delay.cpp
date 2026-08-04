@@ -128,6 +128,24 @@ TEST_CASE("Delay re-prepare resets state and resizes") {
     for (float v : out2) REQUIRE(std::fabs(v) < 1.0e-6f);
 }
 
+TEST_CASE("Delay in-place process matches separate buffers") {
+    // ToneEngine calls delay_.process(out, out, n): same pointer for in/out.
+    auto run = [](bool inPlace) {
+        dsp::Delay d; d.prepare(48000, 128);
+        d.setEnabled(true); d.setTimeMs(10.0f); d.setFeedback(0.5f); d.setMix(0.4f);
+        const int n = 2048;
+        std::vector<float> in(n, 0.0f);
+        in[0] = 1.0f; in[50] = -0.5f;
+        std::vector<float> out(n, 0.0f);
+        if (inPlace) { out = in; d.process(out.data(), out.data(), n); }
+        else         { d.process(in.data(), out.data(), n); }
+        return out;
+    };
+    const auto sep = run(false);
+    const auto ali = run(true);
+    for (size_t i = 0; i < sep.size(); ++i) REQUIRE(ali[i] == Approx(sep[i]));
+}
+
 TEST_CASE("Delay stays finite over long silence") {
     dsp::Delay d; d.prepare(48000, 128);
     d.setEnabled(true); d.setTimeMs(10.0f); d.setFeedback(0.9f); d.setMix(1.0f);
