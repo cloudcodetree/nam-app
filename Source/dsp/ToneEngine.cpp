@@ -44,7 +44,8 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
 
     nam::NamModel* m = active_.load(std::memory_order_acquire);
     if (m) {
-        // Signal order: input gain -> gate -> model -> IR cab -> EQ -> output gain.
+        // Signal order: input gain -> gate -> model -> IR cab -> EQ ->
+        //               delay -> reverb -> output gain.
         // scratch_ is preallocated in prepare() so this stays
         // allocation-free on the audio thread. Contract: numSamples
         // must be <= the maxBlock passed to prepare(); guard defensively
