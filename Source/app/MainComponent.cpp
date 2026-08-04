@@ -284,20 +284,35 @@ void MainComponent::doTone3000Search(const juce::String& query) {
         return;
     }
 
-    // No valid token yet: authenticate (token-only, no select_tone prompt),
-    // then run the search once connected.
-    t3kAuth_.beginConnectFlow([safe, query, searchDone](nam::Tone3000Auth::Result result) {
+    // No valid token yet: try a silent refresh first (no browser) using a
+    // stored refresh token. Only if that's impossible/fails do we fall back
+    // to the browser Connect flow.
+    t3kAuth_.tryRefresh([safe, query, searchDone](bool refreshed) {
         auto* self = safe.getComponent();
         if (self == nullptr) return;
 
-        if (!result.ok) {
-            // result.error never contains the token/code (see Tone3000Auth).
-            self->searchPanel_.setStatus("TONE3000: " + juce::String(result.error));
+        if (refreshed) {
+            self->t3kSession_ = std::make_unique<nam::Tone3000Session>(self->t3kAuth_.accessToken());
+            self->t3kSession_->search(query.toStdString(), 1, searchDone);
             return;
         }
 
-        self->t3kSession_ = std::make_unique<nam::Tone3000Session>(self->t3kAuth_.accessToken());
-        self->t3kSession_->search(query.toStdString(), 1, searchDone);
+        // Refresh wasn't possible (no refresh token) or failed: authenticate
+        // via the browser (token-only, no select_tone prompt), then run the
+        // search once connected.
+        self->t3kAuth_.beginConnectFlow([safe, query, searchDone](nam::Tone3000Auth::Result result) {
+            auto* self2 = safe.getComponent();
+            if (self2 == nullptr) return;
+
+            if (!result.ok) {
+                // result.error never contains the token/code (see Tone3000Auth).
+                self2->searchPanel_.setStatus("TONE3000: " + juce::String(result.error));
+                return;
+            }
+
+            self2->t3kSession_ = std::make_unique<nam::Tone3000Session>(self2->t3kAuth_.accessToken());
+            self2->t3kSession_->search(query.toStdString(), 1, searchDone);
+        });
     });
 }
 

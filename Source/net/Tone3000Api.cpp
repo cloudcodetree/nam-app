@@ -123,6 +123,15 @@ std::string buildTokenFormBody(const std::string& publishableKey,
     return body;
 }
 
+std::string buildRefreshFormBody(const std::string& publishableKey,
+                                  const std::string& refreshToken) {
+    std::string body;
+    body += "grant_type=" + urlEncode("refresh_token");
+    body += "&refresh_token=" + urlEncode(refreshToken);
+    body += "&client_id=" + urlEncode(publishableKey);
+    return body;
+}
+
 std::string modelsUrl(const std::string& toneId, const std::string& architecture) {
     return std::string(kBaseUrl) + "/models?tone_id=" + urlEncode(toneId) +
            "&architecture=" + urlEncode(architecture) + "&page_size=50";

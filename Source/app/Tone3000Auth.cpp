@@ -168,6 +168,30 @@ private:
     std::function<void(Result)> done_;
 };
 
+// Runs entirely on the background RefreshThread; delivers its bool result to
+// the caller's `done` callback via juce::MessageManager::callAsync.
+class Tone3000Auth::RefreshThread : public juce::Thread {
+public:
+    RefreshThread(Tone3000Auth& owner, std::string refreshToken, std::function<void(bool)> done)
+        : juce::Thread("Tone3000AuthRefresh"), owner_(owner), refreshToken_(std::move(refreshToken)),
+          done_(std::move(done)) {}
+
+    void run() override {
+        const bool ok = owner_.runRefreshOnThread(refreshToken_);
+        auto callback = std::move(done_);
+        if (callback) {
+            // Hop back to the message thread before invoking the caller's
+            // callback -- UI code must not run on this background thread.
+            juce::MessageManager::callAsync([callback, ok] { callback(ok); });
+        }
+    }
+
+private:
+    Tone3000Auth& owner_;
+    std::string refreshToken_;
+    std::function<void(bool)> done_;
+};
+
 Tone3000Auth::Tone3000Auth(juce::File tokenStoreFile) : tokenStoreFile_(std::move(tokenStoreFile)) {
 #if defined(TONE3000_PUBLISHABLE_KEY)
     publishableKey_ = TONE3000_PUBLISHABLE_KEY;
@@ -181,6 +205,11 @@ Tone3000Auth::~Tone3000Auth() {
         // intervals throughout the accept loop) and block until it does, so
         // the FlowThread is never destroyed while still running.
         flowThread_->stopThread(20000);
+    }
+    if (refreshThread_) {
+        // Same discipline as flowThread_ above: never destroy a running
+        // thread out from under it.
+        refreshThread_->stopThread(20000);
     }
 }
 
@@ -204,6 +233,32 @@ void Tone3000Auth::beginFlow(std::string prompt, std::function<void(Result)> don
     }
     flowThread_ = std::make_unique<FlowThread>(*this, std::move(prompt), std::move(done));
     flowThread_->startThread();
+}
+
+void Tone3000Auth::tryRefresh(std::function<void(bool ok)> done) {
+    std::string refreshToken;
+    {
+        std::lock_guard<std::mutex> lock(tokenMutex_);
+        refreshToken = refreshToken_;
+    }
+
+    if (refreshToken.empty()) {
+        if (done) {
+            juce::MessageManager::callAsync([done] { done(false); });
+        }
+        return;
+    }
+
+    if (refreshThread_) {
+        // Same supersede discipline as beginFlow(): stop any prior refresh
+        // before starting a new one so we never have two RefreshThreads (or
+        // a dangling one) alive at once. Its `done` is dropped, never
+        // called.
+        refreshThread_->stopThread(20000);
+        refreshThread_.reset();
+    }
+    refreshThread_ = std::make_unique<RefreshThread>(*this, std::move(refreshToken), std::move(done));
+    refreshThread_->startThread();
 }
 
 Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const std::string& prompt) {
@@ -343,12 +398,52 @@ Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const s
     return result;
 }
 
+bool Tone3000Auth::runRefreshOnThread(const std::string& refreshToken) {
+    if (publishableKey_.empty() || refreshToken.empty())
+        return false;
+
+    const std::string formBody = buildRefreshFormBody(publishableKey_, refreshToken);
+    const juce::URL tokenUrl = juce::URL(juce::String(kTokenUrl)).withPOSTData(juce::String(formBody));
+
+    juce::WebInputStream tokenStream(tokenUrl, true);
+    tokenStream.withExtraHeaders("Content-Type: application/x-www-form-urlencoded");
+    tokenStream.withConnectionTimeout(kTokenConnectTimeoutMs);
+
+    if (!tokenStream.connect(nullptr) || tokenStream.isError()) {
+        // Never interpolate `refreshToken` or the response body into
+        // diagnostics -- this function only ever returns a bool.
+        return false;
+    }
+    const int status = tokenStream.getStatusCode();
+    const std::string responseBody = tokenStream.readEntireStreamAsString().toStdString();
+    if (status < 200 || status >= 300)
+        return false;
+
+    const TokenResponse tokenResponse = parseTokenResponse(responseBody);
+    if (!tokenResponse.ok || tokenResponse.accessToken.empty())
+        return false;
+
+    // CRITICAL ROTATION GOTCHA: if the server didn't return a new refresh
+    // token, keep the one we just used -- overwriting refreshToken_ with
+    // empty would strand us with no way to refresh again next time.
+    const std::string newRefreshToken =
+        tokenResponse.refreshToken.empty() ? refreshToken : tokenResponse.refreshToken;
+
+    storeTokensResolved(tokenResponse.accessToken, newRefreshToken, tokenResponse.expiresIn);
+    return true;
+}
+
 void Tone3000Auth::storeTokens(const TokenResponse& tokenResponse) {
-    const long long expiry = nowEpochSeconds() + tokenResponse.expiresIn;
+    storeTokensResolved(tokenResponse.accessToken, tokenResponse.refreshToken, tokenResponse.expiresIn);
+}
+
+void Tone3000Auth::storeTokensResolved(const std::string& accessToken, const std::string& refreshToken,
+                                        long long expiresIn) {
+    const long long expiry = nowEpochSeconds() + expiresIn;
 
     json j;
-    j["access_token"] = tokenResponse.accessToken;
-    j["refresh_token"] = tokenResponse.refreshToken;
+    j["access_token"] = accessToken;
+    j["refresh_token"] = refreshToken;
     j["expiry"] = expiry;
 
     const fs::path path(tokenStoreFile_.getFullPathName().toStdString());
@@ -390,8 +485,8 @@ void Tone3000Auth::storeTokens(const TokenResponse& tokenResponse) {
 
     {
         std::lock_guard<std::mutex> lock(tokenMutex_);
-        accessToken_ = tokenResponse.accessToken;
-        refreshToken_ = tokenResponse.refreshToken;
+        accessToken_ = accessToken;
+        refreshToken_ = refreshToken;
         expiryEpochSeconds_ = expiry;
     }
 }

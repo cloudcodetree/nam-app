@@ -57,6 +57,18 @@ public:
     // dropped, never invoked).
     void beginConnectFlow(std::function<void(Result)> done);
 
+    // Attempts a silent (no browser) refresh using the stored refresh token:
+    // POSTs a refresh_token grant on a background thread and, on success,
+    // stores the new tokens (preserving the existing refresh token if the
+    // server doesn't rotate it). `done` is invoked on the JUCE message
+    // thread exactly once with true on success, false otherwise (no refresh
+    // token stored, request/parse failure, or bad status).
+    //
+    // Calling this again while a prior refresh is still in flight supersedes
+    // it first (its `done` callback is dropped, never invoked), mirroring
+    // beginFlow()'s discipline for flowThread_.
+    void tryRefresh(std::function<void(bool ok)> done);
+
     // The stored access token, or "" if none is stored or it has expired
     // (see hasValidToken()).
     std::string accessToken() const;
@@ -74,6 +86,7 @@ public:
 
 private:
     class FlowThread;
+    class RefreshThread;
 
     // Starts a background FlowThread running the PKCE flow with the given
     // `prompt` ("select_tone" or "" for a plain authenticate). Shared by
@@ -81,7 +94,22 @@ private:
     void beginFlow(std::string prompt, std::function<void(Result)> done);
 
     Result runFlowOnThread(juce::Thread& thread, const std::string& prompt);
+
+    // Runs the refresh_token POST on the background RefreshThread. Returns
+    // true and persists the new tokens on success. Never logs `refreshToken`
+    // or the response body.
+    bool runRefreshOnThread(const std::string& refreshToken);
+
     void storeTokens(const TokenResponse& tokenResponse);
+
+    // Persists the given tokens (0600 atomic temp+rename) and updates the
+    // in-memory copies. `refreshToken` is the CALLER-RESOLVED refresh token
+    // to store -- storeTokens() passes tokenResponse.refreshToken through
+    // unchanged, while runRefreshOnThread() resolves an empty
+    // tokenResponse.refreshToken (server didn't rotate) to the refresh token
+    // that was just used, so a refresh never strands us without one.
+    void storeTokensResolved(const std::string& accessToken, const std::string& refreshToken,
+                              long long expiresIn);
 
     // Publishable key from the TONE3000_PUBLISHABLE_KEY build def; "" if
     // unset. NEVER the client secret (t3k_cs_...) -- a native PKCE client
@@ -95,6 +123,7 @@ private:
     long long expiryEpochSeconds_ = 0;
 
     std::unique_ptr<FlowThread> flowThread_;
+    std::unique_ptr<RefreshThread> refreshThread_;
 };
 
 } // namespace nam

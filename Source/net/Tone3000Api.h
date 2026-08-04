@@ -47,6 +47,12 @@ std::string buildTokenFormBody(const std::string& publishableKey,
                                 const std::string& code,
                                 const std::string& codeVerifier);
 
+// Builds the application/x-www-form-urlencoded body for a refresh_token
+// grant: silently exchanges a stored refresh token for a new access token
+// (and possibly a rotated refresh token) without involving the browser.
+std::string buildRefreshFormBody(const std::string& publishableKey,
+                                  const std::string& refreshToken);
+
 // Full /api/v1/models?tone_id=...&architecture=...&page_size=50 URL for a
 // given tone id. `architecture` is the TONE3000 API's numeric-string
 // architecture selector: "2" for A2 models, "1" for A1 models. Without this

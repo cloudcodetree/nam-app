@@ -32,6 +32,13 @@ TEST_CASE("buildTokenFormBody has the authorization_code grant fields") {
     REQUIRE(b.find("client_id=t3k_pub_x") != std::string::npos);
 }
 
+TEST_CASE("buildRefreshFormBody has the refresh_token grant fields") {
+    auto b = buildRefreshFormBody("t3k_pub_x", "REFRESH_TOK");
+    REQUIRE(b.find("grant_type=refresh_token") != std::string::npos);
+    REQUIRE(b.find("refresh_token=REFRESH_TOK") != std::string::npos);
+    REQUIRE(b.find("client_id=t3k_pub_x") != std::string::npos);
+}
+
 TEST_CASE("parseTokenResponse reads tokens") {
     auto t = parseTokenResponse(R"({"access_token":"AT","refresh_token":"RT","expires_in":3600,"token_type":"bearer","scope":"read"})");
     REQUIRE(t.ok);
