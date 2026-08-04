@@ -23,7 +23,10 @@ public:
     void setMix(float m)      { mix_.store(m, std::memory_order_relaxed); }
 
     void process(const float* in, float* out, int numSamples) {
-        if (! enabled_.load(std::memory_order_relaxed)) {
+        // Disabled, or prepare() never ran (empty line): transparent passthrough.
+        // The empty guard also protects the std::clamp below from a (1, N-1)==(1,-1)
+        // lo>hi precondition violation and an out-of-bounds line_ access.
+        if (! enabled_.load(std::memory_order_relaxed) || line_.empty()) {
             if (in != out) for (int i = 0; i < numSamples; ++i) out[i] = in[i];
             return;
         }
