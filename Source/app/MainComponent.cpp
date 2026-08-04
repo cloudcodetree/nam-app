@@ -85,8 +85,18 @@ MainComponent::MainComponent() {
         browseT3kButton_.onClick = [this] { browseT3kButtonClicked(); };
     }
 
+    // In-app TONE3000 search panel (additive to the Browse TONE3000 button
+    // above): query -> results -> pick -> download, reusing t3kAuth_ /
+    // t3kSession_ / the Phase 4a download path.
+    addAndMakeVisible(searchPanel_);
+    if (!t3kAuth_.isConfigured()) {
+        searchPanel_.setStatus("TONE3000 not configured (.env)");
+    }
+    searchPanel_.onSearch = [this](const juce::String& query) { doTone3000Search(query); };
+    searchPanel_.onPick = [this](const nam::ToneInfo& tone) { downloadPickedTone(tone); };
+
     startTimerHz(15);
-    setSize(880, 900);
+    setSize(1200, 900);
 }
 
 MainComponent::~MainComponent() {
@@ -243,6 +253,95 @@ void MainComponent::browseT3kButtonClicked() {
     });
 }
 
+void MainComponent::doTone3000Search(const juce::String& query) {
+    if (!t3kAuth_.isConfigured()) {
+        searchPanel_.setStatus("TONE3000 not configured (.env)");
+        return;
+    }
+
+    searchPanel_.setStatus("Searching...");
+
+    juce::Component::SafePointer<MainComponent> safe(this);
+    auto searchDone = [safe](bool ok, std::vector<nam::ToneInfo> tones, juce::String error) {
+        auto* self = safe.getComponent();
+        if (self == nullptr) return;
+
+        if (!ok) {
+            // `error` is Tone3000Session's error message, which never
+            // contains the access token.
+            self->searchPanel_.setStatus("TONE3000 search failed: " + error);
+            return;
+        }
+        const int n = (int) tones.size();
+        self->searchPanel_.setResults(std::move(tones));
+        self->searchPanel_.setStatus(juce::String(n) + (n == 1 ? " result" : " results"));
+    };
+
+    if (t3kAuth_.hasValidToken()) {
+        if (t3kSession_ == nullptr)
+            t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+        t3kSession_->search(query.toStdString(), 1, searchDone);
+        return;
+    }
+
+    // No valid token yet: authenticate (token-only, no select_tone prompt),
+    // then run the search once connected.
+    t3kAuth_.beginConnectFlow([safe, query, searchDone](nam::Tone3000Auth::Result result) {
+        auto* self = safe.getComponent();
+        if (self == nullptr) return;
+
+        if (!result.ok) {
+            // result.error never contains the token/code (see Tone3000Auth).
+            self->searchPanel_.setStatus("TONE3000: " + juce::String(result.error));
+            return;
+        }
+
+        self->t3kSession_ = std::make_unique<nam::Tone3000Session>(self->t3kAuth_.accessToken());
+        self->t3kSession_->search(query.toStdString(), 1, searchDone);
+    });
+}
+
+void MainComponent::downloadPickedTone(const nam::ToneInfo& tone) {
+    if (!t3kAuth_.hasValidToken()) {
+        searchPanel_.setStatus("Connect first (run a search to connect)");
+        return;
+    }
+
+    searchPanel_.setStatus("Downloading model from TONE3000...");
+    if (t3kSession_ == nullptr)
+        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+
+    const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    juce::Component::SafePointer<MainComponent> safe(this);
+    t3kSession_->downloadToneModel(tone.id, tempDir,
+        [safe](bool ok, juce::File file, juce::String nameOrError) {
+            auto* self = safe.getComponent();
+            if (self == nullptr) return;
+
+            if (!ok) {
+                // nameOrError is Tone3000Session's error message, which
+                // never contains the access token.
+                self->searchPanel_.setStatus("TONE3000 download failed: " + nameOrError);
+                return;
+            }
+
+            auto* entry = nam::importIntoLibrary(self->library_, file.getFullPathName().toStdString(),
+                                nam::LibraryType::Model, MainComponent::nowSeconds());
+            file.deleteFile(); // best-effort cleanup of the temp download
+
+            if (entry == nullptr) {
+                self->searchPanel_.setStatus("Failed to import the downloaded model into the library");
+                return;
+            }
+
+            // handleLibraryEntryLoad() marks it used, saves, refreshes the
+            // library panel, and loads it -- the same path the library
+            // panel's and Browse TONE3000's click-to-load use.
+            self->handleLibraryEntryLoad(*entry);
+            self->searchPanel_.setStatus("Downloaded: " + juce::String(entry->displayName));
+        });
+}
+
 void MainComponent::reloadCurrentModelAt(int sampleRate, int maxBlock) {
     if (currentModelPath_.isEmpty()) return;
     host_.configure(sampleRate, maxBlock);
@@ -365,6 +464,11 @@ void MainComponent::paint(juce::Graphics& g) {
 
 void MainComponent::resized() {
     auto full = getLocalBounds().reduced(12);
+
+    auto searchArea = full.removeFromRight(300);
+    full.removeFromRight(12);
+    searchPanel_.setBounds(searchArea);
+
     auto libraryArea = full.removeFromRight(300);
     full.removeFromRight(12);
     libraryPanel_.setBounds(libraryArea);

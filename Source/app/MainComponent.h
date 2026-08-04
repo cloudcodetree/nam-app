@@ -8,6 +8,7 @@
 #include "model/LibraryEntry.h"
 #include "app/AudioDeviceCallbackAdapter.h"
 #include "app/LibraryPanel.h"
+#include "app/SearchPanel.h"
 #include "app/Tone3000Auth.h"
 #include "app/Tone3000Session.h"
 
@@ -25,6 +26,8 @@ private:
     void loadButtonClicked();
     void loadIrClicked();
     void browseT3kButtonClicked();
+    void doTone3000Search(const juce::String& query);
+    void downloadPickedTone(const nam::ToneInfo& tone);
     void timerCallback() override;          // repaint meter + latency + telemetry
     void reloadCurrentModelAt(int sampleRate, int maxBlock);
     void reloadCurrentIrAt(int sampleRate);
@@ -75,6 +78,11 @@ private:
     std::unique_ptr<nam::Tone3000Session> t3kSession_;
     juce::TextButton browseT3kButton_ { "Browse TONE3000" };
     juce::Label      t3kStatus_;
+
+    // In-app TONE3000 search panel: query -> results -> pick -> download
+    // (reuses t3kAuth_/t3kSession_ and the same download path as
+    // browseT3kButtonClicked() above).
+    SearchPanel searchPanel_;
 
     // UI-thread meter state (read from engine telemetry each timer tick).
     juce::Rectangle<int> meterBounds_;
