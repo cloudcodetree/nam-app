@@ -43,6 +43,14 @@ target_compile_definitions(nam_tests PRIVATE
     # and for regression coverage of the production A2 format.
     NAM_MODEL_A2_REAL="${CMAKE_SOURCE_DIR}/models/A2.nam")
 
-include(CTest)
-include(Catch)
-catch_discover_tests(nam_tests)
+# Catch2's catch_discover_tests() RUNS the test binary on the build host to
+# enumerate TEST_CASEs. That's impossible when cross-compiling (e.g. for
+# Android arm64) -- the host can't exec a foreign-arch binary. Skip discovery
+# in that case; the binary still runs the whole suite when invoked directly
+# (pushed to the device via adb). Native desktop builds keep full CTest
+# integration.
+if(NOT CMAKE_CROSSCOMPILING)
+    include(CTest)
+    include(Catch)
+    catch_discover_tests(nam_tests)
+endif()
