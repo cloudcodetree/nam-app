@@ -1,0 +1,6 @@
+// Root Gradle build. The Android Gradle Plugin is declared here and applied in
+// app/build.gradle. Phase 5a: minimal Android app wrapping the CMake-built
+// libjuce_jni.so (the JUCE-free core + a trivial/audio JUCE component).
+plugins {
+    id "com.android.application" version "8.7.2" apply false
+}

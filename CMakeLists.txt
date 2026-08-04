@@ -60,6 +60,10 @@ if(NAM_BUILD_APP)
         # desktop app (library, TONE3000, MainComponent) is intentionally NOT
         # ported yet. Task 4 swaps the bring-up component for the audio app.
         juce_add_gui_app(NamPlayer PRODUCT_NAME "NAM Player")
+        # JUCE's Android Java bootstrap (Java.java) does
+        # System.loadLibrary("juce_jni"), so the shared library MUST be named
+        # libjuce_jni.so regardless of the target/product name.
+        set_target_properties(NamPlayer PROPERTIES OUTPUT_NAME juce_jni)
         target_compile_features(NamPlayer PRIVATE cxx_std_17)
         target_sources(NamPlayer PRIVATE
             Source/app/android/AndroidMain.cpp
