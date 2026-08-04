@@ -31,3 +31,21 @@ jobs:
 
       - name: Run tests
         run: ctest --test-dir build --output-on-failure
+
+  app-build:
+    name: App compiles (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Build the full JUCE app on macOS (JUCE configures cleanly there with no
+      # extra system deps) so an app-only compile break can't pass CI while the
+      # JUCE-free test job stays green.
+      - name: Configure (app)
+        run: cmake -S . -B build-app -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build NamPlayer
+        run: cmake --build build-app --target NamPlayer -j
