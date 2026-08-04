@@ -45,9 +45,18 @@ void LibraryPanel::EntryListModel::paintListBoxItem(int rowNumber, juce::Graphic
     }
 
     auto textArea = juce::Rectangle<int>(kStarWidth + 4, 0, width - kStarWidth - 8, height);
+
+    // Reserve the hint's width on the right so a long name can't overlap it.
+    int hintWidth = 0;
+    if (hint.isNotEmpty()) {
+        g.setFont((float) height * 0.45f);
+        hintWidth = g.getCurrentFont().getStringWidth(hint) + 10;
+    }
+
     g.setColour(juce::Colours::white);
     g.setFont((float) height * 0.55f);
-    g.drawText(juce::String(e.displayName), textArea, juce::Justification::centredLeft);
+    g.drawText(juce::String(e.displayName), textArea.withTrimmedRight(hintWidth),
+               juce::Justification::centredLeft);
 
     if (hint.isNotEmpty()) {
         g.setColour(juce::Colours::lightgrey.withAlpha(0.7f));
