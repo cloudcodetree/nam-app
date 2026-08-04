@@ -64,6 +64,44 @@ MainComponent::MainComponent() {
     eqMid_.onValueChange  = [this]{ engine_.setMidDb((float) eqMid_.getValue()); };
     eqHigh_.onValueChange = [this]{ engine_.setHighDb((float) eqHigh_.getValue()); };
 
+    // Delay (time FX): enable + time / feedback / mix rotary knobs.
+    addAndMakeVisible(delayEnable_); delayEnable_.setButtonText("Delay");
+    delayEnable_.onClick = [this]{ engine_.setDelayEnabled(delayEnable_.getToggleState()); };
+    delayTime_.setRange(1.0, 2000.0, 1.0);   delayTime_.setValue(250.0);
+    delayTime_.setTextValueSuffix(" ms");
+    delayFeedback_.setRange(0.0, 0.95, 0.01); delayFeedback_.setValue(0.3);
+    delayMix_.setRange(0.0, 1.0, 0.01);       delayMix_.setValue(0.3);
+    for (auto* s : { &delayTime_, &delayFeedback_, &delayMix_ }) {
+        s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        s->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 56, 16);
+        addAndMakeVisible(*s);
+    }
+    delayTime_.onValueChange     = [this]{ engine_.setDelayTimeMs((float) delayTime_.getValue()); };
+    delayFeedback_.onValueChange = [this]{ engine_.setDelayFeedback((float) delayFeedback_.getValue()); };
+    delayMix_.onValueChange      = [this]{ engine_.setDelayMix((float) delayMix_.getValue()); };
+    // Push initial slider values so the engine matches the UI at startup.
+    engine_.setDelayTimeMs((float) delayTime_.getValue());
+    engine_.setDelayFeedback((float) delayFeedback_.getValue());
+    engine_.setDelayMix((float) delayMix_.getValue());
+
+    // Reverb (time FX): enable + room / damping / mix rotary knobs.
+    addAndMakeVisible(reverbEnable_); reverbEnable_.setButtonText("Reverb");
+    reverbEnable_.onClick = [this]{ engine_.setReverbEnabled(reverbEnable_.getToggleState()); };
+    reverbRoom_.setRange(0.0, 1.0, 0.01); reverbRoom_.setValue(0.5);
+    reverbDamp_.setRange(0.0, 1.0, 0.01); reverbDamp_.setValue(0.5);
+    reverbMix_.setRange(0.0, 1.0, 0.01);  reverbMix_.setValue(0.3);
+    for (auto* s : { &reverbRoom_, &reverbDamp_, &reverbMix_ }) {
+        s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        s->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 56, 16);
+        addAndMakeVisible(*s);
+    }
+    reverbRoom_.onValueChange = [this]{ engine_.setReverbRoomSize((float) reverbRoom_.getValue()); };
+    reverbDamp_.onValueChange = [this]{ engine_.setReverbDamping((float) reverbDamp_.getValue()); };
+    reverbMix_.onValueChange  = [this]{ engine_.setReverbMix((float) reverbMix_.getValue()); };
+    engine_.setReverbRoomSize((float) reverbRoom_.getValue());
+    engine_.setReverbDamping((float) reverbDamp_.getValue());
+    engine_.setReverbMix((float) reverbMix_.getValue());
+
     // IR cab.
     addAndMakeVisible(irEnable_); irEnable_.setButtonText("Cab IR");
     irEnable_.onClick = [this]{ engine_.setIrEnabled(irEnable_.getToggleState()); };
@@ -96,7 +134,7 @@ MainComponent::MainComponent() {
     searchPanel_.onPick = [this](const nam::ToneInfo& tone) { downloadPickedTone(tone); };
 
     startTimerHz(15);
-    setSize(1200, 900);
+    setSize(1200, 1000);
 }
 
 MainComponent::~MainComponent() {
@@ -515,6 +553,28 @@ void MainComponent::resized() {
         eqLow_.setBounds(row.removeFromLeft(knobW));
         eqMid_.setBounds(row.removeFromLeft(knobW));
         eqHigh_.setBounds(row);
+    }
+    r.removeFromTop(8);
+
+    // Delay row: enable + time / feedback / mix knobs.
+    {
+        auto row = r.removeFromTop(90);
+        delayEnable_.setBounds(row.removeFromLeft(80));
+        const int knobW = row.getWidth() / 3;
+        delayTime_.setBounds(row.removeFromLeft(knobW));
+        delayFeedback_.setBounds(row.removeFromLeft(knobW));
+        delayMix_.setBounds(row);
+    }
+    r.removeFromTop(8);
+
+    // Reverb row: enable + room / damping / mix knobs.
+    {
+        auto row = r.removeFromTop(90);
+        reverbEnable_.setBounds(row.removeFromLeft(80));
+        const int knobW = row.getWidth() / 3;
+        reverbRoom_.setBounds(row.removeFromLeft(knobW));
+        reverbDamp_.setBounds(row.removeFromLeft(knobW));
+        reverbMix_.setBounds(row);
     }
     r.removeFromTop(8);
 

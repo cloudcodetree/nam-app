@@ -66,6 +66,7 @@ if(NAM_BUILD_APP)
         Source/dsp/ToneEngine.cpp
         Source/dsp/IrCab.cpp
         Source/dsp/ToneEq.cpp
+        Source/dsp/Reverb.cpp
         Source/model/NamModel.cpp
         Source/model/ModelHost.cpp
         Source/model/IrLoader.cpp
