@@ -19,6 +19,8 @@ add_executable(nam_tests
     test_libraryimporter.cpp
     test_pkce.cpp
     test_tone3000api.cpp
+    test_delay.cpp
+    test_reverb.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/IrLoader.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryStore.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryImporter.cpp
@@ -34,6 +36,7 @@ target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/dsp/ToneEngine.cpp)
 target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/model/ModelHost.cpp)
 target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/dsp/ToneEq.cpp)
 target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/dsp/IrCab.cpp)
+target_sources(nam_tests PRIVATE ${CMAKE_SOURCE_DIR}/Source/dsp/Reverb.cpp)
 target_compile_definitions(nam_tests PRIVATE
     NAM_FIXTURE_A2="${CMAKE_SOURCE_DIR}/tests/fixtures/example_a2.nam"
     # A real A2 amp capture (SlimmableContainer architecture) for auditioning

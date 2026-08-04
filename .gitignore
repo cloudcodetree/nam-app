@@ -8,3 +8,5 @@ build-tsan/
 .env
 .env.*
 !.env.example
+build-ci/
+build-app/

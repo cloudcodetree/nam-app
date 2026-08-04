@@ -7,6 +7,8 @@
 #include "dsp/NoiseGate.h"
 #include "dsp/IrCab.h"
 #include "dsp/ToneEq.h"
+#include "dsp/Delay.h"
+#include "dsp/Reverb.h"
 #include "model/NamModel.h"
 
 namespace dsp {
@@ -26,6 +28,14 @@ public:
     void setLowDb(float db)  { eq_.setLowDb(db); }
     void setMidDb(float db)  { eq_.setMidDb(db); }
     void setHighDb(float db) { eq_.setHighDb(db); }
+    void setDelayEnabled(bool on)     { delay_.setEnabled(on); }
+    void setDelayTimeMs(float ms)     { delay_.setTimeMs(ms); }
+    void setDelayFeedback(float f)    { delay_.setFeedback(f); }
+    void setDelayMix(float m)         { delay_.setMix(m); }
+    void setReverbEnabled(bool on)    { reverb_.setEnabled(on); }
+    void setReverbRoomSize(float r)   { reverb_.setRoomSize(r); }
+    void setReverbDamping(float d)    { reverb_.setDamping(d); }
+    void setReverbMix(float m)        { reverb_.setMix(m); }
 
     // Real-time safe. Mono in -> mono out. May be called with model==null.
     // Contract: prepare(maxBlock) must be called before render(), and every
@@ -45,6 +55,8 @@ private:
     NoiseGate gate_;
     IrCab     irCab_;
     ToneEq    eq_;
+    Delay     delay_;
+    Reverb    reverb_;
 
     // --- RT-safe model ownership contract ---------------------------------
     // The audio thread must never touch a std::shared_ptr's control block

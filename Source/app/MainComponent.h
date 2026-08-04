@@ -58,6 +58,14 @@ private:
     juce::ToggleButton eqEnable_;
     juce::Slider       eqLow_, eqMid_, eqHigh_;
 
+    // Delay (time FX): time / feedback / mix.
+    juce::ToggleButton delayEnable_;
+    juce::Slider       delayTime_, delayFeedback_, delayMix_;
+
+    // Reverb (time FX): room size / damping / mix.
+    juce::ToggleButton reverbEnable_;
+    juce::Slider       reverbRoom_, reverbDamp_, reverbMix_;
+
     // IR cab.
     juce::ToggleButton irEnable_;
     juce::TextButton   loadIrButton_ { "Load IR (.wav)" };
