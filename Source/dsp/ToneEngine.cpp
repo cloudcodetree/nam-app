@@ -21,6 +21,8 @@ void ToneEngine::prepare(int sampleRate, int maxBlock) {
     gate_.prepare(sampleRate);
     irCab_.prepare(sampleRate, maxBlock);
     eq_.prepare(sampleRate);
+    delay_.prepare(sampleRate, maxBlock);
+    reverb_.prepare(sampleRate, maxBlock);
 }
 
 void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
@@ -63,26 +65,31 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
         if (n < numSamples)
             overCap_.fetch_add(1, std::memory_order_relaxed);
 
-        // Signal order: input gain -> gate -> model -> IR cab -> EQ -> output gain.
+        // Signal order: input gain -> gate -> model -> IR cab -> EQ ->
+        //               delay -> reverb -> output gain.
         for (int i = 0; i < n; ++i)
             scratch_[i] = inGain_.applyNext(in[i]);
         gate_.process(scratch_.data(), scratch_.data(), n);   // gate before amp
         m->process(scratch_.data(), out, n);                  // amp
         irCab_.process(out, out, n);                          // cab
         eq_.process(out, n);                                  // tone
+        delay_.process(out, out, n);                          // time FX: delay
+        reverb_.process(out, out, n);                         // time FX: reverb
         for (int i = 0; i < n; ++i)
             out[i] = outGain_.applyNext(out[i]);
         for (int i = n; i < numSamples; ++i)
             out[i] = 0.0f;
     } else {
-        // No model: in-gain -> gate -> IR cab -> EQ -> out-gain. Reads `in`/
-        // writes `out` directly (not scratch_-backed), so it is not
-        // bounds-limited here.
+        // No model: in-gain -> gate -> IR cab -> EQ -> delay -> reverb ->
+        // out-gain. Reads `in`/writes `out` directly (not scratch_-backed),
+        // so it is not bounds-limited here.
         for (int i = 0; i < numSamples; ++i)
             out[i] = inGain_.applyNext(in[i]);
         gate_.process(out, out, numSamples);
         irCab_.process(out, out, numSamples);
         eq_.process(out, numSamples);
+        delay_.process(out, out, numSamples);
+        reverb_.process(out, out, numSamples);
         for (int i = 0; i < numSamples; ++i)
             out[i] = outGain_.applyNext(out[i]);
     }

@@ -170,3 +170,54 @@ TEST_CASE("ToneEngine full chain: model + gate + IR cab + EQ all active stays fi
     for (float v : out) REQUIRE(std::isfinite(v));
     REQUIRE(e.overCapacityCount() == 0u);   // no clamp events on a well-sized chain
 }
+
+TEST_CASE("ToneEngine delay + reverb bypassed matches pre-6a passthrough") {
+    // The new time-FX stages default to disabled, so a no-model chain with
+    // everything off must still be a bit-clean passthrough (no level change,
+    // no tail) -- proving Phase 6a didn't alter the existing signal path.
+    dsp::ToneEngine e; e.prepare(48000, 128);
+    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    std::vector<float> in(128, 0.25f), out(128);
+    for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128);
+    for (int i = 0; i < 128; ++i) REQUIRE(out[i] == Approx(0.25f).epsilon(0.01));
+}
+
+TEST_CASE("ToneEngine delay stage produces an echo in the chain") {
+    // Sanity: with delay enabled (no model), a single impulse block should
+    // yield a delayed copy ~10 ms later -- confirms the stage is actually
+    // wired into render(), not just present.
+    dsp::ToneEngine e; e.prepare(48000, 4096);
+    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    e.setDelayEnabled(true);
+    e.setDelayTimeMs(10.0f); e.setDelayFeedback(0.0f); e.setDelayMix(1.0f);
+
+    const int n = 4096;
+    std::vector<float> in(n, 0.0f), out(n, 0.0f);
+    in[0] = 1.0f;
+    e.render(in.data(), out.data(), n);
+
+    const int expected = (int) std::round(0.010 * 48000.0); // 480
+    for (float v : out) REQUIRE(std::isfinite(v));
+    REQUIRE(out[expected] == Approx(1.0f).margin(0.02f));
+}
+
+TEST_CASE("ToneEngine full chain: model + gate + IR + EQ + delay + reverb stays finite") {
+    // The Phase 6a end-to-end: every stage on, including the two new time FX,
+    // with a real A2 model. Guards against cross-stage interaction regressions
+    // (buffer sizing, ordering, in-place aliasing) that single-node tests miss.
+    dsp::ToneEngine e; e.prepare(48000, 128);
+    auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m != nullptr);
+    e.setModel(std::move(m));
+    e.setGateEnabled(true);   e.setGateThresholdDb(-55.0f);
+    e.setIrEnabled(true);     e.setImpulse(std::make_shared<std::vector<float>>(
+                                  std::vector<float>{0.5f, 0.3f, 0.2f}));
+    e.setEqEnabled(true);     e.setLowDb(3.0f); e.setMidDb(-2.0f); e.setHighDb(4.0f);
+    e.setDelayEnabled(true);  e.setDelayTimeMs(120.0f); e.setDelayFeedback(0.4f); e.setDelayMix(0.35f);
+    e.setReverbEnabled(true); e.setReverbRoomSize(0.7f); e.setReverbDamping(0.4f); e.setReverbMix(0.3f);
+    std::vector<float> in(128), out(128);
+    for (int i = 0; i < 128; ++i) in[i] = 0.1f * std::sin(i * 0.15f);
+    for (int b = 0; b < 32; ++b) e.render(in.data(), out.data(), 128);
+    for (float v : out) REQUIRE(std::isfinite(v));
+    REQUIRE(e.overCapacityCount() == 0u);
+}
