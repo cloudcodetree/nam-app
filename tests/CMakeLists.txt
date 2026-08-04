@@ -19,6 +19,7 @@ add_executable(nam_tests
     test_libraryimporter.cpp
     test_pkce.cpp
     test_tone3000api.cpp
+    test_delay.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/IrLoader.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryStore.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryImporter.cpp
