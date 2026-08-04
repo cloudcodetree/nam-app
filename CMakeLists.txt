@@ -59,6 +59,7 @@ if(NAM_BUILD_APP)
         Source/app/AudioDeviceCallbackAdapter.cpp
         Source/app/MainComponent.cpp
         Source/app/LibraryPanel.cpp
+        Source/app/SearchPanel.cpp
         Source/app/Main.cpp
         Source/app/Tone3000Auth.cpp
         Source/app/Tone3000Session.cpp

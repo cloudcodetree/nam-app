@@ -91,6 +91,72 @@ std::string sanitizeFileName(const std::string& name) {
     return out.empty() ? "model" : out;
 }
 
+// Performs a GET, optionally with a Bearer Authorization header, and returns
+// the raw response bytes. On an HTTP error status (from the *first* hop),
+// `outError` is set to the numeric status code as text (e.g. "401") so
+// callers can detect the auth-retry case; on a connection failure it's a
+// generic, token-free message. Never logs or includes the access token.
+//
+// Redirects are never auto-followed by the underlying stream
+// (withNumRedirectsToFollow(0)): a 3xx is instead followed manually, one hop
+// at a time, re-evaluating isTone3000Host() at every hop. The Authorization
+// header is only ever attached when the *current* hop's host is
+// tone3000.com; a redirect to any other host (e.g. a pre-signed S3/CDN URL)
+// is requested without it, so the access token can never be leaked
+// off-domain via a redirect. The chain is capped at kMaxRedirects hops.
+//
+// `thread` is consulted via threadShouldExit() at the top of every hop so a
+// superseded/stopped caller thread aborts promptly instead of blocking on
+// the network. Shared by DownloadThread and SearchThread.
+bool authenticatedGet(juce::Thread& thread, const std::string& accessToken, const juce::URL& url,
+                      bool withAuth, juce::MemoryBlock& outBytes, juce::String& outError) {
+    juce::URL currentUrl = url;
+    bool currentAuth = withAuth;
+
+    for (int hop = 0;; ++hop) {
+        if (thread.threadShouldExit()) {
+            outError = "cancelled";
+            return false;
+        }
+        if (hop > kMaxRedirects) {
+            outError = "too many redirects";
+            return false;
+        }
+
+        juce::WebInputStream stream(currentUrl, false);
+        if (currentAuth)
+            stream.withExtraHeaders("Authorization: Bearer " + juce::String(accessToken));
+        stream.withConnectionTimeout(kConnectTimeoutMs);
+        stream.withNumRedirectsToFollow(0);
+
+        if (!stream.connect(nullptr) || stream.isError()) {
+            outError = "connection failed";
+            return false;
+        }
+        const int status = stream.getStatusCode();
+
+        if (status >= 300 && status < 400) {
+            const juce::String location = stream.getResponseHeaders()["Location"];
+            const juce::URL nextUrl = resolveRedirectLocation(currentUrl, location);
+            if (nextUrl.isEmpty()) {
+                outError = "redirect missing a usable Location header";
+                return false;
+            }
+            currentUrl = nextUrl;
+            currentAuth = isTone3000Host(currentUrl.toString(false).toStdString());
+            continue;
+        }
+
+        if (status < 200 || status >= 300) {
+            outError = juce::String(status);
+            return false;
+        }
+        outBytes.reset();
+        stream.readIntoMemoryBlock(outBytes);
+        return true;
+    }
+}
+
 } // namespace
 
 // Runs entirely on a background thread; delivers its result to the
@@ -121,70 +187,6 @@ public:
     }
 
 private:
-    // Performs a GET, optionally with a Bearer Authorization header, and
-    // returns the raw response bytes. On an HTTP error status (from the
-    // *first* hop), `outError` is set to the numeric status code as text
-    // (e.g. "401") so callers can detect the auth-retry case; on a
-    // connection failure it's a generic, token-free message. Never logs or
-    // includes the access token.
-    //
-    // Redirects are never auto-followed by the underlying stream
-    // (withNumRedirectsToFollow(0)): a 3xx is instead followed manually, one
-    // hop at a time, re-evaluating isTone3000Host() at every hop. The
-    // Authorization header is only ever attached when the *current* hop's
-    // host is tone3000.com; a redirect to any other host (e.g. a pre-signed
-    // S3/CDN URL) is requested without it, so the access token can never be
-    // leaked off-domain via a redirect. The chain is capped at
-    // kMaxRedirects hops.
-    bool authenticatedGet(const juce::URL& url, bool withAuth, juce::MemoryBlock& outBytes,
-                           juce::String& outError) {
-        juce::URL currentUrl = url;
-        bool currentAuth = withAuth;
-
-        for (int hop = 0;; ++hop) {
-            if (threadShouldExit()) {
-                outError = "cancelled";
-                return false;
-            }
-            if (hop > kMaxRedirects) {
-                outError = "too many redirects";
-                return false;
-            }
-
-            juce::WebInputStream stream(currentUrl, false);
-            if (currentAuth)
-                stream.withExtraHeaders("Authorization: Bearer " + juce::String(accessToken_));
-            stream.withConnectionTimeout(kConnectTimeoutMs);
-            stream.withNumRedirectsToFollow(0);
-
-            if (!stream.connect(nullptr) || stream.isError()) {
-                outError = "connection failed";
-                return false;
-            }
-            const int status = stream.getStatusCode();
-
-            if (status >= 300 && status < 400) {
-                const juce::String location = stream.getResponseHeaders()["Location"];
-                const juce::URL nextUrl = resolveRedirectLocation(currentUrl, location);
-                if (nextUrl.isEmpty()) {
-                    outError = "redirect missing a usable Location header";
-                    return false;
-                }
-                currentUrl = nextUrl;
-                currentAuth = isTone3000Host(currentUrl.toString(false).toStdString());
-                continue;
-            }
-
-            if (status < 200 || status >= 300) {
-                outError = juce::String(status);
-                return false;
-            }
-            outBytes.reset();
-            stream.readIntoMemoryBlock(outBytes);
-            return true;
-        }
-    }
-
     bool doDownload(juce::File& outFile, juce::String& outName, juce::String& outError) {
         if (threadShouldExit()) {
             outError = "cancelled";
@@ -200,7 +202,7 @@ private:
             const juce::URL modelsUrl{juce::String(nam::modelsUrl(toneId_, architecture))};
             juce::MemoryBlock listBytes;
             juce::String listError;
-            if (!authenticatedGet(modelsUrl, true, listBytes, listError)) {
+            if (!authenticatedGet(*this, accessToken_, modelsUrl, true, listBytes, listError)) {
                 outError = (listError == "401" || listError == "403")
                     ? "TONE3000 authentication failed (please try Browse TONE3000 again)"
                     : "could not reach TONE3000 to list models";
@@ -238,9 +240,9 @@ private:
         const bool modelUrlIsT3k = isTone3000Host(best.modelUrl);
         juce::MemoryBlock bytes;
         juce::String downloadError;
-        bool downloaded = authenticatedGet(modelUrl, modelUrlIsT3k, bytes, downloadError);
+        bool downloaded = authenticatedGet(*this, accessToken_, modelUrl, modelUrlIsT3k, bytes, downloadError);
         if (!downloaded && modelUrlIsT3k && (downloadError == "401" || downloadError == "403"))
-            downloaded = authenticatedGet(modelUrl, false, bytes, downloadError);
+            downloaded = authenticatedGet(*this, accessToken_, modelUrl, false, bytes, downloadError);
         if (!downloaded) {
             outError = "failed to download the model file";
             return false;
@@ -274,11 +276,78 @@ private:
     std::function<void(bool, juce::File, juce::String)> done_;
 };
 
+// Runs an authenticated TONE3000 tone search entirely on a background
+// thread; delivers its result to the caller's `done` via
+// juce::MessageManager::callAsync so UI code touched by `done` never runs
+// off the message thread. Mirrors DownloadThread's lifecycle exactly (own
+// thread, stopThread()-and-drop on supersede, joined in the owner's
+// destructor) but is otherwise independent of it: a search and a download
+// may be in flight at the same time.
+class Tone3000Session::SearchThread : public juce::Thread {
+public:
+    SearchThread(std::string accessToken, std::string query, int page,
+                 std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done)
+        : juce::Thread("Tone3000Search"),
+          accessToken_(std::move(accessToken)),
+          query_(std::move(query)),
+          page_(page),
+          done_(std::move(done)) {}
+
+    void run() override {
+        std::vector<nam::ToneInfo> resultTones;
+        juce::String error;
+        const bool ok = doSearch(resultTones, error);
+
+        auto callback = std::move(done_);
+        if (callback) {
+            juce::MessageManager::callAsync([callback, ok, resultTones, error] {
+                callback(ok, resultTones, error);
+            });
+        }
+    }
+
+private:
+    bool doSearch(std::vector<nam::ToneInfo>& outTones, juce::String& outError) {
+        if (threadShouldExit()) {
+            outError = "cancelled";
+            return false;
+        }
+
+        const juce::URL searchUrl{
+            juce::String(nam::buildSearchUrl(query_, page_, /*pageSize*/ 25, /*namOnly*/ true))};
+        juce::MemoryBlock bytes;
+        juce::String getError;
+        if (!authenticatedGet(*this, accessToken_, searchUrl, true, bytes, getError)) {
+            outError = (getError == "401" || getError == "403")
+                ? "TONE3000 authentication failed (please try Connect TONE3000 again)"
+                : "could not reach TONE3000 to search";
+            return false;
+        }
+
+        if (threadShouldExit()) {
+            outError = "cancelled";
+            return false;
+        }
+
+        const juce::String body =
+            juce::String::createStringFromData(bytes.getData(), (int) bytes.getSize());
+        outTones = nam::parseToneList(body.toStdString());
+        return true;
+    }
+
+    std::string accessToken_;
+    std::string query_;
+    int page_;
+    std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done_;
+};
+
 Tone3000Session::Tone3000Session(std::string accessToken) : accessToken_(std::move(accessToken)) {}
 
 Tone3000Session::~Tone3000Session() {
     if (downloadThread_)
         downloadThread_->stopThread(20000);
+    if (searchThread_)
+        searchThread_->stopThread(20000);
 }
 
 void Tone3000Session::downloadToneModel(const std::string& toneId, juce::File destDir,
@@ -294,6 +363,19 @@ void Tone3000Session::downloadToneModel(const std::string& toneId, juce::File de
     downloadThread_ = std::make_unique<DownloadThread>(accessToken_, toneId, std::move(destDir),
                                                         std::move(done));
     downloadThread_->startThread();
+}
+
+void Tone3000Session::search(const std::string& query, int page,
+                              std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+    if (searchThread_) {
+        // A prior search is still in flight (or just finished): stop it
+        // before starting a new one so we never have two SearchThreads (or a
+        // dangling one) alive at once. Its `done` is dropped, never called.
+        searchThread_->stopThread(20000);
+        searchThread_.reset();
+    }
+    searchThread_ = std::make_unique<SearchThread>(accessToken_, query, page, std::move(done));
+    searchThread_->startThread();
 }
 
 } // namespace nam

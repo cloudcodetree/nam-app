@@ -3,8 +3,11 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <juce_core/juce_core.h>
+
+#include "net/Tone3000Api.h"
 
 namespace nam {
 
@@ -39,11 +42,26 @@ public:
     void downloadToneModel(const std::string& toneId, juce::File destDir,
                            std::function<void(bool, juce::File, juce::String)> done);
 
+    // Runs an authenticated TONE3000 tone search (`nam::buildSearchUrl`) on a
+    // background thread and delivers the parsed results.
+    //
+    // `done` is invoked exactly once, on the JUCE message thread: on success
+    // with (true, tones, {}); on any failure with (false, {}, errorMessage).
+    //
+    // Calling this again while a search is already in progress cancels the
+    // prior one first (its `done` is dropped, never invoked). Independent of
+    // downloadToneModel(): a search and a download may be in flight at the
+    // same time.
+    void search(const std::string& query, int page,
+                std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
+
 private:
     class DownloadThread;
+    class SearchThread;
 
     std::string accessToken_;
     std::unique_ptr<DownloadThread> downloadThread_;
+    std::unique_ptr<SearchThread> searchThread_;
 };
 
 } // namespace nam

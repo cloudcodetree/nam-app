@@ -15,6 +15,15 @@ TEST_CASE("buildAuthorizeUrl includes all required PKCE params") {
     REQUIRE(u.find("redirect_uri=http%3A%2F%2F127.0.0.1%3A8912%2Fcallback") != std::string::npos);
 }
 
+TEST_CASE("buildAuthorizeUrl omits prompt entirely when empty (connect flow)") {
+    auto u = buildAuthorizeUrl("t3k_pub_x", "http://127.0.0.1:8912/callback",
+                               "CHALLENGE", "STATE123", "");
+    REQUIRE(u.find("prompt=") == std::string::npos);
+    // everything else is still present
+    REQUIRE(u.find("client_id=t3k_pub_x") != std::string::npos);
+    REQUIRE(u.find("state=STATE123") != std::string::npos);
+}
+
 TEST_CASE("buildTokenFormBody has the authorization_code grant fields") {
     auto b = buildTokenFormBody("t3k_pub_x", "http://127.0.0.1:8912/callback", "CODE", "VERIFIER");
     REQUIRE(b.find("grant_type=authorization_code") != std::string::npos);
@@ -93,3 +102,34 @@ TEST_CASE("modelsUrl includes tone_id, architecture, and page_size") {
     REQUIRE(u.find("architecture=2") != std::string::npos);
     REQUIRE(u.find("page_size=50") != std::string::npos);
 }
+
+TEST_CASE("buildSearchUrl encodes query + paging + nam filter") {
+    auto u = nam::buildSearchUrl("vox ac30", 2, 25, true);
+    REQUIRE(u.find("/api/v1/tones/search?") != std::string::npos);
+    REQUIRE(u.find("query=vox%20ac30") != std::string::npos);
+    REQUIRE(u.find("page=2") != std::string::npos);
+    REQUIRE(u.find("page_size=25") != std::string::npos);
+    REQUIRE(u.find("format=nam") != std::string::npos);
+}
+
+TEST_CASE("buildSearchUrl omits format when namOnly=false and query when empty") {
+    auto u = nam::buildSearchUrl("", 1, 20, false);
+    REQUIRE(u.find("format=") == std::string::npos);
+    REQUIRE(u.find("query=") == std::string::npos);   // empty query is omitted
+    REQUIRE(u.find("page=1") != std::string::npos);
+}
+
+TEST_CASE("parseToneList reads real tone shape (integer id, counts)") {
+    const char* j = R"({"data":[
+      {"id":75774,"title":"RR AC30 TB","format":"nam","gear":"amp","a2_models_count":3,"a1_models_count":2,"downloads_count":11081},
+      {"id":79866,"title":"IR only","format":"ir","a2_models_count":0}
+    ],"total":2})";
+    auto ts = nam::parseToneList(j);
+    REQUIRE(ts.size() == 2);
+    REQUIRE(ts[0].id == "75774");
+    REQUIRE(ts[0].title == "RR AC30 TB");
+    REQUIRE(ts[0].a2Count == 3);
+    REQUIRE(ts[1].format == "ir");
+}
+
+TEST_CASE("parseToneList tolerates garbage") { REQUIRE(nam::parseToneList("nope").empty()); }
