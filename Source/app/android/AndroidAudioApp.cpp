@@ -24,6 +24,13 @@ AndroidAudioApp::AndroidAudioApp() {
         [this](nam::ToneInfo t, std::function<void(bool, juce::String)> done) {
             doDownload(std::move(t), std::move(done));
         });
+    shell_->setLibraryService(
+        [this] { return library_.all(nam::LibraryType::Model); },
+        [this](nam::LibraryEntry e) { loadModelEntry(e); });
+
+    // First launch (empty library, never connected): show the setup/gain-stage.
+    if (library_.all(nam::LibraryType::Model).empty() && ! t3kAuth_.hasValidToken())
+        shell_->startOnSetup();
 
     // 1 input (guitar) / 2 output. JUCE requests RECORD_AUDIO on input open.
     setAudioChannels(1, 2);
@@ -133,6 +140,16 @@ void AndroidAudioApp::doSearch(juce::String query,
             run();
         });
     });
+}
+
+void AndroidAudioApp::loadModelEntry(const nam::LibraryEntry& e) {
+    const std::string path = library_.subdir(nam::LibraryType::Model) + "/" + e.fileName;
+    if (auto m = nam::NamModel::load(path, (int) sampleRate_, blockSize_)) {
+        engine_.setModel(std::move(m));
+        modelLoaded_ = true;
+        library_.markUsed(e.id, nowSeconds());
+        library_.save();
+    }
 }
 
 void AndroidAudioApp::doDownload(nam::ToneInfo tone,

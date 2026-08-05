@@ -36,6 +36,9 @@ private:
                   std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
     void doDownload(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
 
+    // Library: load a kept model file into the running engine.
+    void loadModelEntry(const nam::LibraryEntry& e);
+
     static juce::File tokenStoreFile();
     static std::string defaultLibraryDir();
     static long long nowSeconds();

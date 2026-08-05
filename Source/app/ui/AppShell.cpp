@@ -9,12 +9,13 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_    = std::make_unique<PlayScreen>();
     edit_    = std::make_unique<EditScreen> (engine_);
     radio_   = std::make_unique<RadioScreen>();
-    library_ = std::make_unique<PlaceholderScreen> ("Library");
-    live_    = std::make_unique<PlaceholderScreen> ("Live");
+    library_ = std::make_unique<LibraryScreen>();
+    live_    = std::make_unique<LiveScreen>();
+    setup_   = std::make_unique<SetupScreen>();
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) radio_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) setup_.get() })
         addChildComponent (*c);
 
     play_->onNav = [this] (int tab) {
@@ -27,7 +28,10 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     edit_->onDone    = [this] { show (Screen::Play); };
     radio_->onBack   = [this] { show (Screen::Play); };
     library_->onBack = [this] { show (Screen::Play); };
-    live_->onBack    = [this] { show (Screen::Play); };
+    live_->onExit    = [this] { show (Screen::Play); };
+
+    setup_->onFinish     = [this] { show (Screen::Play); };
+    setup_->onSetInputDb = [this] (float db) { engine_.setInputDb (db); };
 
     show (Screen::Play);
 }
@@ -58,13 +62,27 @@ void AppShell::setTone3000 (SearchFn search, DownloadFn download) {
     };
 }
 
+void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) {
+    getModels_ = std::move (getModels);
+    loadModel_ = std::move (loadModel);
+    library_->onLoad = [this] (nam::LibraryEntry e) { if (loadModel_) loadModel_ (e); show (Screen::Play); };
+    live_->onSelect  = [this] (nam::LibraryEntry e) { if (loadModel_) loadModel_ (e); };
+}
+
+void AppShell::startOnSetup() { show (Screen::Setup); }
+
 void AppShell::show (Screen s) {
+    // Refresh data-backed screens as they come into view.
+    if (s == Screen::Library && getModels_) library_->setEntries (getModels_());
+    if (s == Screen::Live && getModels_)     live_->setSlots (getModels_());
+
     juce::Component* target = play_.get();
     switch (s) {
         case Screen::Edit:    target = edit_.get();    break;
         case Screen::Radio:   target = radio_.get();   break;
         case Screen::Library: target = library_.get(); break;
         case Screen::Live:    target = live_.get();    break;
+        case Screen::Setup:   target = setup_.get();   break;
         case Screen::Play:    default: target = play_.get(); break;
     }
     if (current_ == target) return;
@@ -76,13 +94,14 @@ void AppShell::show (Screen s) {
 }
 
 void AppShell::setLevels (float in, float out) {
-    if (play_ != nullptr) play_->setLevels (in, out);
+    if (play_ != nullptr)  play_->setLevels (in, out);
+    if (setup_ != nullptr) setup_->setLevel (in);
 }
 
 void AppShell::resized() {
     auto b = getLocalBounds();
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) radio_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) setup_.get() })
         if (c != nullptr) c->setBounds (b);
 }

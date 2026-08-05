@@ -82,7 +82,9 @@ if(NAM_BUILD_APP)
             Source/app/ui/PlayScreen.cpp
             Source/app/ui/EditScreen.cpp
             Source/app/ui/RadioScreen.cpp
-            Source/app/ui/PlaceholderScreen.cpp
+            Source/app/ui/LibraryScreen.cpp
+            Source/app/ui/LiveScreen.cpp
+            Source/app/ui/SetupScreen.cpp
             Source/app/ui/AppShell.cpp
             Source/dsp/ToneEngine.cpp
             Source/dsp/IrCab.cpp
