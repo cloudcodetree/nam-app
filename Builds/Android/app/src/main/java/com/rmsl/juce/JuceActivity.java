@@ -47,8 +47,15 @@ import android.view.View;
 //==============================================================================
 public class JuceActivity   extends Activity
 {
-    private native void appNewIntent (Intent intent);
-    private native void appOnResume();
+    // NOTE (NAM Player, Phase 5a): the upstream JUCE JuceActivity also declares
+    // `appNewIntent`/`appOnResume` native methods and calls them from
+    // onNewIntent/onResume. Those C++ callbacks are only registered when
+    // JUCE_PUSH_NOTIFICATIONS_ACTIVITY is defined (i.e. push-notifications /
+    // in-app-purchases builds). This minimal app enables neither, so the native
+    // methods are never registered -- calling them crashed with
+    // UnsatisfiedLinkError. They are removed here to keep the Java in sync with
+    // the compiled native library. Re-add them (and the native decls) if push
+    // notifications / IAP are ever enabled.
 
     @SuppressWarnings ("deprecation")
     private void initEdgeToEdge()
@@ -91,14 +98,5 @@ public class JuceActivity   extends Activity
     {
         super.onNewIntent (intent);
         setIntent (intent);
-
-        appNewIntent (intent);
-    }
-
-    @Override
-    protected void onResume()
-    {
-        super.onResume();
-        appOnResume();
     }
 }
