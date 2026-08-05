@@ -1,5 +1,10 @@
 #include "app/ui/AppShell.h"
 
+namespace {
+const juce::String kEllipsis = juce::String::fromUTF8 ("\xE2\x80\xA6"); // …
+const juce::String kHeart    = juce::String::fromUTF8 ("\xE2\x99\xA5"); // ♥
+}
+
 AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_    = std::make_unique<PlayScreen>();
     edit_    = std::make_unique<EditScreen> (engine_);
@@ -33,7 +38,7 @@ void AppShell::setTone3000 (SearchFn search, DownloadFn download) {
 
     radio_->onSearch = [this] (juce::String q) {
         if (! searchFn_) return;
-        radio_->setStatus ("Connecting / searching \"" + q + "\"\xE2\x80\xA6");
+        radio_->setStatus ("Connecting / searching \"" + q + "\"" + kEllipsis);
         searchFn_ (q, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String err) {
             if (! ok) { radio_->setStatus ("TONE3000: " + err); return; }
             radioResults_ = tones;
@@ -46,9 +51,9 @@ void AppShell::setTone3000 (SearchFn search, DownloadFn download) {
     radio_->onKeep = [this] (int idx) {
         if (! downloadFn_ || idx < 0 || idx >= (int) radioResults_.size()) return;
         const auto tone = radioResults_[(size_t) idx];
-        radio_->setStatus ("Downloading \"" + juce::String (tone.title) + "\"\xE2\x80\xA6");
+        radio_->setStatus ("Downloading \"" + juce::String (tone.title) + "\"" + kEllipsis);
         downloadFn_ (tone, [this] (bool ok, juce::String msg) {
-            radio_->setStatus (ok ? ("\xE2\x99\xA5 Kept: " + msg) : ("Download failed: " + msg));
+            radio_->setStatus (ok ? (kHeart + " Kept: " + msg) : ("Download failed: " + msg));
         });
     };
 }
