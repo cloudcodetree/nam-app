@@ -1,15 +1,29 @@
 #include "app/android/AndroidAudioApp.h"
 
 #include "BinaryData.h"
+#include "model/LibraryImporter.h"
+#include "model/LibraryEntry.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 AndroidAudioApp::AndroidAudioApp() {
     setLookAndFeel(&laf_);
 
+    library_.load();
+    t3kAuth_.loadTokens();   // reuse a prior refresh token if present
+
     shell_ = std::make_unique<AppShell>(engine_);
     addAndMakeVisible(*shell_);
+    shell_->setTone3000(
+        [this](juce::String q,
+               std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+            doSearch(std::move(q), std::move(done));
+        },
+        [this](nam::ToneInfo t, std::function<void(bool, juce::String)> done) {
+            doDownload(std::move(t), std::move(done));
+        });
 
     // 1 input (guitar) / 2 output. JUCE requests RECORD_AUDIO on input open.
     setAudioChannels(1, 2);
@@ -80,4 +94,62 @@ void AndroidAudioApp::paint(juce::Graphics& g) { g.fillAll(nam::ui::col::bg); }
 
 void AndroidAudioApp::resized() {
     if (shell_ != nullptr) shell_->setBounds(getLocalBounds());
+}
+
+// --- TONE3000 -------------------------------------------------------------
+juce::File AndroidAudioApp::tokenStoreFile() {
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("NAM Player/tone3000_tokens.json");
+}
+
+std::string AndroidAudioApp::defaultLibraryDir() {
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("NAM Player/library").getFullPathName().toStdString();
+}
+
+long long AndroidAudioApp::nowSeconds() {
+    using namespace std::chrono;
+    return (long long) duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+}
+
+void AndroidAudioApp::doSearch(juce::String query,
+        std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+    if (! t3kAuth_.isConfigured()) { done(false, {}, "not configured (.env key missing)"); return; }
+
+    // Runs the actual search with a fresh session built from the current token.
+    auto run = [this, query, done] {
+        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+        t3kSession_->search(query.toStdString(), 1, done);
+    };
+
+    if (t3kAuth_.hasValidToken()) { run(); return; }
+
+    // No valid token: try a silent refresh, else the browser Connect flow
+    // (loopback OAuth — the on-device browser redirects back to 127.0.0.1).
+    t3kAuth_.tryRefresh([this, run, done](bool refreshed) {
+        if (refreshed) { run(); return; }
+        t3kAuth_.beginConnectFlow([run, done](nam::Tone3000Auth::Result r) {
+            if (! r.ok) { done(false, {}, juce::String(r.error)); return; }
+            run();
+        });
+    });
+}
+
+void AndroidAudioApp::doDownload(nam::ToneInfo tone,
+        std::function<void(bool, juce::String)> done) {
+    if (! t3kAuth_.hasValidToken()) { done(false, "connect first (pick a station)"); return; }
+    if (t3kSession_ == nullptr)
+        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+
+    const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    t3kSession_->downloadToneModel(tone.id, tempDir,
+        [this, done](bool ok, juce::File file, juce::String nameOrErr) {
+            if (! ok) { done(false, nameOrErr); return; }
+            auto* entry = nam::importIntoLibrary(library_, file.getFullPathName().toStdString(),
+                                                 nam::LibraryType::Model, nowSeconds());
+            file.deleteFile();
+            if (entry == nullptr) { done(false, "import failed"); return; }
+            library_.save();
+            done(true, juce::String(entry->displayName));
+        });
 }
