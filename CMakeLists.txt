@@ -65,8 +65,15 @@ if(NAM_BUILD_APP)
         # libjuce_jni.so regardless of the target/product name.
         set_target_properties(NamPlayer PROPERTIES OUTPUT_NAME juce_jni)
         target_compile_features(NamPlayer PRIVATE cxx_std_17)
+
+        # Embed the bundled NAM model (Android assets aren't real file paths, so
+        # BinaryData -> temp file -> NamModel::load). Resource name: "model_nam".
+        juce_add_binary_data(NamPlayerData SOURCES
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/model.nam)
+
         target_sources(NamPlayer PRIVATE
             Source/app/android/AndroidMain.cpp
+            Source/app/android/AndroidAudioApp.cpp
             Source/dsp/ToneEngine.cpp
             Source/dsp/IrCab.cpp
             Source/dsp/ToneEq.cpp
@@ -78,6 +85,7 @@ if(NAM_BUILD_APP)
             ${CMAKE_SOURCE_DIR}/extern/dr_wav
             ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann)
         target_link_libraries(NamPlayer PRIVATE
+            NamPlayerData
             NeuralAudio
             juce::juce_audio_utils
             juce::juce_gui_extra)

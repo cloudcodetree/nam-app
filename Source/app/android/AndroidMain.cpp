@@ -1,27 +1,15 @@
 #include <juce_gui_extra/juce_gui_extra.h>
+#include "app/android/AndroidAudioApp.h"
 
-// Minimal JUCE app for Android bring-up (Phase 5a, Task 3): proves the
-// Gradle -> CMake -> APK -> launch path works before wiring real audio
-// (Task 4 swaps in AndroidAudioApp). Deliberately uses no core/DSP code so a
-// failure here is unambiguously a build/shell problem, not app logic.
-class BringUpComponent : public juce::Component {
-public:
-    BringUpComponent() { setSize(400, 200); }
-    void paint(juce::Graphics& g) override {
-        g.fillAll(juce::Colours::black);
-        g.setColour(juce::Colours::limegreen);
-        g.setFont(24.0f);
-        g.drawText("NAM Player - Android bring-up OK",
-                   getLocalBounds(), juce::Justification::centred);
-    }
-};
-
+// Android app entry (Phase 5a). Task 3 proved the Gradle -> CMake -> APK ->
+// render path with a trivial component; Task 4 hosts the real AndroidAudioApp
+// (guitar in -> ToneEngine -> out + status/latency/gain UI).
 class BringUpWindow : public juce::DocumentWindow {
 public:
     BringUpWindow()
         : DocumentWindow("NAM Player", juce::Colours::black, DocumentWindow::allButtons) {
         setUsingNativeTitleBar(true);
-        setContentOwned(new BringUpComponent(), true);
+        setContentOwned(new AndroidAudioApp(), true);
         setVisible(true);
         setFullScreen(true);
     }
