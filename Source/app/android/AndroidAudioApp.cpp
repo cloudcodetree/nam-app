@@ -104,7 +104,13 @@ bool AndroidAudioApp::handleBackButton() {
 void AndroidAudioApp::paint(juce::Graphics& g) { g.fillAll(nam::ui::col::bg); }
 
 void AndroidAudioApp::resized() {
-    if (shell_ != nullptr) shell_->setBounds(getLocalBounds());
+    if (shell_ == nullptr) return;
+    // Inset the UI by the system safe area (status bar top, nav bar bottom) so
+    // our own controls never sit under the OS bars. The app background paints
+    // the full window behind the (translucent) bars.
+    const auto insets = juce::Desktop::getInstance().getDisplays()
+                            .getPrimaryDisplay()->safeAreaInsets;
+    shell_->setBounds(insets.subtractedFrom(getLocalBounds()));
 }
 
 // --- TONE3000 -------------------------------------------------------------

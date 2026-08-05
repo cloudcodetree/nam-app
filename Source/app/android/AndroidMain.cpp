@@ -12,7 +12,7 @@ public:
         audioApp_ = new AndroidAudioApp();
         setContentOwned(audioApp_, true);   // window takes ownership
         setVisible(true);
-        setFullScreen(true);
+        setFullScreen(true);   // fill the screen; JuceActivity insets our content
     }
     void closeButtonPressed() override {
         juce::JUCEApplication::getInstance()->systemRequestedQuit();

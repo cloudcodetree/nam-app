@@ -57,32 +57,16 @@ public class JuceActivity   extends Activity
     // the compiled native library. Re-add them (and the native decls) if push
     // notifications / IAP are ever enabled.
 
+    // NAM Player: go edge-to-edge so the app background fills behind the
+    // (translucent) system bars, and the native app layer insets its own
+    // controls by the safe-area (Desktop safeAreaInsets) so nothing sits under
+    // the status/navigation bars. This keeps the system nav bar visible and
+    // tappable while the app still fills the screen.
     @SuppressWarnings ("deprecation")
     private void initEdgeToEdge()
     {
-        if (Build.VERSION.SDK_INT < 35)
-        {
-            View decorView = getWindow().getDecorView();
-
-            final int flags = Build.VERSION.SDK_INT < 30
-                    ? (  SYSTEM_UI_FLAG_LAYOUT_STABLE
-                       | SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                       | SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
-                    : 0;
-
-            decorView.setSystemUiVisibility (decorView.getSystemUiVisibility() | flags);
-        }
-
         if (30 <= Build.VERSION.SDK_INT)
             getWindow().setDecorFitsSystemWindows (false);
-
-        if (29 <= Build.VERSION.SDK_INT)
-        {
-            if (Build.VERSION.SDK_INT < 35)
-                getWindow().setStatusBarContrastEnforced (false);
-
-            getWindow().setNavigationBarContrastEnforced (false);
-        }
     }
 
     @Override
