@@ -66,14 +66,20 @@ if(NAM_BUILD_APP)
         set_target_properties(NamPlayer PROPERTIES OUTPUT_NAME juce_jni)
         target_compile_features(NamPlayer PRIVATE cxx_std_17)
 
-        # Embed the bundled NAM model (Android assets aren't real file paths, so
-        # BinaryData -> temp file -> NamModel::load). Resource name: "model_nam".
+        # Embed the bundled NAM model + the Hi-Fi UI fonts (Libre Caslon +
+        # Work Sans). Android assets aren't real file paths, so everything the
+        # app loads is BinaryData. Resource names: model_nam, LibreCaslon_ttf,
+        # WorkSans_ttf.
         juce_add_binary_data(NamPlayerData SOURCES
-            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/model.nam)
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/model.nam
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/fonts/LibreCaslon.ttf
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/fonts/WorkSans.ttf)
 
         target_sources(NamPlayer PRIVATE
             Source/app/android/AndroidMain.cpp
             Source/app/android/AndroidAudioApp.cpp
+            Source/app/ui/NamLookAndFeel.cpp
+            Source/app/ui/PlayScreen.cpp
             Source/dsp/ToneEngine.cpp
             Source/dsp/IrCab.cpp
             Source/dsp/ToneEq.cpp

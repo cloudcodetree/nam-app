@@ -22,7 +22,7 @@
             android:label="@string/app_name"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|navigation|smallestScreenSize|screenLayout|uiMode"
             android:launchMode="singleTask"
-            android:screenOrientation="userLandscape"
+            android:screenOrientation="portrait"
             android:hardwareAccelerated="true"
             android:exported="true">
             <intent-filter>
