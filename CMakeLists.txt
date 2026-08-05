@@ -80,6 +80,9 @@ if(NAM_BUILD_APP)
             Source/app/android/AndroidAudioApp.cpp
             Source/app/ui/NamLookAndFeel.cpp
             Source/app/ui/PlayScreen.cpp
+            Source/app/ui/EditScreen.cpp
+            Source/app/ui/PlaceholderScreen.cpp
+            Source/app/ui/AppShell.cpp
             Source/dsp/ToneEngine.cpp
             Source/dsp/IrCab.cpp
             Source/dsp/ToneEq.cpp

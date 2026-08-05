@@ -8,10 +8,8 @@
 AndroidAudioApp::AndroidAudioApp() {
     setLookAndFeel(&laf_);
 
-    play_ = std::make_unique<PlayScreen>();
-    addAndMakeVisible(*play_);
-    play_->onNav     = [](int /*tab*/) { /* screen nav wired in a later screen */ };
-    play_->onLibrary = []             { /* library screen wired later */ };
+    shell_ = std::make_unique<AppShell>(engine_);
+    addAndMakeVisible(*shell_);
 
     // 1 input (guitar) / 2 output. JUCE requests RECORD_AUDIO on input open.
     setAudioChannels(1, 2);
@@ -73,13 +71,13 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
 void AndroidAudioApp::releaseResources() {}
 
 void AndroidAudioApp::timerCallback() {
-    if (play_ != nullptr)
-        play_->setLevels(inPeak_.load(std::memory_order_relaxed),
-                         engine_.outputPeak());
+    if (shell_ != nullptr)
+        shell_->setLevels(inPeak_.load(std::memory_order_relaxed),
+                          engine_.outputPeak());
 }
 
 void AndroidAudioApp::paint(juce::Graphics& g) { g.fillAll(nam::ui::col::bg); }
 
 void AndroidAudioApp::resized() {
-    if (play_ != nullptr) play_->setBounds(getLocalBounds());
+    if (shell_ != nullptr) shell_->setBounds(getLocalBounds());
 }

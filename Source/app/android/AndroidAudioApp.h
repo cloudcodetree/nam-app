@@ -6,7 +6,7 @@
 #include "dsp/ToneEngine.h"
 #include "model/NamModel.h"
 #include "app/ui/NamLookAndFeel.h"
-#include "app/ui/PlayScreen.h"
+#include "app/ui/AppShell.h"
 
 // Android app shell (Phase 5a): owns the audio device + ToneEngine and hosts
 // the SHARED, cross-platform Hi-Fi UI (Source/app/ui). The screens themselves
@@ -31,7 +31,7 @@ private:
 
     nam::ui::NamLookAndFeel laf_;
     dsp::ToneEngine engine_;
-    std::unique_ptr<PlayScreen> play_;
+    std::unique_ptr<AppShell> shell_;
 
     double sampleRate_ = 48000.0;
     int    blockSize_  = 256;
