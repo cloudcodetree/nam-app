@@ -97,6 +97,10 @@ void AndroidAudioApp::timerCallback() {
                           engine_.outputPeak());
 }
 
+bool AndroidAudioApp::handleBackButton() {
+    return shell_ != nullptr && shell_->handleBackButton();
+}
+
 void AndroidAudioApp::paint(juce::Graphics& g) { g.fillAll(nam::ui::col::bg); }
 
 void AndroidAudioApp::resized() {

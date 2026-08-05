@@ -9,13 +9,17 @@ public:
     BringUpWindow()
         : DocumentWindow("NAM Player", juce::Colours::black, DocumentWindow::allButtons) {
         setUsingNativeTitleBar(true);
-        setContentOwned(new AndroidAudioApp(), true);
+        audioApp_ = new AndroidAudioApp();
+        setContentOwned(audioApp_, true);   // window takes ownership
         setVisible(true);
         setFullScreen(true);
     }
     void closeButtonPressed() override {
         juce::JUCEApplication::getInstance()->systemRequestedQuit();
     }
+    AndroidAudioApp* audioApp() const { return audioApp_; }
+private:
+    AndroidAudioApp* audioApp_ = nullptr;   // owned by the DocumentWindow content
 };
 
 class NamPlayerApplication : public juce::JUCEApplication {
@@ -24,6 +28,16 @@ public:
     const juce::String getApplicationVersion() override { return "0.1.0"; }
     void initialise(const juce::String&) override       { window_.reset(new BringUpWindow()); }
     void shutdown() override                             { window_ = nullptr; }
+
+    // Android hardware/gesture back: navigate our own screen stack (pop to
+    // Play) instead of finishing the activity. Returning true tells JUCE the
+    // press was handled so the app stays open; on Play we return false so the
+    // OS default (leave the app) applies.
+    bool backButtonPressed() override {
+        if (window_ != nullptr && window_->audioApp() != nullptr)
+            return window_->audioApp()->handleBackButton();
+        return false;
+    }
 private:
     std::unique_ptr<BringUpWindow> window_;
 };

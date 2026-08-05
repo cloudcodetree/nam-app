@@ -27,6 +27,9 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
+    // Android system back button: true if handled (navigated), false = exit.
+    bool handleBackButton();
+
 private:
     void timerCallback() override;
     std::string copyBundledModelToFile();

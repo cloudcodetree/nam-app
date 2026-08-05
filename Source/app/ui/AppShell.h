@@ -23,6 +23,11 @@ public:
     void setLevels (float in, float out);     // Play meters + Setup listener
     void startOnSetup();                       // first-launch entry point
 
+    // Android system back: pop to Play if on a sub-screen. Returns true if it
+    // handled the press (caller should NOT exit the app); false if already on
+    // Play (let the OS do the default = leave the app).
+    bool handleBackButton();
+
     // TONE3000 service (Radio search/download), owned by the host.
     using SearchFn   = std::function<void (juce::String,
                              std::function<void (bool, std::vector<nam::ToneInfo>, juce::String)>)>;

@@ -71,6 +71,11 @@ void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) 
 
 void AppShell::startOnSetup() { show (Screen::Setup); }
 
+bool AppShell::handleBackButton() {
+    if (current_ != nullptr && current_ != play_.get()) { show (Screen::Play); return true; }
+    return false;
+}
+
 void AppShell::show (Screen s) {
     // Refresh data-backed screens as they come into view.
     if (s == Screen::Library && getModels_) library_->setEntries (getModels_());
