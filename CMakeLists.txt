@@ -89,10 +89,20 @@ if(NAM_BUILD_APP)
             Source/dsp/Reverb.cpp
             Source/model/NamModel.cpp
             Source/model/ModelHost.cpp
-            Source/model/IrLoader.cpp)
+            Source/model/IrLoader.cpp
+            Source/model/LibraryStore.cpp
+            Source/model/LibraryImporter.cpp
+            # TONE3000: OAuth2 PKCE + search/download (same code as desktop; the
+            # loopback redirect works on Android — the on-device browser reaches
+            # 127.0.0.1, so TONE3000's existing redirect_uri whitelist applies).
+            Source/net/Pkce.cpp
+            Source/net/Tone3000Api.cpp
+            Source/app/Tone3000Auth.cpp
+            Source/app/Tone3000Session.cpp)
         target_include_directories(NamPlayer PRIVATE Source
             ${CMAKE_SOURCE_DIR}/extern/dr_wav
-            ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann)
+            ${CMAKE_SOURCE_DIR}/extern/NeuralAudio/deps/NeuralAmpModelerCore/Dependencies/nlohmann
+            ${CMAKE_SOURCE_DIR}/extern/picosha2)
         target_link_libraries(NamPlayer PRIVATE
             NamPlayerData
             NeuralAudio
@@ -100,7 +110,9 @@ if(NAM_BUILD_APP)
             juce::juce_gui_extra)
         target_compile_definitions(NamPlayer PRIVATE
             JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-            JUCE_APPLICATION_NAME_STRING="NAM Player")
+            JUCE_APPLICATION_NAME_STRING="NAM Player"
+            # Publishable key only (parsed from .env above); "" if absent.
+            TONE3000_PUBLISHABLE_KEY="${T3K_PUB}")
     else()
         # --- Desktop app target (macOS/Windows/Linux) ---
         juce_add_gui_app(NamPlayer

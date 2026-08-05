@@ -3,6 +3,7 @@
     <!-- Guitar input; USB host so a class-compliant interface (iRig HD X) can
          attach over USB-C. GLES 3.0 is required by JUCE's Android renderer. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
     <uses-feature android:name="android.hardware.usb.host"/>
     <uses-feature android:glEsVersion="0x00030000" android:required="true"/>
 
