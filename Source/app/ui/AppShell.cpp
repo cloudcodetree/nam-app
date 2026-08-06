@@ -122,14 +122,19 @@ void AppShell::setBrowseServices (BrowseServices services) {
     };
 
     browse_->onDemoTrack = [this] (int track) {
-        if (svc_.setDemoTrack) svc_.setDemoTrack (track);
-        refreshCachedFlags();
-        // Re-render the current audition with the new riff, if one is playing.
-        if (auditioningPack_ >= 0) {
-            const int pack = auditioningPack_, model = auditioningModel_;
-            if (model >= 0) browse_->onPlayModel (pack, model);
-            else { auditioningPack_ = -1; browse_->onPlayPack (pack); }
-        }
+        if (! svc_.setDemoTrack) return;
+        browse_->setStatus ("Fetching demo track" + kEllipsis);
+        svc_.setDemoTrack (track, [this] (bool ok) {
+            if (! ok) { browse_->setStatus ("Demo track unavailable (offline?)"); return; }
+            browse_->setStatus ("Demo track ready");
+            refreshCachedFlags();
+            // Re-audition with the new riff, if something is playing.
+            if (auditioningPack_ >= 0) {
+                const int pack = auditioningPack_, model = auditioningModel_;
+                if (model >= 0) browse_->onPlayModel (pack, model);
+                else { auditioningPack_ = -1; browse_->onPlayPack (pack); }
+            }
+        });
     };
 }
 

@@ -11,6 +11,7 @@
 #include "app/Tone3000Session.h"
 #include "app/ui/NamLookAndFeel.h"
 #include "app/ui/AppShell.h"
+#include "app/ui/DemoTrackCatalog.h"
 
 // Android app shell (Phase 5a): owns the audio device + ToneEngine + TONE3000
 // service and hosts the SHARED, cross-platform Hi-Fi UI (Source/app/ui). Only
@@ -70,7 +71,10 @@ private:
                          std::function<void(bool, juce::String)> done);
     void doListModels(const std::string& toneId,
                       std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done);
-    void setDemoTrack(int index);         // 0 chords · 1 lead · 2 chugs
+    void setDemoTrack(int index);         // index into nam::demo::kTracks
+    // Makes sure a DI track's audio is in memory (bundled, disk cache, or
+    // downloaded from TONE3000's repo), then done(true) on the msg thread.
+    void ensureDemoTrack(int index, std::function<void(bool)> done);
     void setDemoActive(bool on);
     void setLiveInputMuted(bool muted);   // browsing: don't amplify the mic
     void buildDemoLoop(double sampleRate);
@@ -114,7 +118,8 @@ private:
     // only re-renders, it never re-downloads.
     static juce::File modelCacheFile(const std::string& scope);
     static void pruneModelCache();
-    std::array<std::vector<float>, 4> demoTracks_;   // chords / lead / chugs / bass
+    // One slot per catalog track; fixed size (audio thread indexes into it).
+    std::array<std::vector<float>, (size_t) nam::demo::kNumTracks> demoTracks_;
     int demoTrack_ = 0;
     std::atomic<int>  demoTrackRT_ { 0 };   // audio-thread copy of demoTrack_
     std::atomic<bool> demoLive_ { false };  // live mode: dry DI -> engine in RT

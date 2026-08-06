@@ -1,4 +1,5 @@
 #include "app/ui/BrowseScreen.h"
+#include "app/ui/DemoTrackCatalog.h"
 #include "app/ui/NamLookAndFeel.h"
 
 #include <algorithm>
@@ -19,12 +20,6 @@ constexpr int kDragThreshold = 8;
 
 const char* kTagChips[]  = { "metal", "blues", "clean", "vintage", "high gain" };
 const char* kMakeChips[] = { "Marshall", "Fender", "Vox", "Mesa", "Orange", "EVH" };
-// TONE3000 web-player DI tracks (bundled; names as published in their repo).
-const char* kDiNames[] = { "Mayer - Guitar", "Slide Lead - Guitar",
-                           "Metalcore - Guitar", "Smokin' - Bass" };
-const char* kDiDescs[] = { "clean chords", "expressive slide lead",
-                           "palm-muted metal", "fingerstyle bass groove" };
-constexpr int kNumDi = 4;
 }
 
 BrowseScreen::BrowseScreen() {
@@ -215,13 +210,13 @@ void BrowseScreen::clampScroll() {
 }
 
 int BrowseScreen::menuCount() const {
-    if (menu_ == Menu::DemoTrack) return kNumDi;
+    if (menu_ == Menu::DemoTrack) return nam::demo::kNumTracks;
     if (menu_ == Menu::Variant && expanded_ >= 0 && expanded_ < (int) models_.size())
         return models_[(size_t) expanded_].size();
     return 0;
 }
 
-int BrowseScreen::menuRowH() const { return menu_ == Menu::DemoTrack ? 44 : 38; }
+int BrowseScreen::menuRowH() const { return 38; }
 
 juce::Rectangle<int> BrowseScreen::menuPanelRect() const {
     if (menu_ == Menu::None || expanded_ < 0 || expanded_ >= (int) rows_.size()) return {};
@@ -399,7 +394,8 @@ void BrowseScreen::paint (juce::Graphics& g) {
         };
 
         dropdownBtn (row.diBtn,
-                     juce::String::fromUTF8 ("\xE2\x99\xAB") + "  Demo: " + juce::String (kDiNames[demoTrack_]),
+                     juce::String::fromUTF8 ("\xE2\x99\xAB") + "  Demo: "
+                         + juce::String (nam::demo::kTracks[demoTrack_].display),
                      menu_ == Menu::DemoTrack);
         juce::String varLabel;
         if (models_[i].isEmpty())
@@ -449,16 +445,11 @@ void BrowseScreen::paint (juce::Graphics& g) {
                 auto inner = rr.reduced (14, 4);
                 text (on ? kCheck : juce::String(), uiFont (11.0f, false), col::accentAlt,
                       inner.removeFromLeft (16), juce::Justification::centredLeft);
-                if (menu_ == Menu::DemoTrack) {
-                    text (kDiNames[d], uiFont (12.0f, true), on ? col::accentAlt : col::ink,
-                          inner.removeFromTop (inner.getHeight() / 2 + 3),
-                          juce::Justification::bottomLeft);
-                    text (kDiDescs[d], uiFont (10.0f, false), col::inkA (0.4f),
-                          inner, juce::Justification::topLeft);
-                } else {
-                    text (models_[(size_t) expanded_][d], uiFont (12.0f, false),
-                          on ? col::accentAlt : col::ink, inner, juce::Justification::centredLeft);
-                }
+                const juce::String label = (menu_ == Menu::DemoTrack)
+                    ? juce::String (nam::demo::kTracks[d].display)
+                    : models_[(size_t) expanded_][d];
+                text (label, uiFont (12.0f, menu_ == Menu::DemoTrack),
+                      on ? col::accentAlt : col::ink, inner, juce::Justification::centredLeft);
             }
             const int totalH = menuCount() * menuRowH() + 8;
             if (totalH > panel.getHeight()) {

@@ -51,7 +51,12 @@ AndroidAudioApp::AndroidAudioApp() {
             std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
         doListModels(toneId, std::move(done));
     };
-    browse.setDemoTrack = [this](int t) { setDemoTrack(t); };
+    browse.setDemoTrack = [this](int t, std::function<void(bool)> done) {
+        ensureDemoTrack(t, [this, t, done](bool ok) {
+            if (ok) setDemoTrack(t);   // RT switch only after audio is loaded
+            done(ok);
+        });
+    };
     browse.stopDemo     = [this] { setDemoActive(false); };
     browse.isAuditionCached = [this](std::string toneId) {
         if (preRenderAuditions_)
@@ -486,45 +491,61 @@ void buildKsLoop(std::vector<float>& loop, double sr, double loopSec,
 }
 }
 
-void AndroidAudioApp::buildDemoLoop(double sr) {
-    // Preferred source: real DI recordings bundled from TONE3000's
-    // MIT-licensed web-player repo (48 kHz mono 24-bit). Decoded with
-    // dr_wav; linear-resampled if the device rate differs. Falls back to
-    // the synthesized riffs below if anything is missing.
-    const char* diResources[4] = { "di_chords_wav", "di_lead_wav", "di_chugs_wav", "di_bass_wav" };
-    bool allDecoded = true;
-    for (int t = 0; t < 4; ++t) {
-        int size = 0;
-        const char* data = BinaryData::getNamedResource(diResources[t], size);
-        bool ok = false;
-        if (data != nullptr && size > 0) {
-            unsigned int ch = 0, fileSr = 0;
-            drwav_uint64 frames = 0;
-            float* raw = drwav_open_memory_and_read_pcm_frames_f32(
-                data, (size_t) size, &ch, &fileSr, &frames, nullptr);
-            if (raw != nullptr && ch >= 1 && frames > 0) {
-                std::vector<float> mono((size_t) frames);
-                for (drwav_uint64 i = 0; i < frames; ++i)
-                    mono[(size_t) i] = raw[i * ch];   // mono files: ch==1
-                if ((double) fileSr != sr && fileSr > 0) {
-                    const double ratio = (double) fileSr / sr;
-                    std::vector<float> res((size_t) ((double) frames / ratio));
-                    for (size_t i = 0; i < res.size(); ++i) {
-                        const double pos = (double) i * ratio;
-                        const size_t i0 = (size_t) pos;
-                        const float frac = (float) (pos - (double) i0);
-                        const float a = mono[juce::jmin(i0, mono.size() - 1)];
-                        const float b = mono[juce::jmin(i0 + 1, mono.size() - 1)];
-                        res[i] = a + (b - a) * frac;
-                    }
-                    mono = std::move(res);
-                }
-                demoTracks_[(size_t) t] = std::move(mono);
-                ok = true;
-            }
-            if (raw != nullptr) drwav_free(raw, nullptr);
+namespace {
+// Decodes a WAV byte blob to mono floats at `sr`, trimmed to 12 s max.
+bool decodeDiWav(const void* data, size_t size, double sr, std::vector<float>& outMono) {
+    unsigned int ch = 0, fileSr = 0;
+    drwav_uint64 frames = 0;
+    float* raw = drwav_open_memory_and_read_pcm_frames_f32(
+        data, size, &ch, &fileSr, &frames, nullptr);
+    if (raw == nullptr || ch < 1 || frames == 0) {
+        if (raw != nullptr) drwav_free(raw, nullptr);
+        return false;
+    }
+    const drwav_uint64 maxFrames = (drwav_uint64) ((double) fileSr * 12.0);
+    frames = juce::jmin(frames, maxFrames);
+    std::vector<float> mono((size_t) frames);
+    for (drwav_uint64 i = 0; i < frames; ++i)
+        mono[(size_t) i] = raw[i * ch];
+    drwav_free(raw, nullptr);
+    if ((double) fileSr != sr && fileSr > 0) {
+        const double ratio = (double) fileSr / sr;
+        std::vector<float> res((size_t) ((double) frames / ratio));
+        for (size_t i = 0; i < res.size(); ++i) {
+            const double pos = (double) i * ratio;
+            const size_t i0 = (size_t) pos;
+            const float frac = (float) (pos - (double) i0);
+            const float a = mono[juce::jmin(i0, mono.size() - 1)];
+            const float b = mono[juce::jmin(i0 + 1, mono.size() - 1)];
+            res[i] = a + (b - a) * frac;
         }
-        if (! ok) allDecoded = false;
+        mono = std::move(res);
+    }
+    outMono = std::move(mono);
+    return true;
+}
+
+juce::File diCacheFile(int index) {
+    return juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getChildFile("di_cache")
+        .getChildFile("di_" + juce::String(index) + ".wav");
+}
+}
+
+void AndroidAudioApp::buildDemoLoop(double sr) {
+    // Bundled tracks decode from BinaryData; fetched tracks reload lazily
+    // (ensureDemoTrack) from the disk cache at the current rate. Clear
+    // everything first — a device-rate change invalidates old buffers.
+    bool allDecoded = true;
+    for (int t = 0; t < nam::demo::kNumTracks; ++t) {
+        demoTracks_[(size_t) t].clear();
+        const char* res = nam::demo::kTracks[t].binaryResource;
+        if (res == nullptr) continue;
+        int size = 0;
+        const char* data = BinaryData::getNamedResource(res, size);
+        if (data == nullptr || size <= 0
+            || ! decodeDiWav(data, (size_t) size, sr, demoTracks_[(size_t) t]))
+            allDecoded = false;
     }
     if (allDecoded) return;
 
@@ -560,8 +581,46 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
 }
 
 void AndroidAudioApp::setDemoTrack(int index) {
-    demoTrack_ = juce::jlimit(0, 3, index);
+    demoTrack_ = juce::jlimit(0, nam::demo::kNumTracks - 1, index);
     demoTrackRT_.store(demoTrack_, std::memory_order_relaxed);
+}
+
+void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done) {
+    if (index < 0 || index >= nam::demo::kNumTracks) { done(false); return; }
+    if (! demoTracks_[(size_t) index].empty()) { done(true); return; }
+
+    const double sr = sampleRate_;
+    const auto cache = diCacheFile(index);
+    const juce::String fileName (nam::demo::kTracks[index].fileName);
+
+    juce::Thread::launch([this, index, sr, cache, fileName, done] {
+        juce::MemoryBlock bytes;
+        if (cache.existsAsFile()) {
+            cache.loadFileAsData(bytes);
+        } else {
+            // MIT-licensed DI from TONE3000's web-player repo.
+            const juce::URL url ("https://raw.githubusercontent.com/tone-3000/"
+                                 "neural-amp-modeler-wasm/main/ui/public/inputs/"
+                                 + juce::URL::addEscapeChars(fileName, false));
+            if (auto stream = url.createInputStream(
+                    juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                        .withConnectionTimeoutMs(15000))) {
+                stream->readIntoMemoryBlock(bytes, 12 * 1024 * 1024);
+            }
+            if (bytes.getSize() > 1024) {
+                cache.getParentDirectory().createDirectory();
+                cache.replaceWithData(bytes.getData(), bytes.getSize());
+            }
+        }
+
+        auto mono = std::make_shared<std::vector<float>>();
+        const bool ok = bytes.getSize() > 1024
+                        && decodeDiWav(bytes.getData(), bytes.getSize(), sr, *mono);
+        juce::MessageManager::callAsync([this, index, mono, ok, done] {
+            if (ok) demoTracks_[(size_t) index] = std::move(*mono);
+            done(ok && ! demoTracks_[(size_t) index].empty());
+        });
+    });
 }
 
 void AndroidAudioApp::setDemoActive(bool on) {
