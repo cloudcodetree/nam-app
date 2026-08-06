@@ -54,6 +54,9 @@ private:
     float loadProgress_ = 0.0f;
     int demoTrack_ = 0;
     bool diMenuOpen_ = false;
+    float diMenuScroll_ = 0.0f;
+    bool diMenuDragging_ = false;
+    juce::Rectangle<int> diMenuPanelRect() const;               // screen space
     std::vector<juce::Rectangle<int>> diMenuRowRects() const;   // screen space
     int sort_ = 0;                            // 0 trending · 1 most kept
     bool filtersOpen_ = false;

@@ -91,6 +91,7 @@ private:
     nam::LibraryStore library_ { defaultLibraryDir() };
     nam::Tone3000Auth t3kAuth_ { tokenStoreFile() };
     std::unique_ptr<nam::Tone3000Session> t3kSession_;
+    std::string sessionToken_;   // token the session was built with (never logged)
 
     double sampleRate_ = 48000.0;
     int    blockSize_  = 256;
@@ -106,9 +107,13 @@ private:
     void installRenderedDemo(std::vector<float> rendered);
     void cacheAudition(const std::string& key, const std::vector<float>& rendered);
     const std::vector<float>* cachedAudition(const std::string& key) const;
-    void renderAuditionFile(juce::File file, std::string cacheKey,
+    void renderAuditionFile(juce::File file, bool deleteAfter, std::string cacheKey,
                             juce::String displayName,
                             std::function<void(bool, juce::String)> done);
+    // On-disk cache of downloaded audition model files: a demo-riff change
+    // only re-renders, it never re-downloads.
+    static juce::File modelCacheFile(const std::string& scope);
+    static void pruneModelCache();
     std::array<std::vector<float>, 4> demoTracks_;   // chords / lead / chugs / bass
     int demoTrack_ = 0;
     // Rendered-audition cache (message thread only): tone id -> processed

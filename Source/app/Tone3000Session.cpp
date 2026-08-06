@@ -410,10 +410,23 @@ Tone3000Session::Tone3000Session(std::string accessToken) : accessToken_(std::mo
 Tone3000Session::~Tone3000Session() {
     if (downloadThread_)
         downloadThread_->stopThread(20000);
+    if (keepThread_)
+        keepThread_->stopThread(20000);
     if (searchThread_)
         searchThread_->stopThread(20000);
     if (listThread_)
         listThread_->stopThread(20000);
+}
+
+void Tone3000Session::downloadToneModelForKeep(const std::string& toneId, juce::File destDir,
+        std::function<void(bool, juce::File, juce::String)> done) {
+    if (keepThread_) {
+        keepThread_->stopThread(20000);
+        keepThread_.reset();
+    }
+    keepThread_ = std::make_unique<DownloadThread>(accessToken_, toneId, std::move(destDir),
+                                                    false, std::move(done));
+    keepThread_->startThread();
 }
 
 void Tone3000Session::listToneModels(const std::string& toneId,

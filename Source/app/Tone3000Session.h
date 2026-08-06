@@ -68,13 +68,20 @@ public:
     void downloadModel(const nam::ModelInfo& model, juce::File destDir,
                        std::function<void(bool, juce::File, juce::String)> done);
 
+    // Keep/library download: identical to downloadToneModel (best quality)
+    // but runs on its OWN slot, so keeping a pack never cancels an in-flight
+    // audition download (and vice versa).
+    void downloadToneModelForKeep(const std::string& toneId, juce::File destDir,
+                                  std::function<void(bool, juce::File, juce::String)> done);
+
 private:
     class DownloadThread;
     class SearchThread;
     class ListModelsThread;
 
     std::string accessToken_;
-    std::unique_ptr<DownloadThread> downloadThread_;
+    std::unique_ptr<DownloadThread> downloadThread_;   // audition slot
+    std::unique_ptr<DownloadThread> keepThread_;       // keep/library slot
     std::unique_ptr<SearchThread> searchThread_;
     std::unique_ptr<ListModelsThread> listThread_;
 };

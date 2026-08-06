@@ -377,18 +377,21 @@ void BrowseScreen::paint (juce::Graphics& g) {
     // DI dropdown menu — drawn over everything, anchored to the open row's
     // dropdown button.
     if (diMenuOpen_ && expanded_ >= 0 && expanded_ < (int) rows_.size()) {
+        const auto panel = diMenuPanelRect();
         const auto rowRects = diMenuRowRects();
-        if (! rowRects.empty()) {
-            auto panel = rowRects.front().getUnion (rowRects.back()).expanded (0, 4);
+        if (! panel.isEmpty() && ! rowRects.empty()) {
             juce::DropShadow (juce::Colours::black.withAlpha (0.6f), 24, { 0, 10 })
                 .drawForRectangle (g, panel);
             g.setColour (col::bgGradTop.brighter (0.03f));
             g.fillRoundedRectangle (panel.toFloat(), 10.0f);
             g.setColour (col::inkA (0.18f));
             g.drawRoundedRectangle (panel.toFloat().reduced (0.5f), 10.0f, 1.0f);
+            g.saveState();
+            g.reduceClipRegion (panel.reduced (1));
             for (int d = 0; d < kNumDi && d < (int) rowRects.size(); ++d) {
                 const bool on = (d == demoTrack_);
                 auto rr = rowRects[(size_t) d];
+                if (rr.getBottom() < panel.getY() || rr.getY() > panel.getBottom()) continue;
                 if (on) { g.setColour (col::accentA (0.08f)); g.fillRect (rr); }
                 auto inner = rr.reduced (14, 4);
                 text (on ? juce::String::fromUTF8 ("\xE2\x9C\x93") : juce::String(),
@@ -400,6 +403,19 @@ void BrowseScreen::paint (juce::Graphics& g) {
                 text (kDiDescs[d], uiFont (10.0f, false), col::inkA (0.4f),
                       inner, juce::Justification::topLeft);
             }
+            // Scroll affordance when content overflows.
+            const int totalH = kNumDi * kDiRowH + 8;
+            if (totalH > panel.getHeight()) {
+                g.setColour (col::inkA (0.25f));
+                const float frac = (float) panel.getHeight() / (float) totalH;
+                const float maxScroll = (float) (totalH - panel.getHeight());
+                const float pos = maxScroll > 0 ? diMenuScroll_ / maxScroll : 0.0f;
+                const float barH = juce::jmax (18.0f, panel.getHeight() * frac);
+                const float barY = panel.getY() + 3
+                                   + pos * ((float) panel.getHeight() - 6.0f - barH);
+                g.fillRoundedRectangle ((float) panel.getRight() - 5.0f, barY, 2.5f, barH, 1.2f);
+            }
+            g.restoreState();
         }
     }
 
@@ -410,23 +426,35 @@ void BrowseScreen::paint (juce::Graphics& g) {
           statusRect_.reduced (20, 0), juce::Justification::centred);
 }
 
+juce::Rectangle<int> BrowseScreen::diMenuPanelRect() const {
+    if (expanded_ < 0 || expanded_ >= (int) rows_.size()) return {};
+    const auto btn = rows_[(size_t) expanded_].diBtn.translated (0, listArea_.getY() - (int) scrollY_);
+    const int totalH = kNumDi * kDiRowH + 8;
+    const int belowTop = btn.getBottom() + 4;
+    const int belowH = getHeight() - 24 - belowTop;
+    if (belowH >= juce::jmin (totalH, kDiRowH * 2 + 8))
+        return { btn.getX(), belowTop, btn.getWidth(), juce::jmin (totalH, belowH) };
+    const int aboveH = juce::jmin (totalH, btn.getY() - 4 - 24);
+    return { btn.getX(), btn.getY() - 4 - aboveH, btn.getWidth(), juce::jmax (kDiRowH, aboveH) };
+}
+
 std::vector<juce::Rectangle<int>> BrowseScreen::diMenuRowRects() const {
     std::vector<juce::Rectangle<int>> out;
-    if (expanded_ < 0 || expanded_ >= (int) rows_.size()) return out;
-    const auto btn = rows_[(size_t) expanded_].diBtn.translated (0, listArea_.getY() - (int) scrollY_);
-    int top = btn.getBottom() + 4;
-    const int totalH = kNumDi * kDiRowH;
-    if (top + totalH > getHeight() - 40)               // overflow: open upwards
-        top = juce::jmax (8, btn.getY() - 4 - totalH);
-    for (int d = 0; d < kNumDi; ++d)
-        out.push_back ({ btn.getX(), top + d * kDiRowH, btn.getWidth(), kDiRowH });
+    const auto panel = diMenuPanelRect();
+    if (panel.isEmpty()) return out;
+    int y = panel.getY() + 4 - (int) diMenuScroll_;
+    for (int d = 0; d < kNumDi; ++d) {
+        out.push_back ({ panel.getX(), y, panel.getWidth(), kDiRowH });
+        y += kDiRowH;
+    }
     return out;
 }
 
 void BrowseScreen::mouseDown (const juce::MouseEvent& e) {
     pressY_ = e.getPosition().y;
-    pressScroll_ = scrollY_;
     dragged_ = false;
+    diMenuDragging_ = diMenuOpen_ && diMenuPanelRect().contains (e.getPosition());
+    pressScroll_ = diMenuDragging_ ? diMenuScroll_ : scrollY_;
     // Keep keyboard focus off the search field unless it was tapped —
     // otherwise Android re-shows the soft keyboard on every tap.
     if (! searchBox_.contains (e.getPosition()))
@@ -434,32 +462,47 @@ void BrowseScreen::mouseDown (const juce::MouseEvent& e) {
 }
 
 void BrowseScreen::mouseDrag (const juce::MouseEvent& e) {
-    if (! listArea_.contains (e.getMouseDownPosition())) return;
+    if (! diMenuDragging_ && ! listArea_.contains (e.getMouseDownPosition())) return;
     const int delta = e.getPosition().y - pressY_;
     if (std::abs (delta) > kDragThreshold) dragged_ = true;
-    if (dragged_) {
+    if (! dragged_) return;
+    if (diMenuDragging_) {
+        const auto panel = diMenuPanelRect();
+        const float maxScroll = (float) juce::jmax (0, kNumDi * kDiRowH + 8 - panel.getHeight());
+        diMenuScroll_ = juce::jlimit (0.0f, maxScroll, pressScroll_ - (float) delta);
+    } else {
         scrollY_ = pressScroll_ - (float) delta;
         clampScroll();
-        repaint();
     }
+    repaint();
 }
 
 void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
-    if (dragged_) { diMenuOpen_ = false; return; }
+    if (dragged_) {
+        if (! diMenuDragging_) diMenuOpen_ = false;   // menu drag = scroll it
+        diMenuDragging_ = false;
+        return;
+    }
+    diMenuDragging_ = false;
     const auto p = e.getPosition();
 
     // Open DI menu consumes the tap: pick a track or dismiss.
     if (diMenuOpen_) {
-        const auto rowRects = diMenuRowRects();
-        for (int d = 0; d < (int) rowRects.size(); ++d)
-            if (rowRects[(size_t) d].contains (p)) {
-                demoTrack_ = d;
-                diMenuOpen_ = false;
-                if (onDemoTrack) onDemoTrack (d);
-                repaint();
-                return;
-            }
+        const auto panel = diMenuPanelRect();
+        if (panel.contains (p)) {
+            const auto rowRects = diMenuRowRects();
+            for (int d = 0; d < (int) rowRects.size(); ++d)
+                if (rowRects[(size_t) d].contains (p)) {
+                    demoTrack_ = d;
+                    diMenuOpen_ = false;
+                    diMenuScroll_ = 0.0f;
+                    if (onDemoTrack) onDemoTrack (d);
+                    repaint();
+                    return;
+                }
+        }
         diMenuOpen_ = false;
+        diMenuScroll_ = 0.0f;
         repaint();
         return;
     }
@@ -514,8 +557,14 @@ void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
     }
 }
 
-void BrowseScreen::mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w) {
-    scrollY_ -= w.deltaY * 120.0f;
-    clampScroll();
+void BrowseScreen::mouseWheelMove (const juce::MouseEvent& e, const juce::MouseWheelDetails& w) {
+    if (diMenuOpen_ && diMenuPanelRect().contains (e.getPosition())) {
+        const auto panel = diMenuPanelRect();
+        const float maxScroll = (float) juce::jmax (0, kNumDi * kDiRowH + 8 - panel.getHeight());
+        diMenuScroll_ = juce::jlimit (0.0f, maxScroll, diMenuScroll_ - w.deltaY * 120.0f);
+    } else {
+        scrollY_ -= w.deltaY * 120.0f;
+        clampScroll();
+    }
     repaint();
 }
