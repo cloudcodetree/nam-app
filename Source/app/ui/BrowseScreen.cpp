@@ -80,6 +80,8 @@ void BrowseScreen::setResults (std::vector<nam::ToneInfo> tones) {
     cached_.assign (tones_.size(), false);
     downloaded_.assign (tones_.size(), false);
     selVariant_.assign (tones_.size(), -1);
+    defaultVariant_.assign (tones_.size(), -1);
+    defaultName_.assign (tones_.size(), {});
     expanded_ = -1;
     playingPack_ = playingModel_ = -1;
     loadingPack_ = downloadingPack_ = -1;
@@ -94,6 +96,13 @@ void BrowseScreen::setModels (int packIdx, juce::StringArray names) {
     models_[(size_t) packIdx] = std::move (names);
     relayout();
     repaint();
+}
+
+void BrowseScreen::setDefaultModel (int packIdx, int modelIdx, juce::String name) {
+    if (packIdx < 0 || packIdx >= (int) defaultName_.size()) return;
+    defaultVariant_[(size_t) packIdx] = modelIdx;
+    defaultName_[(size_t) packIdx] = std::move (name);
+    repaint (listArea_);
 }
 
 void BrowseScreen::setPlaying (int packIdx, int modelIdx) {
@@ -402,6 +411,8 @@ void BrowseScreen::paint (juce::Graphics& g) {
             varLabel = "Model: loading" + juce::String::fromUTF8 ("\xE2\x80\xA6");
         else if (selVariant_[i] >= 0 && selVariant_[i] < models_[i].size())
             varLabel = "Model: " + models_[i][selVariant_[i]];
+        else if (defaultName_[i].isNotEmpty())
+            varLabel = "Model: " + defaultName_[i] + " (default)";
         else
             varLabel = "Model: Auto (best)";
         dropdownBtn (row.varBtn, varLabel, menu_ == Menu::Variant);
@@ -435,8 +446,10 @@ void BrowseScreen::paint (juce::Graphics& g) {
             g.drawRoundedRectangle (panel.toFloat().reduced (0.5f), 10.0f, 1.0f);
             g.saveState();
             g.reduceClipRegion (panel.reduced (1));
-            const int selected = (menu_ == Menu::DemoTrack) ? demoTrack_
-                                 : (expanded_ >= 0 ? selVariant_[(size_t) expanded_] : -1);
+            int selected = (menu_ == Menu::DemoTrack) ? demoTrack_
+                           : (expanded_ >= 0 ? selVariant_[(size_t) expanded_] : -1);
+            if (menu_ == Menu::Variant && selected < 0 && expanded_ >= 0)
+                selected = defaultVariant_[(size_t) expanded_];   // show what Auto uses
             for (int d = 0; d < (int) rowRects.size(); ++d) {
                 auto rr = rowRects[(size_t) d];
                 if (rr.getBottom() < panel.getY() || rr.getY() > panel.getBottom()) continue;

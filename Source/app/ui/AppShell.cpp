@@ -78,6 +78,15 @@ void AppShell::setBrowseServices (BrowseServices services) {
                 for (const auto& m : models)
                     names.add (juce::String (m.name.empty() ? m.id : m.name));
                 browse_->setModels (idx, names);
+                // Tell the UI which variant "Auto (best)" actually resolves to.
+                nam::ModelInfo best;
+                if (nam::pickBestModel (models, best)) {
+                    int bestIdx = -1;
+                    for (size_t k = 0; k < models.size(); ++k)
+                        if (models[k].id == best.id) { bestIdx = (int) k; break; }
+                    browse_->setDefaultModel (idx, bestIdx,
+                        juce::String (best.name.empty() ? best.id : best.name));
+                }
             });
     };
 

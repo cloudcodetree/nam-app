@@ -27,6 +27,7 @@ public:
 
     void setResults (std::vector<nam::ToneInfo> tones);
     void setModels (int packIdx, juce::StringArray names);
+    void setDefaultModel (int packIdx, int modelIdx, juce::String name);  // what "Auto" resolves to
     void setPlaying (int packIdx, int modelIdx);          // -1,-1 = stopped
     void setKept (int packIdx);
     void setStatus (juce::String s);
@@ -60,7 +61,9 @@ private:
     std::vector<nam::ToneInfo> tones_;
     std::vector<juce::StringArray> models_;
     std::vector<bool> kept_, cached_, downloaded_;
-    std::vector<int> selVariant_;             // -1 = auto (smallest)
+    std::vector<int> selVariant_;             // -1 = auto (default/best)
+    std::vector<int> defaultVariant_;         // index "Auto" resolves to (-1 unknown)
+    std::vector<juce::String> defaultName_;
     int expanded_ = -1;
     int playingPack_ = -1, playingModel_ = -1;
     int loadingPack_ = -1;
