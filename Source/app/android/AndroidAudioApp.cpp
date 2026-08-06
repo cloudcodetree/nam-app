@@ -1,6 +1,7 @@
 #include "app/android/AndroidAudioApp.h"
 
 #include "BinaryData.h"
+#include "model/IrLoader.h"
 #include "model/LibraryImporter.h"
 #include "model/LibraryEntry.h"
 
@@ -58,6 +59,7 @@ AndroidAudioApp::AndroidAudioApp() {
         });
     };
     browse.stopDemo     = [this] { setDemoActive(false); };
+    browse.setCab       = [this](int c) { setCab(c); };
     browse.isAuditionCached = [this](std::string toneId) {
         if (preRenderAuditions_)
             return cachedAudition(toneId + "#auto#" + std::to_string(demoTrack_)) != nullptr;
@@ -116,6 +118,19 @@ void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRa
     mono_.assign((size_t) juce::jmax(1, samplesPerBlockExpected), 0.0f);
     engine_.prepare((int) sampleRate, samplesPerBlockExpected);
     buildDemoLoop(sampleRate);
+
+    // Bundled cab IRs (IrLoader wants a path; stage each through a temp file).
+    for (int c = 1; c < nam::demo::kNumCabs; ++c) {
+        int size = 0;
+        const char* data = BinaryData::getNamedResource(nam::demo::kCabs[c].binaryResource, size);
+        if (data == nullptr || size <= 0) continue;
+        auto tmp = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                       .getChildFile("cab_" + juce::String(c) + ".wav");
+        tmp.replaceWithData(data, (size_t) size);
+        cabIrs_[(size_t) c] = nam::loadImpulseResponse(
+            tmp.getFullPathName().toStdString(), (int) sampleRate, dsp::kMaxIrTaps);
+    }
+    setCab(cab_);   // re-apply selection at the (possibly new) sample rate
 
     if (auto m = nam::NamModel::load(copyBundledModelToFile(),
                                      (int) sampleRate, samplesPerBlockExpected)) {
@@ -585,6 +600,13 @@ void AndroidAudioApp::setDemoTrack(int index) {
     demoTrackRT_.store(demoTrack_, std::memory_order_relaxed);
 }
 
+void AndroidAudioApp::setCab(int index) {
+    cab_ = juce::jlimit(0, nam::demo::kNumCabs - 1, index);
+    const auto ir = cabIrs_[(size_t) cab_];
+    engine_.setImpulse(ir);
+    engine_.setIrEnabled(cab_ > 0 && ir != nullptr);
+}
+
 void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done) {
     if (index < 0 || index >= nam::demo::kNumTracks) { done(false); return; }
     if (! demoTracks_[(size_t) index].empty()) { done(true); return; }
@@ -633,10 +655,18 @@ void AndroidAudioApp::setLiveInputMuted(bool muted) {
     liveMuted_.store(muted, std::memory_order_relaxed);
 }
 
-void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered) {
+void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered, bool preservePosition) {
     const int next = (demoSlot_.load(std::memory_order_relaxed) + 1) & 1;
+    const size_t len = rendered.size();
     demoSlots_[(size_t) next] = std::move(rendered);
-    demoPos_.store(0, std::memory_order_relaxed);
+    // Model/cab switches keep the demo rolling from the same spot (the DI
+    // timeline is identical); anything else starts from the top.
+    const bool wasPlaying = demoOn_.load(std::memory_order_relaxed);
+    if (! (preservePosition && wasPlaying) || len == 0)
+        demoPos_.store(0, std::memory_order_relaxed);
+    else
+        demoPos_.store(demoPos_.load(std::memory_order_relaxed) % len,
+                       std::memory_order_relaxed);
     demoSlot_.store(next, std::memory_order_release);
     demoLive_.store(false, std::memory_order_relaxed);   // slot playback mode
     demoOn_.store(true, std::memory_order_relaxed);
@@ -702,15 +732,17 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
                                         const std::string& cacheKey,
                                         juce::String displayName,
                                         std::function<void(bool, juce::String)> done) {
-    setDemoActive(false);
+    // Deliberately do NOT stop the current demo: it keeps playing until the
+    // new tone is ready, then swaps in place — clean A/B comparisons.
     const std::string path = file.getFullPathName().toStdString();
     const double sr = sampleRate_;
     const int liveBlock = blockSize_;
     const bool forcePre = preRenderAuditions_;
     auto dry = std::make_shared<std::vector<float>>(demoTracks_[(size_t) demoTrack_]);
+    auto cabIr = (cab_ > 0) ? cabIrs_[(size_t) cab_] : nullptr;
 
     juce::Thread::launch([this, path, sr, liveBlock, forcePre, dry, deleteAfter,
-                          cacheKey, displayName, done] {
+                          cacheKey, displayName, done, cabIr] {
         constexpr int block = 256;
         auto offline = std::make_unique<dsp::ToneEngine>();
         offline->prepare((int) sr, block);
@@ -721,6 +753,10 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
             return;
         }
         offline->setModel(std::move(m));
+        if (cabIr != nullptr) {
+            offline->setImpulse(cabIr);
+            offline->setIrEnabled(true);
+        }
 
         auto out = std::make_shared<std::vector<float>>(dry->size(), 0.0f);
         std::vector<float> chunk(block, 0.0f);
@@ -751,7 +787,10 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
                 if (model == nullptr) { done(false, "model load failed"); return; }
                 engine_.setModel(std::move(model));
                 modelLoaded_ = true;
-                demoPos_.store(0, std::memory_order_relaxed);
+                // Keep position when already playing (A/B); slot and live
+                // playback share the same DI timeline.
+                if (! demoOn_.load(std::memory_order_relaxed))
+                    demoPos_.store(0, std::memory_order_relaxed);
                 demoLive_.store(true, std::memory_order_relaxed);
                 demoOn_.store(true, std::memory_order_relaxed);
                 done(true, displayName);
@@ -785,7 +824,7 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
 
         juce::MessageManager::callAsync([this, out, done, displayName, cacheKey] {
             cacheAudition(cacheKey, *out);
-            installRenderedDemo(std::move(*out));
+            installRenderedDemo(std::move(*out), true);
             done(true, displayName);
         });
     });
@@ -793,12 +832,12 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
 
 void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
-    const std::string key = tone.id + "#best#" + std::to_string(demoTrack_);
+    const std::string key = tone.id + "#best#" + std::to_string(demoTrack_)
+                            + "#c" + std::to_string(cab_);
     // Rendered-audio cache: instant replay (covers heavy pre-rendered
     // models on device and everything on the emulator).
     if (const auto* hit = cachedAudition(key)) {
-        setDemoActive(false);
-        installRenderedDemo(std::vector<float>(*hit));
+        installRenderedDemo(std::vector<float>(*hit), true);
         done(true, juce::String(tone.title));
         return;
     }
@@ -859,11 +898,11 @@ void AndroidAudioApp::doDownloadOnly(nam::ToneInfo tone,
 
 void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::ModelInfo& model,
         std::function<void(bool, juce::String)> done) {
-    const std::string key = toneId + "#" + model.id + "#" + std::to_string(demoTrack_);
+    const std::string key = toneId + "#" + model.id + "#" + std::to_string(demoTrack_)
+                            + "#c" + std::to_string(cab_);
     const juce::String display (model.name.empty() ? model.id : model.name);
     if (const auto* hit = cachedAudition(key)) {
-        setDemoActive(false);
-        installRenderedDemo(std::vector<float>(*hit));
+        installRenderedDemo(std::vector<float>(*hit), true);
         done(true, display);
         return;
     }

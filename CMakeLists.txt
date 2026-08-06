@@ -81,7 +81,12 @@ if(NAM_BUILD_APP)
             ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_chords.wav
             ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_lead.wav
             ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_chugs.wav
-            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_bass.wav)
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_bass.wav
+            # Cab IRs from the same MIT repo (ui/public/irs).
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/irs/ir_celestion.wav
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/irs/ir_eminence.wav
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/irs/ir_mesa.wav
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/irs/ir_ampeg.wav)
 
         target_sources(NamPlayer PRIVATE
             Source/app/android/AndroidMain.cpp

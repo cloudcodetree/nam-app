@@ -72,6 +72,7 @@ private:
     void doListModels(const std::string& toneId,
                       std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done);
     void setDemoTrack(int index);         // index into nam::demo::kTracks
+    void setCab(int index);               // index into nam::demo::kCabs (0 = none)
     // Makes sure a DI track's audio is in memory (bundled, disk cache, or
     // downloaded from TONE3000's repo), then done(true) on the msg thread.
     void ensureDemoTrack(int index, std::function<void(bool)> done);
@@ -111,7 +112,7 @@ private:
     // background thread into one of two slots; the audio thread just plays
     // the finished slot back (no inference on the audio thread — an emulated
     // CPU can't run NAM in real time). Slots are never freed: RT-safe.
-    void installRenderedDemo(std::vector<float> rendered);
+    void installRenderedDemo(std::vector<float> rendered, bool preservePosition);
     void cacheAudition(const std::string& key, const std::vector<float>& rendered);
     const std::vector<float>* cachedAudition(const std::string& key) const;
     // On-disk cache of downloaded audition model files: a demo-riff change
@@ -121,6 +122,10 @@ private:
     // One slot per catalog track; fixed size (audio thread indexes into it).
     std::array<std::vector<float>, (size_t) nam::demo::kNumTracks> demoTracks_;
     int demoTrack_ = 0;
+    // Bundled cab IRs (loaded at prepare; shared_ptr swap is RT-safe).
+    std::array<std::shared_ptr<const std::vector<float>>,
+               (size_t) nam::demo::kNumCabs> cabIrs_;
+    int cab_ = 0;
     std::atomic<int>  demoTrackRT_ { 0 };   // audio-thread copy of demoTrack_
     std::atomic<bool> demoLive_ { false };  // live mode: dry DI -> engine in RT
     bool preRenderAuditions_ = false;       // emulator: can't run NAM in RT

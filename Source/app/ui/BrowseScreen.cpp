@@ -202,6 +202,7 @@ void BrowseScreen::relayout() {
             int iy = y + rowH + 4;
             row.diBtn  = { listArea_.getX() + 12, iy, listArea_.getWidth() - 24, 40 };  iy += 48;
             row.varBtn = { listArea_.getX() + 12, iy, listArea_.getWidth() - 24, 40 };  iy += 48;
+            row.cabBtn = { listArea_.getX() + 12, iy, listArea_.getWidth() - 24, 40 };  iy += 48;
             row.keepBtn = { listArea_.getX() + 12, iy + 2, listArea_.getWidth() - 24, 42 };
             iy += 2 + 42 + 12;
             h = iy - y;
@@ -220,6 +221,7 @@ void BrowseScreen::clampScroll() {
 
 int BrowseScreen::menuCount() const {
     if (menu_ == Menu::DemoTrack) return nam::demo::kNumTracks;
+    if (menu_ == Menu::Cab) return nam::demo::kNumCabs;
     if (menu_ == Menu::Variant && expanded_ >= 0 && expanded_ < (int) models_.size())
         return models_[(size_t) expanded_].size();
     return 0;
@@ -230,7 +232,8 @@ int BrowseScreen::menuRowH() const { return 38; }
 juce::Rectangle<int> BrowseScreen::menuPanelRect() const {
     if (menu_ == Menu::None || expanded_ < 0 || expanded_ >= (int) rows_.size()) return {};
     const auto& row = rows_[(size_t) expanded_];
-    const auto btn = (menu_ == Menu::DemoTrack ? row.diBtn : row.varBtn)
+    const auto btn = (menu_ == Menu::DemoTrack ? row.diBtn
+                      : menu_ == Menu::Cab ? row.cabBtn : row.varBtn)
                          .translated (0, listArea_.getY() - (int) scrollY_);
     const int totalH = menuCount() * menuRowH() + 8;
     if (totalH <= 8) return {};
@@ -416,6 +419,8 @@ void BrowseScreen::paint (juce::Graphics& g) {
         else
             varLabel = "Model: Auto (best)";
         dropdownBtn (row.varBtn, varLabel, menu_ == Menu::Variant);
+        dropdownBtn (row.cabBtn, "Cab: " + juce::String (nam::demo::kCabs[cab_].display),
+                     menu_ == Menu::Cab);
 
         // ♥ KEEP = favorites (uses the already-downloaded model)
         auto keep = S (row.keepBtn);
@@ -447,6 +452,7 @@ void BrowseScreen::paint (juce::Graphics& g) {
             g.saveState();
             g.reduceClipRegion (panel.reduced (1));
             int selected = (menu_ == Menu::DemoTrack) ? demoTrack_
+                           : (menu_ == Menu::Cab) ? cab_
                            : (expanded_ >= 0 ? selVariant_[(size_t) expanded_] : -1);
             if (menu_ == Menu::Variant && selected < 0 && expanded_ >= 0)
                 selected = defaultVariant_[(size_t) expanded_];   // show what Auto uses
@@ -460,8 +466,10 @@ void BrowseScreen::paint (juce::Graphics& g) {
                       inner.removeFromLeft (16), juce::Justification::centredLeft);
                 const juce::String label = (menu_ == Menu::DemoTrack)
                     ? juce::String (nam::demo::kTracks[d].display)
+                    : (menu_ == Menu::Cab)
+                    ? juce::String (nam::demo::kCabs[d].display)
                     : models_[(size_t) expanded_][d];
-                text (label, uiFont (12.0f, menu_ == Menu::DemoTrack),
+                text (label, uiFont (12.0f, menu_ != Menu::Variant),
                       on ? col::accentAlt : col::ink, inner, juce::Justification::centredLeft);
             }
             const int totalH = menuCount() * menuRowH() + 8;
@@ -530,6 +538,9 @@ void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
                     if (menu_ == Menu::DemoTrack) {
                         demoTrack_ = d;
                         if (onDemoTrack) onDemoTrack (d);
+                    } else if (menu_ == Menu::Cab) {
+                        cab_ = d;
+                        if (onCab) onCab (d);
                     } else if (expanded_ >= 0) {
                         selVariant_[(size_t) expanded_] = d;
                         if (onPlayModel) onPlayModel (expanded_, d);
@@ -583,6 +594,7 @@ void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
                 if (! models_[i].isEmpty()) { menu_ = Menu::Variant; menuScroll_ = 0; repaint(); }
                 return;
             }
+            if (row.cabBtn.contains (cp)) { menu_ = Menu::Cab; menuScroll_ = 0; repaint(); return; }
             if (row.keepBtn.contains (cp)) { if (onKeep) onKeep ((int) i); return; }
         }
         if (row.header.contains (cp)) {

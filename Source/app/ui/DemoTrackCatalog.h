@@ -52,4 +52,21 @@ inline constexpr TrackDef kTracks[] = {
 
 inline constexpr int kNumTracks = (int) (sizeof (kTracks) / sizeof (kTracks[0]));
 
+// Cab IRs from the same repo (ui/public/irs), bundled. Index 0 = no IR
+// (raw capture — right for amp+cab tones which already include the cab).
+struct CabDef {
+    const char* display;
+    const char* binaryResource;  // nullptr for "None"
+};
+
+inline constexpr CabDef kCabs[] = {
+    { "None (as captured)", nullptr },
+    { "Celestion",          "ir_celestion_wav" },
+    { "Eminence",           "ir_eminence_wav" },
+    { "Mesa",               "ir_mesa_wav" },
+    { "Ampeg (bass)",       "ir_ampeg_wav" },
+};
+
+inline constexpr int kNumCabs = (int) (sizeof (kCabs) / sizeof (kCabs[0]));
+
 } } // namespace nam::demo

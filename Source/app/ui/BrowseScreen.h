@@ -24,6 +24,7 @@ public:
     std::function<void (int)>  onDownload;                // fetch best quality, no play
     std::function<void (int)>  onKeep;                    // favorite -> library
     std::function<void (int)>  onDemoTrack;               // DI track index
+    std::function<void (int)>  onCab;                     // cab IR index (0 = none)
 
     void setResults (std::vector<nam::ToneInfo> tones);
     void setModels (int packIdx, juce::StringArray names);
@@ -51,8 +52,8 @@ private:
     void runSearch();
     juce::String composedQuery() const;
 
-    // Overlay menu shared by the two dropdowns.
-    enum class Menu { None, DemoTrack, Variant };
+    // Overlay menu shared by the dropdowns.
+    enum class Menu { None, DemoTrack, Variant, Cab };
     int menuCount() const;
     int menuRowH() const;
     juce::Rectangle<int> menuPanelRect() const;           // screen space
@@ -70,6 +71,7 @@ private:
     int downloadingPack_ = -1;
     float loadProgress_ = 0.0f;
     int demoTrack_ = 0;
+    int cab_ = 0;
     Menu menu_ = Menu::None;
     float menuScroll_ = 0.0f;
     bool menuDragging_ = false;
@@ -87,7 +89,7 @@ private:
     std::vector<Chip> filterChips_;
     struct Row {
         juce::Rectangle<int> frame, header, playBtn, dlBtn, badge;
-        juce::Rectangle<int> diBtn, varBtn, keepBtn;
+        juce::Rectangle<int> diBtn, varBtn, cabBtn, keepBtn;
     };
     std::vector<Row> rows_;
     juce::Rectangle<int> listArea_;

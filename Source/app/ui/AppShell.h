@@ -44,6 +44,7 @@ public:
             std::function<void (bool, std::vector<nam::ModelInfo>, juce::String)>)> listModels;
         // Async: may need to fetch the DI track first (full TONE3000 catalog).
         std::function<void (int, std::function<void (bool)>)> setDemoTrack;
+        std::function<void (int)>  setCab;    // cab IR index (0 = none)
         std::function<void()>      stopDemo;
         std::function<bool (std::string)> isAuditionCached;   // toneId, current riff
         std::function<bool (std::string)> isDownloaded;       // best-quality on disk

@@ -130,6 +130,17 @@ void AppShell::setBrowseServices (BrowseServices services) {
         });
     };
 
+    browse_->onCab = [this] (int cabIdx) {
+        if (svc_.setCab) svc_.setCab (cabIdx);
+        refreshCachedFlags();
+        // Live auditions pick the cab up instantly; re-render buffered ones.
+        if (auditioningPack_ >= 0) {
+            const int pack = auditioningPack_, model = auditioningModel_;
+            if (model >= 0) browse_->onPlayModel (pack, model);
+            else { auditioningPack_ = -1; browse_->onPlayPack (pack); }
+        }
+    };
+
     browse_->onDemoTrack = [this] (int track) {
         if (! svc_.setDemoTrack) return;
         browse_->setStatus ("Fetching demo track" + kEllipsis);
