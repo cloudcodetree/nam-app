@@ -165,11 +165,13 @@ bool authenticatedGet(juce::Thread& thread, const std::string& accessToken, cons
 class Tone3000Session::DownloadThread : public juce::Thread {
 public:
     DownloadThread(std::string accessToken, std::string toneId, juce::File destDir,
+                    bool preferSmallest,
                     std::function<void(bool, juce::File, juce::String)> done)
         : juce::Thread("Tone3000Download"),
           accessToken_(std::move(accessToken)),
           toneId_(std::move(toneId)),
           destDir_(std::move(destDir)),
+          preferSmallest_(preferSmallest),
           done_(std::move(done)) {}
 
     void run() override {
@@ -219,8 +221,15 @@ private:
             }
         }
 
+        // Audition wants the lightest variant (nano/feather) — quickest to
+        // download and cheapest to run; Keep wants the default best quality.
         nam::ModelInfo best;
-        if (!nam::pickBestModel(models, best)) {
+        bool picked = false;
+        if (preferSmallest_) {
+            for (const auto& m : models)
+                if (m.size > 0 && (!picked || m.size < best.size)) { best = m; picked = true; }
+        }
+        if (!picked && !nam::pickBestModel(models, best)) {
             outError = "TONE3000 returned no models for this tone";
             return false;
         }
@@ -273,6 +282,7 @@ private:
     std::string accessToken_;
     std::string toneId_;
     juce::File destDir_;
+    bool preferSmallest_ = false;
     std::function<void(bool, juce::File, juce::String)> done_;
 };
 
@@ -351,7 +361,8 @@ Tone3000Session::~Tone3000Session() {
 }
 
 void Tone3000Session::downloadToneModel(const std::string& toneId, juce::File destDir,
-                                         std::function<void(bool, juce::File, juce::String)> done) {
+                                         std::function<void(bool, juce::File, juce::String)> done,
+                                         bool preferSmallest) {
     if (downloadThread_) {
         // A prior download is still in flight (or just finished): stop it
         // before starting a new one so we never have two DownloadThreads
@@ -361,7 +372,7 @@ void Tone3000Session::downloadToneModel(const std::string& toneId, juce::File de
         downloadThread_.reset();
     }
     downloadThread_ = std::make_unique<DownloadThread>(accessToken_, toneId, std::move(destDir),
-                                                        std::move(done));
+                                                        preferSmallest, std::move(done));
     downloadThread_->startThread();
 }
 

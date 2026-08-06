@@ -39,8 +39,11 @@ public:
     //
     // Calling this again while a download is already in progress cancels
     // the prior one first (its `done` is dropped, never invoked).
+    // `preferSmallest` picks the smallest model variant by file size instead
+    // (used by the audition/demo flow: fastest download, cheapest to run).
     void downloadToneModel(const std::string& toneId, juce::File destDir,
-                           std::function<void(bool, juce::File, juce::String)> done);
+                           std::function<void(bool, juce::File, juce::String)> done,
+                           bool preferSmallest = false);
 
     // Runs an authenticated TONE3000 tone search (`nam::buildSearchUrl`) on a
     // background thread and delivers the parsed results.

@@ -7,9 +7,19 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <sys/system_properties.h>
 
 AndroidAudioApp::AndroidAudioApp() {
     setLookAndFeel(&laf_);
+
+    // On the emulator the "microphone" is synthetic noise: amplifying it
+    // through an amp model is pure hiss. Mute live input there — the demo
+    // riff (audition) is the emulator's sound source. Real devices keep the
+    // live guitar path.
+    char qemu[PROP_VALUE_MAX] = {};
+    if ((__system_property_get("ro.boot.qemu", qemu) > 0 && qemu[0] == '1')
+        || (__system_property_get("ro.kernel.qemu", qemu) > 0 && qemu[0] == '1'))
+        liveMuted_.store(true, std::memory_order_relaxed);
 
     library_.load();
     t3kAuth_.loadTokens();   // reuse a prior refresh token if present
@@ -95,16 +105,28 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     const int cap = (int) mono_.size();
 
     float inPk = 0.0f;
-    if (demoOn_.load(std::memory_order_relaxed) && ! demoLoop_.empty()) {
-        // Audition mode: loop the pre-rendered dry riff instead of the input.
+    bool bypassEngine = false;
+    const int slot = demoSlot_.load(std::memory_order_relaxed);
+    if (demoOn_.load(std::memory_order_relaxed) && slot >= 0
+        && ! demoSlots_[(size_t) slot].empty()) {
+        // Audition: play back the offline-rendered (model-processed) riff.
+        // No inference on the audio thread.
+        const auto& loop = demoSlots_[(size_t) slot];
         size_t pos = demoPos_.load(std::memory_order_relaxed);
         for (int i = 0; i < n && i < cap; ++i) {
-            const float v = demoLoop_[pos];
+            if (pos >= loop.size()) pos = 0;
+            const float v = loop[pos++];
             mono_[(size_t) i] = v;
             inPk = juce::jmax(inPk, std::fabs(v));
-            if (++pos >= demoLoop_.size()) pos = 0;
         }
         demoPos_.store(pos, std::memory_order_relaxed);
+        bypassEngine = true;   // slot is already model-processed
+    } else if (liveMuted_.load(std::memory_order_relaxed)) {
+        // No demo playing and live input muted (emulator): true silence.
+        // Also bypass the engine — amp models synthesise their own noise
+        // floor (hiss/hum) even on silent input, and inference costs CPU.
+        for (int i = 0; i < n && i < cap; ++i) mono_[(size_t) i] = 0.0f;
+        bypassEngine = true;
     } else {
         const float* in = buf->getReadPointer(0, info.startSample);
         for (int i = 0; i < n && i < cap; ++i) {
@@ -114,7 +136,8 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     }
     inPeak_.store(inPk, std::memory_order_relaxed);
 
-    engine_.render(mono_.data(), mono_.data(), std::min(n, cap));
+    if (! bypassEngine)
+        engine_.render(mono_.data(), mono_.data(), std::min(n, cap));
 
     for (int ch = 0; ch < buf->getNumChannels(); ++ch) {
         float* out = buf->getWritePointer(ch, info.startSample);
@@ -371,6 +394,18 @@ void AndroidAudioApp::setDemoActive(bool on) {
     demoOn_.store(on, std::memory_order_relaxed);
 }
 
+void AndroidAudioApp::setLiveInputMuted(bool muted) {
+    liveMuted_.store(muted, std::memory_order_relaxed);
+}
+
+void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered) {
+    const int next = (demoSlot_.load(std::memory_order_relaxed) + 1) & 1;
+    demoSlots_[(size_t) next] = std::move(rendered);
+    demoPos_.store(0, std::memory_order_relaxed);
+    demoSlot_.store(next, std::memory_order_release);
+    demoOn_.store(true, std::memory_order_relaxed);
+}
+
 void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
     if (! t3kAuth_.hasValidToken()) { done(false, "connect first (pick a station)"); return; }
@@ -381,15 +416,48 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
     t3kSession_->downloadToneModel(tone.id, tempDir,
         [this, done](bool ok, juce::File file, juce::String nameOrErr) {
             if (! ok) { done(false, nameOrErr); return; }
-            auto m = nam::NamModel::load(file.getFullPathName().toStdString(),
-                                         (int) sampleRate_, blockSize_);
-            file.deleteFile();
-            if (m == nullptr) { done(false, "model load failed"); return; }
-            engine_.setModel(std::move(m));
-            modelLoaded_ = true;
-            setDemoActive(true);
-            done(true, nameOrErr);
-        });
+
+            // Render the dry riff through the tone OFFLINE (background
+            // thread, separate engine instance) — playback then costs
+            // nothing on the audio thread.
+            const std::string path = file.getFullPathName().toStdString();
+            const double sr = sampleRate_;
+            auto dry = std::make_shared<std::vector<float>>(demoLoop_);
+            juce::Thread::launch([this, path, sr, dry, done, nameOrErr] {
+                constexpr int block = 256;
+                auto offline = std::make_unique<dsp::ToneEngine>();
+                offline->prepare((int) sr, block);
+                auto m = nam::NamModel::load(path, (int) sr, block);
+                juce::File(juce::String(path)).deleteFile();
+                if (m == nullptr) {
+                    juce::MessageManager::callAsync([done] { done(false, "model load failed"); });
+                    return;
+                }
+                offline->setModel(std::move(m));
+
+                auto out = std::make_shared<std::vector<float>>(dry->size(), 0.0f);
+                std::vector<float> chunk(block, 0.0f);
+                for (size_t i = 0; i < dry->size(); i += block) {
+                    const int n = (int) std::min((size_t) block, dry->size() - i);
+                    std::copy(dry->begin() + (long) i, dry->begin() + (long) i + n, chunk.begin());
+                    offline->render(chunk.data(), out->data() + i, n);
+                }
+
+                // Normalise the audition to a healthy, consistent level.
+                float pk = 0.0f;
+                for (float v : *out) pk = std::max(pk, std::fabs(v));
+                if (pk > 0.0001f) {
+                    const float g = 0.6f / pk;
+                    for (auto& v : *out) v *= g;
+                }
+
+                juce::MessageManager::callAsync([this, out, done, nameOrErr] {
+                    installRenderedDemo(std::move(*out));
+                    done(true, nameOrErr);
+                });
+            });
+        },
+        true /* preferSmallest: quick, cheap audition variant */);
 }
 
 void AndroidAudioApp::doDownload(nam::ToneInfo tone,

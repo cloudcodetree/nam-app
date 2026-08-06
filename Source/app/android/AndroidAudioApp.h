@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <array>
 #include <atomic>
 #include <memory>
 #include <vector>
@@ -59,6 +60,7 @@ private:
     // and run the built-in dry riff through it (no guitar needed).
     void doAudition(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
     void setDemoActive(bool on);
+    void setLiveInputMuted(bool muted);   // Radio browsing: don't amplify the mic
     void buildDemoLoop(double sampleRate);
 
     // Library: load a kept model file into the running engine.
@@ -83,12 +85,18 @@ private:
     std::atomic<float> inPeak_ { 0.0f };
     bool modelLoaded_ = false;
 
-    // Demo riff (audition mode): pre-rendered at prepare time, looped on the
-    // audio thread in place of the live input. RT-safe: no allocation after
-    // prepare; flags/position are atomics.
+    // Demo riff (audition mode). demoLoop_ is the DRY riff, built at prepare
+    // time. An audition renders it through the tone's model OFFLINE on a
+    // background thread into one of two slots; the audio thread just plays
+    // the finished slot back (no inference on the audio thread — an emulated
+    // CPU can't run NAM in real time). Slots are never freed: RT-safe.
+    void installRenderedDemo(std::vector<float> rendered);
     std::vector<float> demoLoop_;
+    std::array<std::vector<float>, 2> demoSlots_;
+    std::atomic<int>    demoSlot_ { -1 };
     std::atomic<size_t> demoPos_ { 0 };
     std::atomic<bool>   demoOn_ { false };
+    std::atomic<bool>   liveMuted_ { false };
 
     bool applyingDeviceChange_ = false;  // re-entrancy guard for setAudioDeviceSetup
     bool userChoseInput_ = false;        // manual pick disables USB auto-select
