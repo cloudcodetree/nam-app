@@ -55,6 +55,12 @@ private:
                   std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
     void doDownload(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
 
+    // Audition: download a tone's model into the engine (no library import)
+    // and run the built-in dry riff through it (no guitar needed).
+    void doAudition(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
+    void setDemoActive(bool on);
+    void buildDemoLoop(double sampleRate);
+
     // Library: load a kept model file into the running engine.
     void loadModelEntry(const nam::LibraryEntry& e);
 
@@ -76,6 +82,13 @@ private:
     std::vector<float> mono_;
     std::atomic<float> inPeak_ { 0.0f };
     bool modelLoaded_ = false;
+
+    // Demo riff (audition mode): pre-rendered at prepare time, looped on the
+    // audio thread in place of the live input. RT-safe: no allocation after
+    // prepare; flags/position are atomics.
+    std::vector<float> demoLoop_;
+    std::atomic<size_t> demoPos_ { 0 };
+    std::atomic<bool>   demoOn_ { false };
 
     bool applyingDeviceChange_ = false;  // re-entrancy guard for setAudioDeviceSetup
     bool userChoseInput_ = false;        // manual pick disables USB auto-select

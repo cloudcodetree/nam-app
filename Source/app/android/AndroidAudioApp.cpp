@@ -24,6 +24,11 @@ AndroidAudioApp::AndroidAudioApp() {
         [this](nam::ToneInfo t, std::function<void(bool, juce::String)> done) {
             doDownload(std::move(t), std::move(done));
         });
+    shell_->setAuditionService(
+        [this](nam::ToneInfo t, std::function<void(bool, juce::String)> done) {
+            doAudition(std::move(t), std::move(done));
+        },
+        [this] { setDemoActive(false); });
     shell_->setLibraryService(
         [this] { return library_.all(nam::LibraryType::Model); },
         [this](nam::LibraryEntry e) { loadModelEntry(e); });
@@ -75,6 +80,7 @@ void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRa
     blockSize_  = samplesPerBlockExpected;
     mono_.assign((size_t) juce::jmax(1, samplesPerBlockExpected), 0.0f);
     engine_.prepare((int) sampleRate, samplesPerBlockExpected);
+    buildDemoLoop(sampleRate);
 
     if (auto m = nam::NamModel::load(copyBundledModelToFile(),
                                      (int) sampleRate, samplesPerBlockExpected)) {
@@ -88,11 +94,23 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     const int n = info.numSamples;
     const int cap = (int) mono_.size();
 
-    const float* in = buf->getReadPointer(0, info.startSample);
     float inPk = 0.0f;
-    for (int i = 0; i < n && i < cap; ++i) {
-        mono_[(size_t) i] = in[i];
-        inPk = juce::jmax(inPk, std::fabs(in[i]));
+    if (demoOn_.load(std::memory_order_relaxed) && ! demoLoop_.empty()) {
+        // Audition mode: loop the pre-rendered dry riff instead of the input.
+        size_t pos = demoPos_.load(std::memory_order_relaxed);
+        for (int i = 0; i < n && i < cap; ++i) {
+            const float v = demoLoop_[pos];
+            mono_[(size_t) i] = v;
+            inPk = juce::jmax(inPk, std::fabs(v));
+            if (++pos >= demoLoop_.size()) pos = 0;
+        }
+        demoPos_.store(pos, std::memory_order_relaxed);
+    } else {
+        const float* in = buf->getReadPointer(0, info.startSample);
+        for (int i = 0; i < n && i < cap; ++i) {
+            mono_[(size_t) i] = in[i];
+            inPk = juce::jmax(inPk, std::fabs(in[i]));
+        }
     }
     inPeak_.store(inPk, std::memory_order_relaxed);
 
@@ -306,6 +324,72 @@ void AndroidAudioApp::loadModelEntry(const nam::LibraryEntry& e) {
         library_.markUsed(e.id, nowSeconds());
         library_.save();
     }
+}
+
+// --- Audition (demo riff) -------------------------------------------------
+// Pre-renders a short looping dry-guitar riff via Karplus-Strong plucked
+// strings: E-minor noodle over ~3.2 s. Runs at prepare time (message thread),
+// so allocation is fine; the audio thread only reads the finished buffer.
+void AndroidAudioApp::buildDemoLoop(double sr) {
+    const double loopSec = 3.2;
+    demoLoop_.assign((size_t) (sr * loopSec), 0.0f);
+
+    struct Note { double freq, t; float amp; };
+    const Note notes[] = {
+        { 82.41, 0.0,  0.95f },   // E2
+        { 98.00, 0.4,  0.70f },   // G2
+        { 110.0, 0.8,  0.80f },   // A2
+        { 82.41, 1.2,  0.95f },   // E2
+        { 123.47, 1.6, 0.70f },   // B2
+        { 110.0, 2.0,  0.80f },   // A2
+        { 98.00, 2.4,  0.70f },   // G2
+        { 82.41, 2.8,  0.95f },   // E2 (rings into the loop start)
+    };
+
+    juce::Random rng(7);
+    for (const auto& n : notes) {
+        const int start = (int) (n.t * sr);
+        const int N = juce::jmax(2, (int) (sr / n.freq));
+        std::vector<float> line((size_t) N);
+        for (auto& v : line) v = rng.nextFloat() * 2.0f - 1.0f;
+
+        const int len = (int) (sr * 1.4);   // ring time per pluck
+        int idx = 0;
+        for (int i = 0; i < len && start + i < (int) demoLoop_.size(); ++i) {
+            const int j = (idx + 1) % N;
+            const float out = 0.5f * (line[(size_t) idx] + line[(size_t) j]) * 0.996f;
+            line[(size_t) idx] = out;
+            idx = j;
+            demoLoop_[(size_t) (start + i)] += out * n.amp * 0.35f;
+        }
+    }
+    for (auto& v : demoLoop_) v = std::tanh(v);   // gentle safety clip
+}
+
+void AndroidAudioApp::setDemoActive(bool on) {
+    demoPos_.store(0, std::memory_order_relaxed);
+    demoOn_.store(on, std::memory_order_relaxed);
+}
+
+void AndroidAudioApp::doAudition(nam::ToneInfo tone,
+        std::function<void(bool, juce::String)> done) {
+    if (! t3kAuth_.hasValidToken()) { done(false, "connect first (pick a station)"); return; }
+    if (t3kSession_ == nullptr)
+        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+
+    const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    t3kSession_->downloadToneModel(tone.id, tempDir,
+        [this, done](bool ok, juce::File file, juce::String nameOrErr) {
+            if (! ok) { done(false, nameOrErr); return; }
+            auto m = nam::NamModel::load(file.getFullPathName().toStdString(),
+                                         (int) sampleRate_, blockSize_);
+            file.deleteFile();
+            if (m == nullptr) { done(false, "model load failed"); return; }
+            engine_.setModel(std::move(m));
+            modelLoaded_ = true;
+            setDemoActive(true);
+            done(true, nameOrErr);
+        });
 }
 
 void AndroidAudioApp::doDownload(nam::ToneInfo tone,

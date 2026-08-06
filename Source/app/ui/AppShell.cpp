@@ -3,6 +3,7 @@
 namespace {
 const juce::String kEllipsis = juce::String::fromUTF8 ("\xE2\x80\xA6"); // …
 const juce::String kHeart    = juce::String::fromUTF8 ("\xE2\x99\xA5"); // ♥
+const juce::String kDotSep   = juce::String::fromUTF8 ("\xC2\xB7");     // ·
 }
 
 AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
@@ -44,17 +45,7 @@ void AppShell::setTone3000 (SearchFn search, DownloadFn download) {
     searchFn_ = std::move (search);
     downloadFn_ = std::move (download);
 
-    radio_->onSearch = [this] (juce::String q) {
-        if (! searchFn_) return;
-        radio_->setStatus ("Connecting / searching \"" + q + "\"" + kEllipsis);
-        searchFn_ (q, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String err) {
-            if (! ok) { radio_->setStatus ("TONE3000: " + err); return; }
-            radioResults_ = tones;
-            radio_->setResults (tones);
-            radio_->setStatus (juce::String ((int) tones.size())
-                               + (tones.size() == 1 ? " result" : " results"));
-        });
-    };
+    radio_->onSearch = [this] (juce::String q) { runRadioSearch (std::move (q)); };
 
     radio_->onKeep = [this] (int idx) {
         if (! downloadFn_ || idx < 0 || idx >= (int) radioResults_.size()) return;
@@ -71,6 +62,47 @@ void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) 
     loadModel_ = std::move (loadModel);
     library_->onLoad = [this] (nam::LibraryEntry e) { if (loadModel_) loadModel_ (e); show (Screen::Play); };
     live_->onSelect  = [this] (nam::LibraryEntry e) { if (loadModel_) loadModel_ (e); };
+}
+
+void AppShell::runRadioSearch (juce::String q) {
+    if (! searchFn_) return;
+    if (stopDemoFn_) { stopDemoFn_(); auditioning_ = -1; radio_->setPlaying (-1); }
+    radio_->setStatus (q.isEmpty() ? ("Tuning in to TONE3000" + kEllipsis)
+                                   : ("Connecting / searching \"" + q + "\"" + kEllipsis));
+    searchFn_ (q, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String err) {
+        if (! ok) { radio_->setStatus ("TONE3000: " + err); return; }
+        radioResults_ = tones;
+        radio_->setResults (tones);
+        radio_->setStatus (juce::String ((int) tones.size())
+                           + (tones.size() == 1 ? " tone" : " tones")
+                           + " " + kDotSep + " tap to audition " + kDotSep
+                           + " " + kHeart + " keeps");
+    });
+}
+
+void AppShell::setAuditionService (AuditionFn audition, std::function<void()> stopDemo) {
+    auditionFn_  = std::move (audition);
+    stopDemoFn_  = std::move (stopDemo);
+
+    radio_->onAudition = [this] (int idx) {
+        if (idx < 0 || idx >= (int) radioResults_.size()) return;
+        if (idx == auditioning_) {                       // tap again = stop
+            if (stopDemoFn_) stopDemoFn_();
+            auditioning_ = -1;
+            radio_->setPlaying (-1);
+            radio_->setStatus ("Stopped");
+            return;
+        }
+        if (! auditionFn_) return;
+        const auto tone = radioResults_[(size_t) idx];
+        radio_->setStatus ("Loading \"" + juce::String (tone.title) + "\"" + kEllipsis);
+        auditionFn_ (tone, [this, idx, tone] (bool ok, juce::String msg) {
+            if (! ok) { radio_->setStatus ("Audition failed: " + msg); return; }
+            auditioning_ = idx;
+            radio_->setPlaying (idx);
+            radio_->setStatus ("Auditioning \"" + juce::String (tone.title) + "\"");
+        });
+    };
 }
 
 void AppShell::setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInput,
@@ -109,6 +141,18 @@ void AppShell::show (Screen s) {
     if (s == Screen::Library && getModels_) library_->setEntries (getModels_());
     if (s == Screen::Live && getModels_)     live_->setSlots (getModels_());
     if (s == Screen::Devices)                refreshDevices();
+
+    // Radio opens onto the live TONE3000 catalog (browse-by-default).
+    if (s == Screen::Radio && ! radioLoadedOnce_ && searchFn_) {
+        radioLoadedOnce_ = true;
+        runRadioSearch ({});
+    }
+    // Leaving Radio stops any audition demo.
+    if (s != Screen::Radio && auditioning_ >= 0) {
+        if (stopDemoFn_) stopDemoFn_();
+        auditioning_ = -1;
+        radio_->setPlaying (-1);
+    }
 
     juce::Component* target = play_.get();
     switch (s) {

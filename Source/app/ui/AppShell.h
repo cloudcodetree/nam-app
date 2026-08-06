@@ -36,6 +36,12 @@ public:
                              std::function<void (bool, juce::String)>)>;
     void setTone3000 (SearchFn search, DownloadFn download);
 
+    // Audition service: play the built-in demo riff through a tone's model
+    // (audition) and stop it (leaving the Radio screen stops automatically).
+    using AuditionFn = std::function<void (nam::ToneInfo,
+                             std::function<void (bool, juce::String)>)>;
+    void setAuditionService (AuditionFn audition, std::function<void()> stopDemo);
+
     // Library service: list kept models + load one into the engine.
     using GetModelsFn = std::function<std::vector<nam::LibraryEntry>()>;
     using LoadModelFn = std::function<void (nam::LibraryEntry)>;
@@ -58,6 +64,7 @@ private:
     enum class Screen { Play, Edit, Library, Radio, Live, Setup, Devices };
     void show (Screen s);
     void refreshDevices();
+    void runRadioSearch (juce::String query);
 
     dsp::ToneEngine& engine_;
     std::unique_ptr<PlayScreen>    play_;
@@ -71,6 +78,10 @@ private:
 
     SearchFn    searchFn_;
     DownloadFn  downloadFn_;
+    AuditionFn  auditionFn_;
+    std::function<void()> stopDemoFn_;
+    int  auditioning_ = -1;
+    bool radioLoadedOnce_ = false;
     GetModelsFn getModels_;
     LoadModelFn loadModel_;
     GetDevicesFn   getDevices_;
