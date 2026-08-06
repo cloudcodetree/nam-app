@@ -3,14 +3,19 @@
 
 using namespace nam::ui;
 
-PlayScreen::PlayScreen() {
-    tones_ = {
-        { "Plexi '68 Crunch", "Marshall family", "ToneHub" },
-        { "Deluxe '65 Clean",  "Fender family",   "AmpCaptures" },
-        { "5150 Lead",         "Hi-gain family",  "DjentLab" },
-        { "AC30 Top Boost",    "Vox family",      "BritTone" },
-    };
-    setOpaque (true);
+PlayScreen::PlayScreen() { setOpaque (true); }
+
+void PlayScreen::setNowPlaying (juce::String name, juce::String family, juce::String author) {
+    name_ = std::move (name);
+    family_ = std::move (family);
+    author_ = std::move (author);
+    repaint();
+}
+
+void PlayScreen::setPosition (int index, int count) {
+    index_ = index;
+    count_ = count;
+    repaint (transportRect_);
 }
 
 void PlayScreen::setLevels (float in, float out) {
@@ -86,8 +91,8 @@ void PlayScreen::paint (juce::Graphics& g) {
                                    (float) artRect_.getBottom(), col::accent.withAlpha (0.0f),
                                    (float) artRect_.getCentreX(), (float) artRect_.getY(), false);
         g.setGradientFill (glow); g.fillRect (artRect_);
-        // big faint family initial as "album art"
-        text (tones_[(size_t) index_].family.substring (0, 1).toUpperCase(),
+        // big faint tone initial as "album art"
+        text (name_.substring (0, 1).toUpperCase(),
               displayFont (artRect_.getHeight() * 0.62f), col::inkA (0.10f),
               artRect_, juce::Justification::centred);
         g.restoreState();
@@ -97,14 +102,14 @@ void PlayScreen::paint (juce::Graphics& g) {
 
     // --- Tone text ------------------------------------------------------
     {
-        const auto& t = tones_[(size_t) index_];
         auto tr = textRect_;
-        text (t.family.toUpperCase(), uiFontTracked (13.0f, false), col::inkA (0.45f),
+        text (family_.toUpperCase(), uiFontTracked (13.0f, false), col::inkA (0.45f),
               tr.removeFromTop (20), juce::Justification::topLeft);
-        text (t.name, displayFont (40.0f), col::ink,
+        text (name_, displayFont (40.0f), col::ink,
               tr.removeFromTop (52), juce::Justification::topLeft);
-        text ("by " + t.author, uiFont (13.0f, false), col::inkA (0.5f),
-              tr.removeFromTop (24), juce::Justification::topLeft);
+        if (author_.isNotEmpty())
+            text ("by " + author_, uiFont (13.0f, false), col::inkA (0.5f),
+                  tr.removeFromTop (24), juce::Justification::topLeft);
     }
 
     // --- Transport ------------------------------------------------------
@@ -117,9 +122,11 @@ void PlayScreen::paint (juce::Graphics& g) {
     circleBtn (nextRect_, juce::String::fromUTF8 ("\xE2\x80\xBA")); // ›
     g.setColour (col::inkA (0.14f));
     g.fillRoundedRectangle (progressRect_.toFloat(), 1.0f);
-    const float prog = (float) (index_ + 1) / (float) tones_.size();
-    g.setColour (col::accent);
-    g.fillRoundedRectangle (progressRect_.toFloat().withWidth (progressRect_.getWidth() * prog), 1.0f);
+    if (count_ > 0 && index_ >= 0) {
+        const float prog = (float) (index_ + 1) / (float) count_;
+        g.setColour (col::accent);
+        g.fillRoundedRectangle (progressRect_.toFloat().withWidth (progressRect_.getWidth() * prog), 1.0f);
+    }
 
     // --- Meters + tuner row --------------------------------------------
     {
@@ -199,8 +206,8 @@ void PlayScreen::paint (juce::Graphics& g) {
 
 void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     const auto p = e.getPosition();
-    if (prevRect_.contains (p)) { index_ = (index_ - 1 + (int) tones_.size()) % (int) tones_.size(); repaint(); return; }
-    if (nextRect_.contains (p)) { index_ = (index_ + 1) % (int) tones_.size(); repaint(); return; }
+    if (prevRect_.contains (p)) { if (onPrev) onPrev(); return; }
+    if (nextRect_.contains (p)) { if (onNext) onNext(); return; }
     if (libRect_.contains (p)) { if (onLibrary) onLibrary(); return; }
     if (ioRect_.contains (p))  { if (onSettings) onSettings(); return; }
     for (int i = 0; i < 4; ++i)

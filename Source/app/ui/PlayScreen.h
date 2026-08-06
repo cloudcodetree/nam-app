@@ -14,19 +14,24 @@ public:
     // Live meter levels, 0..1 (owner's timer pushes these from engine telemetry).
     void setLevels (float in, float out);
 
+    // The tone the engine is ACTUALLY running (owner keeps this current).
+    void setNowPlaying (juce::String name, juce::String family, juce::String author);
+    void setPosition (int index, int count);   // place in the collection (-1 = not in it)
+
     std::function<void (int)> onNav;      // 0=Play 1=Edit 2=Radio 3=Live
     std::function<void()>     onLibrary;
     std::function<void()>     onSettings; // I/O pill -> audio device picker
+    std::function<void()>     onPrev, onNext;   // step through the collection
 
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
-    struct Tone { juce::String name, family, author; };
-    std::vector<Tone> tones_;
-    int   index_    = 0;
-    float inLevel_  = 0.58f;
+    juce::String name_ { "Bundled Tone" }, family_ { "NAM PLAYER" }, author_;
+    int   index_    = -1;
+    int   count_    = 0;
+    float inLevel_  = 0.0f;
     float outLevel_ = 0.0f;
 
     // Hit / layout rects, computed in resized().

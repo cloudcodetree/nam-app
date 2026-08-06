@@ -78,6 +78,8 @@ private:
     void runBrowseSearch (juce::String query);
     void stopAudition();
     void refreshCachedFlags();
+    void stepCollection (int delta);          // Play ‹ › through the Library
+    void showEntryAsNowPlaying (const nam::LibraryEntry& e);
 
     dsp::ToneEngine& engine_;
     std::unique_ptr<PlayScreen>    play_;
@@ -91,6 +93,7 @@ private:
     BrowseServices svc_;
     int  auditioningPack_ = -1, auditioningModel_ = -1;
     bool browseLoadedOnce_ = false;
+    int  collectionIndex_ = -1;               // Play screen position in the Library
     GetModelsFn getModels_;
     LoadModelFn loadModel_;
     GetDevicesFn   getDevices_;

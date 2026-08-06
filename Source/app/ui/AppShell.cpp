@@ -27,6 +27,8 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     };
     play_->onLibrary  = [this] { show (Screen::Library); };
     play_->onSettings = [this] { show (Screen::Devices); };
+    play_->onPrev     = [this] { stepCollection (-1); };
+    play_->onNext     = [this] { stepCollection (+1); };
     devices_->onBack  = [this] { show (Screen::Play); };
     edit_->onDone    = [this] { show (Screen::Play); };
     browse_->onBack  = [this] { show (Screen::Play); };
@@ -96,6 +98,13 @@ void AppShell::setBrowseServices (BrowseServices services) {
             browse_->setPlaying (idx, -1);
             browse_->setStatus ("Auditioning \"" + juce::String (tone.title) + "\"");
             refreshCachedFlags();
+            // The engine now runs this tone: reflect it on the Play screen.
+            collectionIndex_ = -1;
+            play_->setNowPlaying (juce::String (tone.title),
+                                  (tone.gear.empty() ? juce::String ("TONE3000")
+                                   : juce::String (tone.gear).toUpperCase() + " " + kDotSep + " TONE3000"),
+                                  {});
+            play_->setPosition (-1, 0);
         });
     };
 
@@ -115,6 +124,9 @@ void AppShell::setBrowseServices (BrowseServices services) {
             auditioningModel_ = modelIdx;
             browse_->setPlaying (idx, modelIdx);
             browse_->setStatus ("Auditioning \"" + msg + "\"");
+            collectionIndex_ = -1;
+            play_->setNowPlaying (msg, "TONE3000", {});
+            play_->setPosition (-1, 0);
         });
     };
 
@@ -175,8 +187,52 @@ void AppShell::refreshCachedFlags() {
 void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) {
     getModels_ = std::move (getModels);
     loadModel_ = std::move (loadModel);
-    library_->onLoad = [this] (nam::LibraryEntry e) { if (loadModel_) loadModel_ (e); show (Screen::Play); };
-    live_->onSelect  = [this] (nam::LibraryEntry e) { if (loadModel_) loadModel_ (e); };
+    library_->onLoad = [this] (nam::LibraryEntry e) {
+        if (loadModel_) loadModel_ (e);
+        showEntryAsNowPlaying (e);
+        show (Screen::Play);
+    };
+    live_->onSelect  = [this] (nam::LibraryEntry e) {
+        if (loadModel_) loadModel_ (e);
+        showEntryAsNowPlaying (e);
+    };
+}
+
+void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {
+    int idx = -1, count = 0;
+    if (getModels_) {
+        const auto entries = getModels_();
+        count = (int) entries.size();
+        for (size_t i = 0; i < entries.size(); ++i)
+            if (entries[i].id == e.id) { idx = (int) i; break; }
+    }
+    collectionIndex_ = idx;
+    // Raw arch strings are internal ("SlimmableContainer" etc.) — show the
+    // TONE3000 generation label instead.
+    juce::String family ("MY TONES");
+    if (! e.arch.empty()) {
+        const auto a = juce::String (e.arch).toLowerCase();
+        const bool isA2 = a.contains ("slim") || a.startsWith ("2") || a.startsWith ("a2");
+        family = juce::String (isA2 ? "A2" : "A1") + " " + kDotSep + " MY TONES";
+    }
+    play_->setNowPlaying (juce::String (e.displayName), family, {});
+    play_->setPosition (idx, count);
+}
+
+void AppShell::stepCollection (int delta) {
+    if (! getModels_ || ! loadModel_) return;
+    const auto entries = getModels_();
+    if (entries.empty()) {
+        play_->setNowPlaying ("Bundled Tone", "NAM PLAYER", {});
+        play_->setPosition (-1, 0);
+        return;
+    }
+    const int n = (int) entries.size();
+    const int idx = collectionIndex_ < 0
+        ? (delta > 0 ? 0 : n - 1)
+        : ((collectionIndex_ + delta) % n + n) % n;
+    loadModel_ (entries[(size_t) idx]);
+    showEntryAsNowPlaying (entries[(size_t) idx]);
 }
 
 void AppShell::runBrowseSearch (juce::String q) {
