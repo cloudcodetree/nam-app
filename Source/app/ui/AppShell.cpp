@@ -247,10 +247,6 @@ void AppShell::show (Screen s) {
         browseLoadedOnce_ = true;
         runBrowseSearch ({});
     }
-    // While browsing, the live guitar path is muted: stopping an audition
-    // must mean silence, not the mic through an amp model. Play re-arms it.
-    if (svc_.muteLiveInput)
-        svc_.muteLiveInput (s == Screen::Browse);
     // Leaving Browse stops any audition demo.
     if (s != Screen::Browse && auditioningPack_ >= 0)
         stopAudition();
