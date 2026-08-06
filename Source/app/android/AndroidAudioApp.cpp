@@ -326,17 +326,27 @@ void AndroidAudioApp::preferUsbInput() {
     if (type == nullptr) return;
     type->scanForDevices();
 
-    juce::String usb;
+    juce::String usbIn, usbOut;
     for (const auto& n : type->getDeviceNames(true))
-        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usb = n; break; }
-    if (usb.isEmpty()) return;
+        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbIn = n; break; }
+    for (const auto& n : type->getDeviceNames(false))
+        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbOut = n; break; }
+    if (usbIn.isEmpty()) return;
 
+    // Claim BOTH sides explicitly: Android routes default output to USB
+    // anyway, but the settings screen should truthfully show the iRig.
     auto setup = deviceManager.getAudioDeviceSetup();
-    if (setup.inputDeviceName == usb) return;
-    setup.inputDeviceName = usb;
+    const bool inOk  = setup.inputDeviceName == usbIn;
+    const bool outOk = usbOut.isEmpty() || setup.outputDeviceName == usbOut;
+    if (inOk && outOk) return;
+    setup.inputDeviceName = usbIn;
     setup.useDefaultInputChannels = true;
+    if (! usbOut.isEmpty()) {
+        setup.outputDeviceName = usbOut;
+        setup.useDefaultOutputChannels = true;
+    }
     const auto err = applyDeviceSetup(setup);
-    juce::Logger::writeToLog("preferUsbInput(" + usb + ") -> "
+    juce::Logger::writeToLog("preferUsbInput(in=" + usbIn + ", out=" + usbOut + ") -> "
                              + (err.isEmpty() ? "ok" : err));
 }
 
@@ -472,7 +482,13 @@ void AndroidAudioApp::doSearch(juce::String query,
 
 void AndroidAudioApp::loadModelEntry(const nam::LibraryEntry& e) {
     const std::string path = library_.subdir(nam::LibraryType::Model) + "/" + e.fileName;
-    if (auto m = nam::NamModel::load(path, (int) sampleRate_, blockSize_)) {
+    auto m = nam::NamModel::load(path, (int) sampleRate_, blockSize_);
+    juce::Logger::writeToLog("loadModelEntry '" + juce::String(e.displayName) + "' "
+                             + (m != nullptr ? "ok" : "FAILED")
+                             + " (file " + (juce::File(juce::String(path)).existsAsFile() ? "exists" : "MISSING")
+                             + ", sr=" + juce::String(sampleRate_)
+                             + ", block=" + juce::String(blockSize_) + ")");
+    if (m != nullptr) {
         engine_.setModel(std::move(m));
         modelLoaded_ = true;
         library_.markUsed(e.id, nowSeconds());
