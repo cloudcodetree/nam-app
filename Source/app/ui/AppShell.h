@@ -11,8 +11,7 @@
 #include "app/ui/RadioScreen.h"
 #include "app/ui/LibraryScreen.h"
 #include "app/ui/LiveScreen.h"
-#include "app/ui/SetupScreen.h"
-#include "app/ui/DevicesScreen.h"
+#include "app/ui/AudioSettingsScreen.h"
 
 // Cross-platform app shell: owns every screen and swaps the visible one on
 // navigation. Holds the shared dsp::ToneEngine so screens drive it. The
@@ -21,8 +20,7 @@ class AppShell : public juce::Component {
 public:
     explicit AppShell (dsp::ToneEngine& engine);
 
-    void setLevels (float in, float out);     // Play meters + Setup listener
-    void startOnSetup();                       // first-launch entry point
+    void setLevels (float in, float out);     // Play + Audio settings meters
 
     // Android system back: pop to Play if on a sub-screen. Returns true if it
     // handled the press (caller should NOT exit the app); false if already on
@@ -47,21 +45,19 @@ public:
     using LoadModelFn = std::function<void (nam::LibraryEntry)>;
     void setLibraryService (GetModelsFn getModels, LoadModelFn loadModel);
 
-    // Audio device service: enumerate inputs/outputs and apply a selection.
-    struct AudioDeviceState {
-        juce::StringArray inputs, outputs;
-        juce::String currentInput, currentOutput;
-    };
-    using GetDevicesFn   = std::function<AudioDeviceState()>;
+    // Audio settings service: enumerate devices/rates/buffers, apply picks.
+    using GetDevicesFn   = std::function<AudioSettingsState()>;
     using SelectDeviceFn = std::function<void (juce::String)>;
     using RescanFn       = std::function<void()>;
     void setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInput,
-                                SelectDeviceFn selectOutput, RescanFn rescan = {});
+                                SelectDeviceFn selectOutput, RescanFn rescan = {},
+                                SelectDeviceFn selectRate = {},
+                                SelectDeviceFn selectBuffer = {});
 
     void resized() override;
 
 private:
-    enum class Screen { Play, Edit, Library, Radio, Live, Setup, Devices };
+    enum class Screen { Play, Edit, Library, Radio, Live, Devices };
     void show (Screen s);
     void refreshDevices();
     void runRadioSearch (juce::String query);
@@ -72,8 +68,7 @@ private:
     std::unique_ptr<RadioScreen>   radio_;
     std::unique_ptr<LibraryScreen> library_;
     std::unique_ptr<LiveScreen>    live_;
-    std::unique_ptr<SetupScreen>   setup_;
-    std::unique_ptr<DevicesScreen> devices_;
+    std::unique_ptr<AudioSettingsScreen> devices_;
     juce::Component* current_ = nullptr;
 
     SearchFn    searchFn_;
@@ -85,7 +80,7 @@ private:
     GetModelsFn getModels_;
     LoadModelFn loadModel_;
     GetDevicesFn   getDevices_;
-    SelectDeviceFn selectInput_, selectOutput_;
+    SelectDeviceFn selectInput_, selectOutput_, selectRate_, selectBuffer_;
     RescanFn       rescanDevices_;
     std::vector<nam::ToneInfo> radioResults_;
 

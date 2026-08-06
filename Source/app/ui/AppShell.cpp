@@ -12,13 +12,11 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     radio_   = std::make_unique<RadioScreen>();
     library_ = std::make_unique<LibraryScreen>();
     live_    = std::make_unique<LiveScreen>();
-    setup_   = std::make_unique<SetupScreen>();
-    devices_ = std::make_unique<DevicesScreen>();
+    devices_ = std::make_unique<AudioSettingsScreen>();
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) radio_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get(), (juce::Component*) setup_.get(),
-                                (juce::Component*) devices_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) devices_.get() })
         addChildComponent (*c);
 
     play_->onNav = [this] (int tab) {
@@ -35,8 +33,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     library_->onBack = [this] { show (Screen::Play); };
     live_->onExit    = [this] { show (Screen::Play); };
 
-    setup_->onFinish     = [this] { show (Screen::Play); };
-    setup_->onSetInputDb = [this] (float db) { engine_.setInputDb (db); };
+    devices_->onSetInputDb = [this] (float db) { engine_.setInputDb (db); };
 
     show (Screen::Play);
 }
@@ -106,11 +103,14 @@ void AppShell::setAuditionService (AuditionFn audition, std::function<void()> st
 }
 
 void AppShell::setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInput,
-                                      SelectDeviceFn selectOutput, RescanFn rescan) {
+                                      SelectDeviceFn selectOutput, RescanFn rescan,
+                                      SelectDeviceFn selectRate, SelectDeviceFn selectBuffer) {
     getDevices_     = std::move (get);
     selectInput_    = std::move (selectInput);
     selectOutput_   = std::move (selectOutput);
     rescanDevices_  = std::move (rescan);
+    selectRate_     = std::move (selectRate);
+    selectBuffer_   = std::move (selectBuffer);
 
     devices_->onRescan = [this] { if (rescanDevices_) rescanDevices_(); refreshDevices(); };
     devices_->onSelectInput = [this] (juce::String name) {
@@ -121,15 +121,20 @@ void AppShell::setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInp
         if (selectOutput_) selectOutput_ (name);
         refreshDevices();
     };
+    devices_->onSelectRate = [this] (juce::String label) {
+        if (selectRate_) selectRate_ (label);
+        refreshDevices();
+    };
+    devices_->onSelectBuffer = [this] (juce::String label) {
+        if (selectBuffer_) selectBuffer_ (label);
+        refreshDevices();
+    };
 }
 
 void AppShell::refreshDevices() {
     if (! getDevices_) return;
-    const auto st = getDevices_();
-    devices_->setDevices (st.inputs, st.currentInput, st.outputs, st.currentOutput);
+    devices_->setState (getDevices_());
 }
-
-void AppShell::startOnSetup() { show (Screen::Setup); }
 
 bool AppShell::handleBackButton() {
     if (current_ != nullptr && current_ != play_.get()) { show (Screen::Play); return true; }
@@ -160,7 +165,6 @@ void AppShell::show (Screen s) {
         case Screen::Radio:   target = radio_.get();   break;
         case Screen::Library: target = library_.get(); break;
         case Screen::Live:    target = live_.get();    break;
-        case Screen::Setup:   target = setup_.get();   break;
         case Screen::Devices: target = devices_.get(); break;
         case Screen::Play:    default: target = play_.get(); break;
     }
@@ -173,15 +177,14 @@ void AppShell::show (Screen s) {
 }
 
 void AppShell::setLevels (float in, float out) {
-    if (play_ != nullptr)  play_->setLevels (in, out);
-    if (setup_ != nullptr) setup_->setLevel (in);
+    if (play_ != nullptr)    play_->setLevels (in, out);
+    if (devices_ != nullptr) devices_->setLevels (in, out);
 }
 
 void AppShell::resized() {
     auto b = getLocalBounds();
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) radio_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get(), (juce::Component*) setup_.get(),
-                                (juce::Component*) devices_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) devices_.get() })
         if (c != nullptr) c->setBounds (b);
 }

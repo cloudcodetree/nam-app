@@ -43,17 +43,12 @@ AndroidAudioApp::AndroidAudioApp() {
         [this] { return library_.all(nam::LibraryType::Model); },
         [this](nam::LibraryEntry e) { loadModelEntry(e); });
     shell_->setAudioDeviceService(
-        [this] {
-            return AppShell::AudioDeviceState { inputDeviceNames(), outputDeviceNames(),
-                                                currentInputDevice(), currentOutputDevice() };
-        },
+        [this] { return audioSettingsState(); },
         [this](juce::String name) { selectInputDevice(name); },
         [this](juce::String name) { selectOutputDevice(name); },
-        [this] { rescanAudioDevices(); });
-
-    // First launch (empty library, never connected): show the setup/gain-stage.
-    if (library_.all(nam::LibraryType::Model).empty() && ! t3kAuth_.hasValidToken())
-        shell_->startOnSetup();
+        [this] { rescanAudioDevices(); },
+        [this](juce::String label) { selectSampleRate(label); },
+        [this](juce::String label) { selectBufferSize(label); });
 
     // 1 input (guitar) / 2 output. JUCE requests RECORD_AUDIO on input open.
     setAudioChannels(1, 2);
@@ -275,6 +270,74 @@ void AndroidAudioApp::preferUsbInput() {
     const auto err = applyDeviceSetup(setup);
     juce::Logger::writeToLog("preferUsbInput(" + usb + ") -> "
                              + (err.isEmpty() ? "ok" : err));
+}
+
+// --- Engine settings (sample rate / buffer / latency) ---------------------
+namespace {
+juce::String rateLabel(double sr) {
+    if (sr <= 0) return "?";
+    const double k = sr / 1000.0;
+    return (std::fabs(k - std::round(k)) < 0.01
+                ? juce::String((int) std::round(k)) : juce::String(k, 1)) + "k";
+}
+}
+
+AudioSettingsState AndroidAudioApp::audioSettingsState() {
+    AudioSettingsState s;
+    s.inputs  = inputDeviceNames();
+    s.outputs = outputDeviceNames();
+    s.currentInput  = currentInputDevice();
+    s.currentOutput = currentOutputDevice();
+
+    auto* dev = deviceManager.getCurrentAudioDevice();
+    if (dev != nullptr) {
+        for (double r : dev->getAvailableSampleRates())
+            if (r == 44100.0 || r == 48000.0 || r == 96000.0)
+                s.rates.add(rateLabel(r));
+        s.currentRate = rateLabel(dev->getCurrentSampleRate());
+        if (! s.rates.contains(s.currentRate)) s.rates.add(s.currentRate);
+
+        auto sizes = dev->getAvailableBufferSizes();
+        const int cur = dev->getCurrentBufferSizeSamples();
+        // Offer up to 4 sizes spanning small..large.
+        for (int want : { 0, 1, 2, 3 }) {
+            const int idx = sizes.size() <= 4 ? want
+                            : (want * (sizes.size() - 1)) / 3;
+            if (idx >= 0 && idx < sizes.size()) {
+                const auto label = juce::String(sizes[(int) idx]);
+                if (! s.buffers.contains(label)) s.buffers.add(label);
+            }
+        }
+        s.currentBuffer = juce::String(cur);
+        if (! s.buffers.contains(s.currentBuffer)) s.buffers.add(s.currentBuffer);
+
+        const double sr = dev->getCurrentSampleRate();
+        if (sr > 0)
+            s.latencyMs = (dev->getInputLatencyInSamples()
+                           + dev->getOutputLatencyInSamples() + cur) * 1000.0 / sr;
+        s.running = dev->isPlaying();
+    }
+    return s;
+}
+
+void AndroidAudioApp::selectSampleRate(const juce::String& label) {
+    const double sr = label.upToFirstOccurrenceOf("k", false, true).getDoubleValue() * 1000.0;
+    if (sr <= 0) return;
+    auto setup = deviceManager.getAudioDeviceSetup();
+    if (std::fabs(setup.sampleRate - sr) < 1.0) return;
+    setup.sampleRate = sr;
+    const auto err = applyDeviceSetup(setup);
+    juce::Logger::writeToLog("selectSampleRate(" + label + ") -> " + (err.isEmpty() ? "ok" : err));
+}
+
+void AndroidAudioApp::selectBufferSize(const juce::String& label) {
+    const int frames = label.getIntValue();
+    if (frames <= 0) return;
+    auto setup = deviceManager.getAudioDeviceSetup();
+    if (setup.bufferSize == frames) return;
+    setup.bufferSize = frames;
+    const auto err = applyDeviceSetup(setup);
+    juce::Logger::writeToLog("selectBufferSize(" + label + ") -> " + (err.isEmpty() ? "ok" : err));
 }
 
 void AndroidAudioApp::changeListenerCallback(juce::ChangeBroadcaster*) {
