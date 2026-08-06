@@ -22,7 +22,11 @@ android {
                 // Build the JUCE app target; juce_add_gui_app emits it as a
                 // SHARED library (libjuce_jni.so) on Android. c++_shared so the
                 // STL is a bundled .so (AGP packages libc++_shared.so too).
-                arguments "-DNAM_BUILD_APP=ON", "-DANDROID_STL=c++_shared"
+                // RelWithDebInfo: the DSP (Eigen/RTNeural NAM inference) is
+                // 5-15x slower at -O0; debug APKs must still run models in
+                // real time on device.
+                arguments "-DNAM_BUILD_APP=ON", "-DANDROID_STL=c++_shared",
+                          "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
                 targets "NamPlayer"
             }
         }

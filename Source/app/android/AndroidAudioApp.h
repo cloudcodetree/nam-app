@@ -110,9 +110,6 @@ private:
     void installRenderedDemo(std::vector<float> rendered);
     void cacheAudition(const std::string& key, const std::vector<float>& rendered);
     const std::vector<float>* cachedAudition(const std::string& key) const;
-    void renderAuditionFile(juce::File file, bool deleteAfter, std::string cacheKey,
-                            juce::String displayName,
-                            std::function<void(bool, juce::String)> done);
     // On-disk cache of downloaded audition model files: a demo-riff change
     // only re-renders, it never re-downloads.
     static juce::File modelCacheFile(const std::string& scope);
@@ -122,8 +119,6 @@ private:
     std::atomic<int>  demoTrackRT_ { 0 };   // audio-thread copy of demoTrack_
     std::atomic<bool> demoLive_ { false };  // live mode: dry DI -> engine in RT
     bool preRenderAuditions_ = false;       // emulator: can't run NAM in RT
-    void startLiveAudition(juce::File modelFile, juce::String displayName,
-                           std::function<void(bool, juce::String)> done);
     // Rendered-audition cache (message thread only): tone id -> processed
     // riff. Re-tapping a tone plays instantly instead of re-downloading and
     // re-rendering. ~600 KB per entry; capped.
