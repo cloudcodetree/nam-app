@@ -406,15 +406,39 @@ void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered) {
     demoOn_.store(true, std::memory_order_relaxed);
 }
 
+void AndroidAudioApp::cacheAudition(const std::string& toneId,
+                                    const std::vector<float>& rendered) {
+    constexpr size_t kMaxEntries = 12;   // ~7 MB worst case
+    for (auto& e : auditionCache_)
+        if (e.first == toneId) { e.second = rendered; return; }
+    if (auditionCache_.size() >= kMaxEntries)
+        auditionCache_.erase(auditionCache_.begin());
+    auditionCache_.emplace_back(toneId, rendered);
+}
+
+const std::vector<float>* AndroidAudioApp::cachedAudition(const std::string& toneId) const {
+    for (const auto& e : auditionCache_)
+        if (e.first == toneId) return &e.second;
+    return nullptr;
+}
+
 void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
+    // Re-tap of a tone we already rendered: play instantly, no network.
+    if (const auto* hit = cachedAudition(tone.id)) {
+        installRenderedDemo(std::vector<float>(*hit));
+        done(true, juce::String(tone.title));
+        return;
+    }
+
     if (! t3kAuth_.hasValidToken()) { done(false, "connect first (pick a station)"); return; }
     if (t3kSession_ == nullptr)
         t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
 
     const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    const std::string toneId = tone.id;
     t3kSession_->downloadToneModel(tone.id, tempDir,
-        [this, done](bool ok, juce::File file, juce::String nameOrErr) {
+        [this, done, toneId](bool ok, juce::File file, juce::String nameOrErr) {
             if (! ok) { done(false, nameOrErr); return; }
 
             // Render the dry riff through the tone OFFLINE (background
@@ -423,7 +447,7 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
             const std::string path = file.getFullPathName().toStdString();
             const double sr = sampleRate_;
             auto dry = std::make_shared<std::vector<float>>(demoLoop_);
-            juce::Thread::launch([this, path, sr, dry, done, nameOrErr] {
+            juce::Thread::launch([this, path, sr, dry, done, nameOrErr, toneId] {
                 constexpr int block = 256;
                 auto offline = std::make_unique<dsp::ToneEngine>();
                 offline->prepare((int) sr, block);
@@ -451,7 +475,8 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
                     for (auto& v : *out) v *= g;
                 }
 
-                juce::MessageManager::callAsync([this, out, done, nameOrErr] {
+                juce::MessageManager::callAsync([this, out, done, nameOrErr, toneId] {
+                    cacheAudition(toneId, *out);
                     installRenderedDemo(std::move(*out));
                     done(true, nameOrErr);
                 });

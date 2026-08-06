@@ -91,7 +91,13 @@ private:
     // the finished slot back (no inference on the audio thread — an emulated
     // CPU can't run NAM in real time). Slots are never freed: RT-safe.
     void installRenderedDemo(std::vector<float> rendered);
+    void cacheAudition(const std::string& toneId, const std::vector<float>& rendered);
+    const std::vector<float>* cachedAudition(const std::string& toneId) const;
     std::vector<float> demoLoop_;
+    // Rendered-audition cache (message thread only): tone id -> processed
+    // riff. Re-tapping a tone plays instantly instead of re-downloading and
+    // re-rendering. ~600 KB per entry; capped.
+    std::vector<std::pair<std::string, std::vector<float>>> auditionCache_;
     std::array<std::vector<float>, 2> demoSlots_;
     std::atomic<int>    demoSlot_ { -1 };
     std::atomic<size_t> demoPos_ { 0 };
