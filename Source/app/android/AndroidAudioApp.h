@@ -147,6 +147,13 @@ private:
     std::atomic<bool>   liveMuted_ { false };
     bool alwaysMuteLive_ = false;   // emulator: synthetic mic, never unmute
 
+    // Tuner: the audio thread mirrors the RAW live input into a ring; the
+    // UI timer analyzes the latest window (guitar only — demos don't tune).
+    static constexpr int kTunerRingSize = 4096;   // power of two
+    std::array<float, (size_t) kTunerRingSize> tunerRing_ {};
+    std::atomic<int> tunerWrite_ { 0 };
+    int tunerTick_ = 0;
+
     bool applyingDeviceChange_ = false;  // re-entrancy guard for setAudioDeviceSetup
     bool userChoseInput_ = false;        // manual pick disables USB auto-select
     int  rescanTick_ = 0;                // slow hot-plug poll (timer runs at 30 Hz)

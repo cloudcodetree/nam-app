@@ -21,6 +21,7 @@ public:
     explicit AppShell (dsp::ToneEngine& engine);
 
     void setLevels (float in, float out);     // Play + Audio settings meters
+    void setTunerPitch (float hz);            // 0 = no pitch detected
 
     // Android system back: pop to Play if on a sub-screen. Returns true if it
     // handled the press (caller should NOT exit the app); false if already on

@@ -1,5 +1,7 @@
 #include "app/ui/AppShell.h"
 
+#include <cmath>
+
 namespace {
 const juce::String kEllipsis = juce::String::fromUTF8 ("\xE2\x80\xA6"); // …
 const juce::String kHeart    = juce::String::fromUTF8 ("\xE2\x99\xA5"); // ♥
@@ -327,6 +329,19 @@ void AppShell::show (Screen s) {
 void AppShell::setLevels (float in, float out) {
     if (play_ != nullptr)    play_->setLevels (in, out);
     if (devices_ != nullptr) devices_->setLevels (in, out);
+}
+
+void AppShell::setTunerPitch (float hz) {
+    if (play_ == nullptr) return;
+    if (hz <= 0.0f) { play_->setTuner ({}, 0.0f, false); return; }
+    static const char* names[] = { "C", "C#", "D", "D#", "E", "F",
+                                   "F#", "G", "G#", "A", "A#", "B" };
+    const double midi = 69.0 + 12.0 * std::log2 ((double) hz / 440.0);
+    const int nearest = (int) std::round (midi);
+    const float cents = (float) ((midi - (double) nearest) * 100.0);
+    const int nameIdx = ((nearest % 12) + 12) % 12;
+    const int octave = nearest / 12 - 1;
+    play_->setTuner (juce::String (names[nameIdx]) + juce::String (octave), cents, true);
 }
 
 void AppShell::resized() {

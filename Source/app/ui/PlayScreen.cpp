@@ -18,6 +18,16 @@ void PlayScreen::setPosition (int index, int count) {
     repaint (transportRect_);
 }
 
+void PlayScreen::setTuner (juce::String note, float cents, bool active) {
+    if (note == tunerNote_ && active == tunerActive_
+        && std::abs (cents - tunerCents_) < 1.0f)
+        return;
+    tunerNote_ = std::move (note);
+    tunerCents_ = cents;
+    tunerActive_ = active;
+    repaint (metersRow_);
+}
+
 void PlayScreen::setLevels (float in, float out) {
     inLevel_  = juce::jlimit (0.0f, 1.0f, in);
     outLevel_ = juce::jlimit (0.0f, 1.0f, out);
@@ -142,21 +152,35 @@ void PlayScreen::paint (juce::Graphics& g) {
             g.drawRoundedRectangle (rr.toFloat().reduced (0.5f), 12.0f, 1.0f);
         };
 
-        // Tuner panel: note + bars + label
+        // Tuner panel: detected note + cents-deviation bars. The centre bar
+        // lights lime when in tune (within ±7 cents); off-pitch lights the
+        // bar nearest the deviation in accent orange.
         panel (tuner);
         auto ti = tuner.reduced (14, 0);
-        text ("E", displayFont (26.0f), col::ink, ti.removeFromLeft (26), juce::Justification::centred);
+        text (tunerActive_ ? tunerNote_ : juce::String::fromUTF8 ("\xE2\x80\x93"),
+              displayFont (tunerActive_ && tunerNote_.length() > 2 ? 20.0f : 26.0f),
+              tunerActive_ ? col::ink : col::inkA (0.35f),
+              ti.removeFromLeft (40), juce::Justification::centred);
         text ("TUNER", uiFontTracked (10.0f, true), col::inkA (0.4f),
               ti.removeFromRight (48), juce::Justification::centred);
         {
             auto bars = ti; const int n = 5; const float bw = 3.0f;
             const float step = (float) bars.getWidth() / (float) (n + 1);
             const int heights[] = { 10, 14, 20, 14, 10 };
+            // Which bar does the current deviation land on? (-50..50 cents)
+            int lit = -1;
+            bool inTune = false;
+            if (tunerActive_) {
+                const float c = juce::jlimit (-49.0f, 49.0f, tunerCents_);
+                inTune = std::abs (c) <= 7.0f;
+                lit = inTune ? 2 : juce::jlimit (0, 4, (int) std::floor ((c + 50.0f) / 20.0f));
+            }
             for (int i = 0; i < n; ++i) {
                 const float bx = bars.getX() + step * (i + 1) - bw * 0.5f;
                 const float bh = (float) heights[i];
                 juce::Rectangle<float> bar (bx, bars.getCentreY() - bh * 0.5f, bw, bh);
-                g.setColour (i == 2 ? col::accent : col::inkA (i == 1 || i == 3 ? 0.3f : 0.2f));
+                if (i == lit) g.setColour (inTune ? col::meterLime : col::accent);
+                else          g.setColour (col::inkA (i == 2 ? 0.35f : 0.2f));
                 g.fillRect (bar);
             }
         }

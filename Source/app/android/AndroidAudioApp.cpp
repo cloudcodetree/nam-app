@@ -1,6 +1,7 @@
 #include "app/android/AndroidAudioApp.h"
 
 #include "BinaryData.h"
+#include "dsp/PitchDetector.h"
 #include "model/IrLoader.h"
 #include "model/LibraryImporter.h"
 #include "model/LibraryEntry.h"
@@ -150,6 +151,18 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     const int n = info.numSamples;
     const int cap = (int) mono_.size();
 
+    // Mirror the raw input into the tuner ring regardless of demo state —
+    // the tuner always listens to the guitar, never to demo playback.
+    {
+        const float* rawIn = buf->getReadPointer(0, info.startSample);
+        int w = tunerWrite_.load(std::memory_order_relaxed);
+        for (int i = 0; i < n; ++i) {
+            tunerRing_[(size_t) (w & (kTunerRingSize - 1))] = rawIn[i];
+            ++w;
+        }
+        tunerWrite_.store(w, std::memory_order_release);
+    }
+
     float inPk = 0.0f;
     bool bypassEngine = false;
     const bool demoOn = demoOn_.load(std::memory_order_relaxed);
@@ -214,6 +227,19 @@ void AndroidAudioApp::timerCallback() {
     if (shell_ != nullptr)
         shell_->setLevels(inPeak_.load(std::memory_order_relaxed),
                           engine_.outputPeak());
+
+    // Tuner analysis at ~10 Hz: copy the latest window out of the ring and
+    // run pitch detection on the message thread.
+    if (shell_ != nullptr && ++tunerTick_ >= 3) {
+        tunerTick_ = 0;
+        constexpr int kWin = 2048;
+        static thread_local std::array<float, (size_t) kWin> win;
+        const int w = tunerWrite_.load(std::memory_order_acquire);
+        for (int i = 0; i < kWin; ++i)
+            win[(size_t) i] = tunerRing_[(size_t) ((w - kWin + i) & (kTunerRingSize - 1))];
+        const float hz = dsp::detectPitchHz(win.data(), kWin, sampleRate_);
+        shell_->setTunerPitch(hz);
+    }
 
     // Slow hot-plug poll (~every 3 s): Android doesn't notify JUCE when a USB
     // interface appears, so rescan until one is adopted or the user picks.

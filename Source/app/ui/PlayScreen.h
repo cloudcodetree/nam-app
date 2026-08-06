@@ -16,6 +16,8 @@ public:
 
     // The tone the engine is ACTUALLY running (owner keeps this current).
     void setNowPlaying (juce::String name, juce::String family, juce::String author);
+    // Live tuner state (owner runs pitch detection on the raw input).
+    void setTuner (juce::String note, float cents, bool active);
     void setPosition (int index, int count);   // place in the collection (-1 = not in it)
 
     std::function<void (int)> onNav;      // 0=Play 1=Edit 2=Radio 3=Live
@@ -33,6 +35,9 @@ private:
     int   count_    = 0;
     float inLevel_  = 0.0f;
     float outLevel_ = 0.0f;
+    juce::String tunerNote_;
+    float tunerCents_ = 0.0f;
+    bool  tunerActive_ = false;
 
     // Hit / layout rects, computed in resized().
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_,

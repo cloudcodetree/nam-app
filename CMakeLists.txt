@@ -100,6 +100,7 @@ if(NAM_BUILD_APP)
             Source/app/ui/AudioSettingsScreen.cpp
             Source/app/ui/AppShell.cpp
             Source/dsp/ToneEngine.cpp
+            Source/dsp/PitchDetector.cpp
             Source/dsp/IrCab.cpp
             Source/dsp/ToneEq.cpp
             Source/dsp/Reverb.cpp
