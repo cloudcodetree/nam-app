@@ -51,8 +51,18 @@ BrowseScreen::~BrowseScreen() { stopTimer(); }
 
 void BrowseScreen::timerCallback() {
     ++animTicks_;
-    if (playingPack_ >= 0 || loadingPack_ >= 0 || downloadingPack_ >= 0)
-        repaint (listArea_);
+    if (! isVisible()) return;
+    // Repaint only the animated button areas, not the whole list — full
+    // software repaints at 15 Hz can eat an entire core on a big screen.
+    const int dy = listArea_.getY() - (int) scrollY_;
+    auto rp = [this, dy] (juce::Rectangle<int> r) {
+        const auto vis = r.translated (0, dy).expanded (6).getIntersection (listArea_);
+        if (! vis.isEmpty()) repaint (vis);
+    };
+    if (loadingPack_ >= 0 && loadingPack_ < (int) rows_.size())
+        rp (rows_[(size_t) loadingPack_].playBtn);
+    if (downloadingPack_ >= 0 && downloadingPack_ < (int) rows_.size())
+        rp (rows_[(size_t) downloadingPack_].dlBtn);
 }
 
 juce::String BrowseScreen::composedQuery() const {

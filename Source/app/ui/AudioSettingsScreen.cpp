@@ -59,9 +59,14 @@ void AudioSettingsScreen::timerCallback() {
         gain_ = Gain::Idle;
         gainTicks_ = 0;
     }
-    // Meters + gain button live in the last card; cheap full repaint of the
-    // scrolled region keeps this simple.
-    repaint();
+    if (! isVisible()) return;
+    // Repaint only the live areas (meters + gain button), scroll-adjusted.
+    const int dy = contentTop_ - (int) scrollY_;
+    for (auto r : { meterInRow_, meterOutRow_, gainBtn_ }) {
+        const auto vis = r.translated (0, dy).expanded (4)
+                             .getIntersection (getLocalBounds().withTrimmedTop (contentTop_));
+        if (! vis.isEmpty()) repaint (vis);
+    }
 }
 
 void AudioSettingsScreen::resized() { relayout(); }

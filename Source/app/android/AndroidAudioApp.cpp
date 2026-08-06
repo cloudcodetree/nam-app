@@ -604,6 +604,7 @@ void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered) {
     demoSlots_[(size_t) next] = std::move(rendered);
     demoPos_.store(0, std::memory_order_relaxed);
     demoSlot_.store(next, std::memory_order_release);
+    demoLive_.store(false, std::memory_order_relaxed);   // slot playback mode
     demoOn_.store(true, std::memory_order_relaxed);
 }
 
@@ -717,29 +718,38 @@ void AndroidAudioApp::renderAuditionFile(juce::File file, bool deleteAfter,
     });
 }
 
-// Routes a local model file into the right audition mode: real devices
-// stream the dry DI through the live engine (instant, real-time inference);
-// the emulator pre-renders offline (it can't run NAM in real time).
+// Routes a local model file into the right audition mode. Real devices
+// stream light models (nano/feather class) through the live engine —
+// instant start, real-time inference. Heavy models exceed real-time even
+// on fast phones (saturated audio thread = chop), so they pre-render like
+// the emulator does; on a phone that's only a couple of seconds.
 void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
                                         const std::string& cacheKey,
                                         juce::String displayName,
                                         std::function<void(bool, juce::String)> done) {
-    if (preRenderAuditions_)
+    constexpr juce::int64 kLiveMaxModelBytes = 200 * 1024;
+    const bool tooHeavyForLive = file.getSize() > kLiveMaxModelBytes;
+    juce::Logger::writeToLog("audition model " + file.getFileName() + " ("
+                             + juce::String(file.getSize() / 1024) + " KB) -> "
+                             + (preRenderAuditions_ || tooHeavyForLive ? "pre-render" : "live"));
+    if (preRenderAuditions_ || tooHeavyForLive) {
+        setDemoActive(false);   // stop live playback while re-rendering
         renderAuditionFile(file, deleteAfter, cacheKey, displayName, done);
-    else
+    } else {
         startLiveAudition(file, displayName, done);
+    }
 }
 
 void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
     const std::string key = tone.id + "#auto#" + std::to_string(demoTrack_);
-    if (preRenderAuditions_) {
-        // Rendered-audio cache only matters in pre-render mode.
-        if (const auto* hit = cachedAudition(key)) {
-            installRenderedDemo(std::vector<float>(*hit));
-            done(true, juce::String(tone.title));
-            return;
-        }
+    // Rendered-audio cache: instant replay (covers heavy pre-rendered
+    // models on device and everything on the emulator).
+    if (const auto* hit = cachedAudition(key)) {
+        setDemoActive(false);
+        installRenderedDemo(std::vector<float>(*hit));
+        done(true, juce::String(tone.title));
+        return;
     }
 
     // Pack auditions always use the SMALLEST variant: full-size "standard"
@@ -792,12 +802,11 @@ void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::Mode
         std::function<void(bool, juce::String)> done) {
     const std::string key = toneId + "#" + model.id + "#" + std::to_string(demoTrack_);
     const juce::String display (model.name.empty() ? model.id : model.name);
-    if (preRenderAuditions_) {
-        if (const auto* hit = cachedAudition(key)) {
-            installRenderedDemo(std::vector<float>(*hit));
-            done(true, display);
-            return;
-        }
+    if (const auto* hit = cachedAudition(key)) {
+        setDemoActive(false);
+        installRenderedDemo(std::vector<float>(*hit));
+        done(true, display);
+        return;
     }
 
     const auto cachedFile = modelCacheFile("m_" + toneId + "_" + model.id);
