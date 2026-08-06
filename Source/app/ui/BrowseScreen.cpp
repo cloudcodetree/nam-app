@@ -56,8 +56,6 @@ void BrowseScreen::timerCallback() {
     };
     if (loadingPack_ >= 0 && loadingPack_ < (int) rows_.size())
         rp (rows_[(size_t) loadingPack_].playBtn);
-    if (downloadingPack_ >= 0 && downloadingPack_ < (int) rows_.size())
-        rp (rows_[(size_t) downloadingPack_].dlBtn);
 }
 
 juce::String BrowseScreen::composedQuery() const {
@@ -84,7 +82,7 @@ void BrowseScreen::setResults (std::vector<nam::ToneInfo> tones) {
     defaultName_.assign (tones_.size(), {});
     expanded_ = -1;
     playingPack_ = playingModel_ = -1;
-    loadingPack_ = downloadingPack_ = -1;
+    loadingPack_ = -1;
     menu_ = Menu::None;
     scrollY_ = 0.0f;
     relayout();
@@ -141,11 +139,6 @@ void BrowseScreen::setDownloadedFlags (std::vector<bool> dl) {
     repaint (listArea_);
 }
 
-void BrowseScreen::setDownloading (int packIdx) {
-    downloadingPack_ = packIdx;
-    repaint (listArea_);
-}
-
 void BrowseScreen::resized() { relayout(); }
 
 void BrowseScreen::relayout() {
@@ -179,7 +172,6 @@ void BrowseScreen::relayout() {
         for (const char* m : kMakeChips) place (m);
         filterPanel_ = { panel.getX() + 20, panel.getY(), panel.getWidth() - 40,
                          (y + chipH + 12) - panel.getY() };
-        r.removeFromTop (filterPanel_.getHeight() + 6);
     } else {
         filterPanel_ = {};
     }
@@ -196,7 +188,6 @@ void BrowseScreen::relayout() {
         int h = rowH;
         row.header  = { listArea_.getX(), y, listArea_.getWidth(), rowH };
         row.playBtn = { row.header.getX() + 10, y + rowH / 2 - 18, 36, 36 };
-        row.dlBtn   = { row.playBtn.getRight() + 8, y + rowH / 2 - 18, 36, 36 };
         row.badge   = { row.header.getRight() - 58, y + rowH / 2 - 11, 46, 22 };
         if (open) {
             int iy = y + rowH + 4;
@@ -294,20 +285,6 @@ void BrowseScreen::paint (juce::Graphics& g) {
     text (juce::String ((int) tones_.size()) + " packs", uiFont (11.0f, false), col::inkA (0.4f),
           countRect_, juce::Justification::centredRight);
 
-    // Filter panel
-    if (filtersOpen_) {
-        g.setColour (col::inkA (0.03f));
-        g.fillRoundedRectangle (filterPanel_.toFloat(), 14.0f);
-        g.setColour (col::inkA (0.14f));
-        g.drawRoundedRectangle (filterPanel_.toFloat().reduced (0.5f), 14.0f, 1.0f);
-        for (const auto& c : filterChips_) {
-            const bool on = selectedTags_.contains (c.label);
-            drawPill (g, c.rect.toFloat(), on ? col::accent : juce::Colours::transparentBlack,
-                      on ? col::accentA (0.7f) : col::inkA (0.2f));
-            text (c.label, uiFont (11.0f, true), on ? col::inkOnAccent : col::inkA (0.7f),
-                  c.rect, juce::Justification::centred);
-        }
-    }
 
     // Pack list (scrolling)
     g.saveState();
@@ -325,11 +302,12 @@ void BrowseScreen::paint (juce::Graphics& g) {
         const bool open = ((int) i == expanded_);
         const bool packPlaying = ((int) i == playingPack_);
         const bool packLoading = ((int) i == loadingPack_);
-        const bool packDownloading = ((int) i == downloadingPack_);
         const bool packCached = i < cached_.size() && cached_[i] && ! packPlaying && ! packLoading;
         const bool packDownloaded = i < downloaded_.size() && downloaded_[i];
 
-        g.setColour (col::inkA (0.02f));
+        // On-device packs (downloaded or audition-cached) get a warm card tint.
+        const bool onDevice = packDownloaded || (i < cached_.size() && cached_[i]);
+        g.setColour (onDevice ? col::accentA (0.06f) : col::inkA (0.02f));
         g.fillRoundedRectangle (frame.toFloat(), 14.0f);
         g.setColour (packPlaying ? col::accentA (0.5f) : open ? col::accentA (0.35f) : col::inkA (0.1f));
         g.drawRoundedRectangle (frame.toFloat().reduced (0.5f), 14.0f, 1.0f);
@@ -356,28 +334,7 @@ void BrowseScreen::paint (juce::Graphics& g) {
                                                      juce::PathStrokeType::rounded));
         }
 
-        // ↓ download button (best quality, no autoplay)
-        auto dl = S (row.dlBtn);
-        g.setColour (packDownloaded ? col::ink : juce::Colours::transparentBlack);
-        g.fillEllipse (dl.toFloat());
-        g.setColour (packDownloaded ? col::ink : col::inkA (packDownloading ? 0.12f : 0.25f));
-        g.drawEllipse (dl.toFloat().reduced (0.5f), 1.0f);
-        text (packDownloaded ? kCheck : kDown, uiFont (12.0f, false),
-              packDownloaded ? col::bg : col::inkA (packDownloading ? 0.45f : 0.85f),
-              dl, juce::Justification::centred);
-        if (packDownloading) {
-            // Indeterminate sweep while fetching.
-            juce::Path arc;
-            const auto b = dl.toFloat().expanded (3.0f);
-            const float start = (float) animTicks_ * 0.35f;
-            arc.addArc (b.getX(), b.getY(), b.getWidth(), b.getHeight(),
-                        start, start + 1.7f, true);
-            g.setColour (col::meterLime);
-            g.strokePath (arc, juce::PathStrokeType (2.5f, juce::PathStrokeType::curved,
-                                                     juce::PathStrokeType::rounded));
-        }
-
-        auto head = S (row.header).withTrimmedLeft (96).withTrimmedRight (64);
+        auto head = S (row.header).withTrimmedLeft (64).withTrimmedRight (64);
         text (juce::String (t.title), uiFont (14.0f, true), col::ink,
               head.removeFromTop (row.header.getHeight() / 2 + 4), juce::Justification::bottomLeft);
         juce::String meta = juce::String (t.gear.empty() ? juce::String ("TONE3000") : juce::String (t.gear));
@@ -438,6 +395,23 @@ void BrowseScreen::paint (juce::Graphics& g) {
         }
     }
     g.restoreState();
+
+    // Filters overlay (floats over the list)
+    if (filtersOpen_) {
+        juce::DropShadow (juce::Colours::black.withAlpha (0.6f), 24, { 0, 10 })
+            .drawForRectangle (g, filterPanel_);
+        g.setColour (col::bgGradTop.brighter (0.03f));
+        g.fillRoundedRectangle (filterPanel_.toFloat(), 14.0f);
+        g.setColour (col::inkA (0.18f));
+        g.drawRoundedRectangle (filterPanel_.toFloat().reduced (0.5f), 14.0f, 1.0f);
+        for (const auto& c : filterChips_) {
+            const bool on = selectedTags_.contains (c.label);
+            drawPill (g, c.rect.toFloat(), on ? col::accent : juce::Colours::transparentBlack,
+                      on ? col::accentA (0.7f) : col::inkA (0.2f));
+            text (c.label, uiFont (11.0f, true), on ? col::inkOnAccent : col::inkA (0.7f),
+                  c.rect, juce::Justification::centred);
+        }
+    }
 
     // Dropdown menu overlay (demo tracks or model variants)
     if (menu_ != Menu::None) {
@@ -558,23 +532,32 @@ void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
         return;
     }
 
+    // Filters overlay consumes taps while open.
+    if (filtersOpen_) {
+        if (filterPanel_.contains (p)) {
+            for (const auto& c : filterChips_)
+                if (c.rect.contains (p)) {
+                    if (selectedTags_.contains (c.label)) selectedTags_.removeString (c.label);
+                    else selectedTags_.add (c.label);
+                    repaint();
+                    runSearch();
+                    return;
+                }
+            return;
+        }
+        filtersOpen_ = false;
+        repaint();
+        if (! filtersBtn_.contains (p)) return;   // outside tap just closes
+        return;
+    }
+
     if (backRect_.expanded (10).contains (p)) { if (onBack) onBack(); return; }
-    if (filtersBtn_.contains (p)) { filtersOpen_ = ! filtersOpen_; relayout(); repaint(); return; }
+    if (filtersBtn_.contains (p)) { filtersOpen_ = true; relayout(); repaint(); return; }
     if (sortBtn_.contains (p)) {
         sort_ = (sort_ + 1) % 2;
         setResults (std::move (tones_));
         return;
     }
-    if (filtersOpen_)
-        for (const auto& c : filterChips_)
-            if (c.rect.contains (p)) {
-                if (selectedTags_.contains (c.label)) selectedTags_.removeString (c.label);
-                else selectedTags_.add (c.label);
-                repaint();
-                runSearch();
-                return;
-            }
-
     if (! listArea_.contains (p)) return;
     const juce::Point<int> cp { p.x, p.y - listArea_.getY() + (int) scrollY_ };
     for (size_t i = 0; i < rows_.size(); ++i) {
@@ -588,7 +571,6 @@ void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
             else if (onPlayPack) onPlayPack ((int) i);
             return;
         }
-        if (row.dlBtn.contains (cp)) { if (onDownload) onDownload ((int) i); return; }
         if (open) {
             if (row.diBtn.contains (cp))  { menu_ = Menu::DemoTrack; menuScroll_ = 0; repaint(); return; }
             if (row.varBtn.contains (cp)) {

@@ -21,7 +21,6 @@ public:
     std::function<void (int)>  onExpand;                  // fetch models for row
     std::function<void (int)>  onPlayPack;                // audition (auto variant)
     std::function<void (int, int)> onPlayModel;           // audition one variant
-    std::function<void (int)>  onDownload;                // fetch best quality, no play
     std::function<void (int)>  onKeep;                    // favorite -> library
     std::function<void (int)>  onDemoTrack;               // DI track index
     std::function<void (int)>  onCab;                     // cab IR index (0 = none)
@@ -35,8 +34,7 @@ public:
     void setLoading (int packIdx, float progress);        // -1 = not loading
     void setLoadingProgress (float progress);
     void setCachedFlags (std::vector<bool> cached);       // instant-audition packs
-    void setDownloadedFlags (std::vector<bool> dl);       // best-quality on disk
-    void setDownloading (int packIdx);                    // -1 = none
+    void setDownloadedFlags (std::vector<bool> dl);       // on-device (card tint)
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -68,7 +66,6 @@ private:
     int expanded_ = -1;
     int playingPack_ = -1, playingModel_ = -1;
     int loadingPack_ = -1;
-    int downloadingPack_ = -1;
     float loadProgress_ = 0.0f;
     int demoTrack_ = 0;
     int cab_ = 0;
@@ -88,7 +85,7 @@ private:
     struct Chip { juce::String label; juce::Rectangle<int> rect; };
     std::vector<Chip> filterChips_;
     struct Row {
-        juce::Rectangle<int> frame, header, playBtn, dlBtn, badge;
+        juce::Rectangle<int> frame, header, playBtn, badge;
         juce::Rectangle<int> diBtn, varBtn, cabBtn, keepBtn;
     };
     std::vector<Row> rows_;

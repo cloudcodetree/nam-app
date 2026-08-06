@@ -53,19 +53,6 @@ void AppShell::setBrowseServices (BrowseServices services) {
         });
     };
 
-    browse_->onDownload = [this] (int idx) {
-        if (! svc_.downloadOnly || idx < 0 || idx >= (int) browseResults_.size()) return;
-        const auto tone = browseResults_[(size_t) idx];
-        browse_->setDownloading (idx);
-        browse_->setStatus ("Downloading \"" + juce::String (tone.title) + "\"" + kEllipsis);
-        svc_.downloadOnly (tone, [this, idx, tone] (bool ok, juce::String msg) {
-            browse_->setDownloading (-1);
-            browse_->setStatus (ok ? ("Downloaded \"" + juce::String (tone.title) + "\"")
-                                   : ("Download failed: " + msg));
-            refreshCachedFlags();
-        });
-    };
-
     browse_->onExpand = [this] (int idx) {
         if (! svc_.listModels || idx < 0 || idx >= (int) browseResults_.size()) return;
         const auto toneId = browseResults_[(size_t) idx].id;
