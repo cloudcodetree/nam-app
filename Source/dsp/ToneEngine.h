@@ -51,7 +51,7 @@ public:
     uint32_t overCapacityCount() const { return overCap_.load(std::memory_order_relaxed); }    // blocks fed > model capacity (xrun-ish)
     uint64_t blockCount()        const { return blockCount_.load(std::memory_order_relaxed); } // total render() calls
 private:
-    Gain inGain_, outGain_;
+    Gain inGain_, outGain_, normGain_;   // normGain_: NAM loudness normalisation
     NoiseGate gate_;
     IrCab     irCab_;
     ToneEq    eq_;

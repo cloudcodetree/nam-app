@@ -1,6 +1,8 @@
 #include "app/ui/PlayScreen.h"
 #include "app/ui/NamLookAndFeel.h"
 
+#include <cmath>
+
 using namespace nam::ui;
 
 PlayScreen::PlayScreen() { setOpaque (true); }
@@ -189,17 +191,26 @@ void PlayScreen::paint (juce::Graphics& g) {
             }
         }
 
-        // Meters panel: IN + OUT rows
+        // Meters panel: IN + OUT rows, dB-scaled (-60..0 dBFS) with numeric
+        // readout — the bar shows the ACTUAL level headed to the output.
         panel (meters);
         auto mi = meters.reduced (14, 10);
         auto meterRow = [&] (juce::Rectangle<int> rr, const juce::String& label,
-                             float level, bool peakOrange) {
+                             float peak, bool peakOrange) {
+            const float db = peak > 0.001f ? 20.0f * std::log10 (peak) : -60.0f;
+            const float frac = juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f);
             text (label, uiFontTracked (10.0f, true), col::inkA (0.4f),
                   rr.removeFromLeft (30), juce::Justification::centredLeft);
+            const juce::String dbText = db <= -59.5f
+                ? juce::String::fromUTF8 ("\xE2\x88\x92\xE2\x88\x9E")   // −∞
+                : juce::String ((int) std::round (db));
+            text (dbText, uiFont (10.0f, true),
+                  db > -1.0f ? col::accent : col::inkA (0.5f),
+                  rr.removeFromRight (30), juce::Justification::centredRight);
             juce::Rectangle<float> bar = rr.withSizeKeepingCentre (rr.getWidth(), 5).toFloat();
             g.setColour (col::inkA (0.10f));
             g.fillRoundedRectangle (bar, 2.5f);
-            const float w = juce::jmax (5.0f, bar.getWidth() * level);
+            const float w = juce::jmax (frac > 0.0f ? 5.0f : 0.0f, bar.getWidth() * frac);
             juce::ColourGradient mg (col::meterGreen, bar.getX(), 0,
                                      peakOrange ? col::accent : col::meterLime, bar.getX() + w, 0, false);
             if (peakOrange) mg.addColour (0.7, col::meterLime);

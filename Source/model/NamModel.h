@@ -21,6 +21,10 @@ public:
     // Plain int read - lock-free, safe to call on the audio thread.
     int   maxBlock() const { return maxBlock_; }
 
+    // NAM loudness normalisation: gain (dB) that lands this model's output
+    // at the conventional -18 dBFS reference (-18 - model loudness).
+    float recommendedOutputDbAdjustment() const;
+
 private:
     NamModel() = default;
     void* model_ = nullptr;   // NeuralAudio::NeuralModel* (opaque to keep header JUCE/dep-free)
