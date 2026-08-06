@@ -28,6 +28,7 @@ public:
     juce::String currentOutputDevice() const;
     void selectInputDevice(const juce::String& name);
     void selectOutputDevice(const juce::String& name);
+    void rescanAudioDevices();   // re-enumerate (JUCE's Oboe scan is frozen at launch)
 
     void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override;
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& info) override;

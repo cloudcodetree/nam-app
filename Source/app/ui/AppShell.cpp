@@ -74,12 +74,13 @@ void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) 
 }
 
 void AppShell::setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInput,
-                                      SelectDeviceFn selectOutput) {
-    getDevices_   = std::move (get);
-    selectInput_  = std::move (selectInput);
-    selectOutput_ = std::move (selectOutput);
+                                      SelectDeviceFn selectOutput, RescanFn rescan) {
+    getDevices_     = std::move (get);
+    selectInput_    = std::move (selectInput);
+    selectOutput_   = std::move (selectOutput);
+    rescanDevices_  = std::move (rescan);
 
-    devices_->onRescan = [this] { refreshDevices(); };
+    devices_->onRescan = [this] { if (rescanDevices_) rescanDevices_(); refreshDevices(); };
     devices_->onSelectInput = [this] (juce::String name) {
         if (selectInput_) selectInput_ (name);
         refreshDevices();

@@ -33,7 +33,8 @@ AndroidAudioApp::AndroidAudioApp() {
                                                 currentInputDevice(), currentOutputDevice() };
         },
         [this](juce::String name) { selectInputDevice(name); },
-        [this](juce::String name) { selectOutputDevice(name); });
+        [this](juce::String name) { selectOutputDevice(name); },
+        [this] { rescanAudioDevices(); });
 
     // First launch (empty library, never connected): show the setup/gain-stage.
     if (library_.all(nam::LibraryType::Model).empty() && ! t3kAuth_.hasValidToken())
@@ -194,6 +195,26 @@ void AndroidAudioApp::selectOutputDevice(const juce::String& name) {
     const auto err = applyDeviceSetup(setup);
     juce::Logger::writeToLog("selectOutputDevice(" + name + ") -> "
                              + (err.isEmpty() ? "ok" : err));
+}
+
+void AndroidAudioApp::rescanAudioDevices() {
+    // JUCE's OboeAudioIODeviceType enumerates devices ONCE in its constructor
+    // and its scanForDevices() is a no-op, so a USB interface plugged in after
+    // launch never shows up. Recreating the type forces a fresh enumeration.
+    auto setup = deviceManager.getAudioDeviceSetup();
+    deviceManager.closeAudioDevice();
+    if (auto* old = deviceManager.getCurrentDeviceTypeObject())
+        deviceManager.removeAudioDeviceType(old);
+    deviceManager.addAudioDeviceType(std::unique_ptr<juce::AudioIODeviceType>(
+        juce::AudioIODeviceType::createAudioIODeviceType_Oboe()));
+    deviceManager.setCurrentAudioDeviceType("Android Oboe", true);
+
+    if (applyDeviceSetup(setup).isNotEmpty())
+        deviceManager.initialiseWithDefaultDevices(1, 2);
+
+    if (! userChoseInput_) preferUsbInput();
+    juce::Logger::writeToLog("rescanAudioDevices -> in=" + currentInputDevice()
+                             + " out=" + currentOutputDevice());
 }
 
 void AndroidAudioApp::preferUsbInput() {

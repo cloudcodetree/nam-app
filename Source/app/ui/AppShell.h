@@ -48,8 +48,9 @@ public:
     };
     using GetDevicesFn   = std::function<AudioDeviceState()>;
     using SelectDeviceFn = std::function<void (juce::String)>;
+    using RescanFn       = std::function<void()>;
     void setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInput,
-                                SelectDeviceFn selectOutput);
+                                SelectDeviceFn selectOutput, RescanFn rescan = {});
 
     void resized() override;
 
@@ -74,6 +75,7 @@ private:
     LoadModelFn loadModel_;
     GetDevicesFn   getDevices_;
     SelectDeviceFn selectInput_, selectOutput_;
+    RescanFn       rescanDevices_;
     std::vector<nam::ToneInfo> radioResults_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppShell)
