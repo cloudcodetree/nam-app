@@ -12,10 +12,12 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     library_ = std::make_unique<LibraryScreen>();
     live_    = std::make_unique<LiveScreen>();
     setup_   = std::make_unique<SetupScreen>();
+    devices_ = std::make_unique<DevicesScreen>();
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) radio_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get(), (juce::Component*) setup_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) setup_.get(),
+                                (juce::Component*) devices_.get() })
         addChildComponent (*c);
 
     play_->onNav = [this] (int tab) {
@@ -24,7 +26,9 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
                        case 3: show (Screen::Live);  break;
                        default: show (Screen::Play); break; }
     };
-    play_->onLibrary = [this] { show (Screen::Library); };
+    play_->onLibrary  = [this] { show (Screen::Library); };
+    play_->onSettings = [this] { show (Screen::Devices); };
+    devices_->onBack  = [this] { show (Screen::Play); };
     edit_->onDone    = [this] { show (Screen::Play); };
     radio_->onBack   = [this] { show (Screen::Play); };
     library_->onBack = [this] { show (Screen::Play); };
@@ -69,6 +73,29 @@ void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) 
     live_->onSelect  = [this] (nam::LibraryEntry e) { if (loadModel_) loadModel_ (e); };
 }
 
+void AppShell::setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInput,
+                                      SelectDeviceFn selectOutput) {
+    getDevices_   = std::move (get);
+    selectInput_  = std::move (selectInput);
+    selectOutput_ = std::move (selectOutput);
+
+    devices_->onRescan = [this] { refreshDevices(); };
+    devices_->onSelectInput = [this] (juce::String name) {
+        if (selectInput_) selectInput_ (name);
+        refreshDevices();
+    };
+    devices_->onSelectOutput = [this] (juce::String name) {
+        if (selectOutput_) selectOutput_ (name);
+        refreshDevices();
+    };
+}
+
+void AppShell::refreshDevices() {
+    if (! getDevices_) return;
+    const auto st = getDevices_();
+    devices_->setDevices (st.inputs, st.currentInput, st.outputs, st.currentOutput);
+}
+
 void AppShell::startOnSetup() { show (Screen::Setup); }
 
 bool AppShell::handleBackButton() {
@@ -80,6 +107,7 @@ void AppShell::show (Screen s) {
     // Refresh data-backed screens as they come into view.
     if (s == Screen::Library && getModels_) library_->setEntries (getModels_());
     if (s == Screen::Live && getModels_)     live_->setSlots (getModels_());
+    if (s == Screen::Devices)                refreshDevices();
 
     juce::Component* target = play_.get();
     switch (s) {
@@ -88,6 +116,7 @@ void AppShell::show (Screen s) {
         case Screen::Library: target = library_.get(); break;
         case Screen::Live:    target = live_.get();    break;
         case Screen::Setup:   target = setup_.get();   break;
+        case Screen::Devices: target = devices_.get(); break;
         case Screen::Play:    default: target = play_.get(); break;
     }
     if (current_ == target) return;
@@ -107,6 +136,7 @@ void AppShell::resized() {
     auto b = getLocalBounds();
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) radio_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get(), (juce::Component*) setup_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) setup_.get(),
+                                (juce::Component*) devices_.get() })
         if (c != nullptr) c->setBounds (b);
 }

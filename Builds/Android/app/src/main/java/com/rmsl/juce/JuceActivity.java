@@ -75,6 +75,10 @@ public class JuceActivity   extends Activity
         initEdgeToEdge();
 
         super.onCreate (savedInstanceState);
+
+        // Hardware volume rocker should drive the media stream (our audio
+        // output), not the ringer.
+        setVolumeControlStream (android.media.AudioManager.STREAM_MUSIC);
     }
 
     @Override

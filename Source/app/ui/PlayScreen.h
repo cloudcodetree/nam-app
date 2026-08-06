@@ -16,6 +16,7 @@ public:
 
     std::function<void (int)> onNav;      // 0=Play 1=Edit 2=Radio 3=Live
     std::function<void()>     onLibrary;
+    std::function<void()>     onSettings; // I/O pill -> audio device picker
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -31,7 +32,7 @@ private:
     // Hit / layout rects, computed in resized().
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_,
                          metersRow_, navBar_;
-    juce::Rectangle<int> libRect_, prevRect_, nextRect_, progressRect_;
+    juce::Rectangle<int> libRect_, ioRect_, prevRect_, nextRect_, progressRect_;
     std::array<juce::Rectangle<int>, 4> navRects_;
 
     void layout();

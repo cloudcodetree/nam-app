@@ -12,6 +12,7 @@
 #include "app/ui/LibraryScreen.h"
 #include "app/ui/LiveScreen.h"
 #include "app/ui/SetupScreen.h"
+#include "app/ui/DevicesScreen.h"
 
 // Cross-platform app shell: owns every screen and swaps the visible one on
 // navigation. Holds the shared dsp::ToneEngine so screens drive it. The
@@ -40,11 +41,22 @@ public:
     using LoadModelFn = std::function<void (nam::LibraryEntry)>;
     void setLibraryService (GetModelsFn getModels, LoadModelFn loadModel);
 
+    // Audio device service: enumerate inputs/outputs and apply a selection.
+    struct AudioDeviceState {
+        juce::StringArray inputs, outputs;
+        juce::String currentInput, currentOutput;
+    };
+    using GetDevicesFn   = std::function<AudioDeviceState()>;
+    using SelectDeviceFn = std::function<void (juce::String)>;
+    void setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInput,
+                                SelectDeviceFn selectOutput);
+
     void resized() override;
 
 private:
-    enum class Screen { Play, Edit, Library, Radio, Live, Setup };
+    enum class Screen { Play, Edit, Library, Radio, Live, Setup, Devices };
     void show (Screen s);
+    void refreshDevices();
 
     dsp::ToneEngine& engine_;
     std::unique_ptr<PlayScreen>    play_;
@@ -53,12 +65,15 @@ private:
     std::unique_ptr<LibraryScreen> library_;
     std::unique_ptr<LiveScreen>    live_;
     std::unique_ptr<SetupScreen>   setup_;
+    std::unique_ptr<DevicesScreen> devices_;
     juce::Component* current_ = nullptr;
 
     SearchFn    searchFn_;
     DownloadFn  downloadFn_;
     GetModelsFn getModels_;
     LoadModelFn loadModel_;
+    GetDevicesFn   getDevices_;
+    SelectDeviceFn selectInput_, selectOutput_;
     std::vector<nam::ToneInfo> radioResults_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppShell)

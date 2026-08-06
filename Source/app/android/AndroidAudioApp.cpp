@@ -27,6 +27,13 @@ AndroidAudioApp::AndroidAudioApp() {
     shell_->setLibraryService(
         [this] { return library_.all(nam::LibraryType::Model); },
         [this](nam::LibraryEntry e) { loadModelEntry(e); });
+    shell_->setAudioDeviceService(
+        [this] {
+            return AppShell::AudioDeviceState { inputDeviceNames(), outputDeviceNames(),
+                                                currentInputDevice(), currentOutputDevice() };
+        },
+        [this](juce::String name) { selectInputDevice(name); },
+        [this](juce::String name) { selectOutputDevice(name); });
 
     // First launch (empty library, never connected): show the setup/gain-stage.
     if (library_.all(nam::LibraryType::Model).empty() && ! t3kAuth_.hasValidToken())
@@ -34,12 +41,19 @@ AndroidAudioApp::AndroidAudioApp() {
 
     // 1 input (guitar) / 2 output. JUCE requests RECORD_AUDIO on input open.
     setAudioChannels(1, 2);
+
+    // Android opens "System Default (Input)" = built-in mic. If a USB guitar
+    // interface (iRig) is attached, route input to it instead.
+    deviceManager.addChangeListener(this);
+    preferUsbInput();
+
     setSize(900, 500);
     startTimerHz(30);
 }
 
 AndroidAudioApp::~AndroidAudioApp() {
     stopTimer();
+    deviceManager.removeChangeListener(this);
     shutdownAudio();
     setLookAndFeel(nullptr);
 }
@@ -95,6 +109,117 @@ void AndroidAudioApp::timerCallback() {
     if (shell_ != nullptr)
         shell_->setLevels(inPeak_.load(std::memory_order_relaxed),
                           engine_.outputPeak());
+
+    // Slow hot-plug poll (~every 3 s): Android doesn't notify JUCE when a USB
+    // interface appears, so rescan until one is adopted or the user picks.
+    if (! userChoseInput_ && ++rescanTick_ >= 90) {
+        rescanTick_ = 0;
+        preferUsbInput();
+    }
+}
+
+// --- Audio device selection -----------------------------------------------
+juce::StringArray AndroidAudioApp::inputDeviceNames() const {
+    if (auto* type = deviceManager.getCurrentDeviceTypeObject()) {
+        type->scanForDevices();
+        return type->getDeviceNames(true);
+    }
+    return {};
+}
+
+juce::StringArray AndroidAudioApp::outputDeviceNames() const {
+    if (auto* type = deviceManager.getCurrentDeviceTypeObject()) {
+        type->scanForDevices();
+        return type->getDeviceNames(false);
+    }
+    return {};
+}
+
+juce::String AndroidAudioApp::currentInputDevice() const {
+    // An empty setup name means "the default device" — resolve it so the
+    // picker can highlight the row that is actually live.
+    auto name = deviceManager.getAudioDeviceSetup().inputDeviceName;
+    if (name.isEmpty())
+        if (auto* type = deviceManager.getCurrentDeviceTypeObject()) {
+            const auto names = type->getDeviceNames(true);
+            const int def = type->getDefaultDeviceIndex(true);
+            if (def >= 0 && def < names.size()) name = names[def];
+        }
+    return name;
+}
+
+juce::String AndroidAudioApp::currentOutputDevice() const {
+    auto name = deviceManager.getAudioDeviceSetup().outputDeviceName;
+    if (name.isEmpty())
+        if (auto* type = deviceManager.getCurrentDeviceTypeObject()) {
+            const auto names = type->getDeviceNames(false);
+            const int def = type->getDefaultDeviceIndex(false);
+            if (def >= 0 && def < names.size()) name = names[def];
+        }
+    return name;
+}
+
+// Applies a device-setup change; on failure retries once letting the device
+// pick its own sample rate / buffer size (an explicit-device stream can reject
+// the rate the default stream was opened at).
+juce::String AndroidAudioApp::applyDeviceSetup(juce::AudioDeviceManager::AudioDeviceSetup setup) {
+    applyingDeviceChange_ = true;
+    auto err = deviceManager.setAudioDeviceSetup(setup, true);
+    if (err.isNotEmpty()) {
+        setup.sampleRate = 0;
+        setup.bufferSize = 0;
+        err = deviceManager.setAudioDeviceSetup(setup, true);
+    }
+    applyingDeviceChange_ = false;
+    return err;
+}
+
+void AndroidAudioApp::selectInputDevice(const juce::String& name) {
+    userChoseInput_ = true;   // manual pick wins over USB auto-select
+    auto setup = deviceManager.getAudioDeviceSetup();
+    if (setup.inputDeviceName == name) return;
+    setup.inputDeviceName = name;
+    setup.useDefaultInputChannels = true;
+    const auto err = applyDeviceSetup(setup);
+    juce::Logger::writeToLog("selectInputDevice(" + name + ") -> "
+                             + (err.isEmpty() ? "ok" : err)
+                             + " now=" + deviceManager.getAudioDeviceSetup().inputDeviceName);
+}
+
+void AndroidAudioApp::selectOutputDevice(const juce::String& name) {
+    auto setup = deviceManager.getAudioDeviceSetup();
+    if (setup.outputDeviceName == name) return;
+    setup.outputDeviceName = name;
+    setup.useDefaultOutputChannels = true;
+    const auto err = applyDeviceSetup(setup);
+    juce::Logger::writeToLog("selectOutputDevice(" + name + ") -> "
+                             + (err.isEmpty() ? "ok" : err));
+}
+
+void AndroidAudioApp::preferUsbInput() {
+    auto* type = deviceManager.getCurrentDeviceTypeObject();
+    if (type == nullptr) return;
+    type->scanForDevices();
+
+    juce::String usb;
+    for (const auto& n : type->getDeviceNames(true))
+        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usb = n; break; }
+    if (usb.isEmpty()) return;
+
+    auto setup = deviceManager.getAudioDeviceSetup();
+    if (setup.inputDeviceName == usb) return;
+    setup.inputDeviceName = usb;
+    setup.useDefaultInputChannels = true;
+    const auto err = applyDeviceSetup(setup);
+    juce::Logger::writeToLog("preferUsbInput(" + usb + ") -> "
+                             + (err.isEmpty() ? "ok" : err));
+}
+
+void AndroidAudioApp::changeListenerCallback(juce::ChangeBroadcaster*) {
+    // Device setup changed (stream restart etc.) — re-check USB routing unless
+    // we caused the change ourselves or the user made an explicit choice.
+    if (applyingDeviceChange_ || userChoseInput_) return;
+    preferUsbInput();
 }
 
 bool AndroidAudioApp::handleBackButton() {

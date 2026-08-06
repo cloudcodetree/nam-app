@@ -15,10 +15,19 @@
 // service and hosts the SHARED, cross-platform Hi-Fi UI (Source/app/ui). Only
 // this glue is Android-oriented; the screens are platform-agnostic JUCE.
 class AndroidAudioApp : public juce::AudioAppComponent,
-                        private juce::Timer {
+                        private juce::Timer,
+                        private juce::ChangeListener {
 public:
     AndroidAudioApp();
     ~AndroidAudioApp() override;
+
+    // Audio-device picker support (exposed to the settings UI).
+    juce::StringArray inputDeviceNames() const;
+    juce::StringArray outputDeviceNames() const;
+    juce::String currentInputDevice() const;
+    juce::String currentOutputDevice() const;
+    void selectInputDevice(const juce::String& name);
+    void selectOutputDevice(const juce::String& name);
 
     void prepareToPlay(int samplesPerBlockExpected, double sampleRate) override;
     void getNextAudioBlock(const juce::AudioSourceChannelInfo& info) override;
@@ -32,7 +41,13 @@ public:
 
 private:
     void timerCallback() override;
+    void changeListenerCallback(juce::ChangeBroadcaster*) override;
     std::string copyBundledModelToFile();
+
+    // Auto-route the guitar interface: if a USB input (iRig etc.) is present
+    // and the user hasn't picked one manually, switch input to it.
+    void preferUsbInput();
+    juce::String applyDeviceSetup(juce::AudioDeviceManager::AudioDeviceSetup setup);
 
     // TONE3000: connect (refresh, else browser) -> search / download+import.
     void doSearch(juce::String query,
@@ -60,4 +75,8 @@ private:
     std::vector<float> mono_;
     std::atomic<float> inPeak_ { 0.0f };
     bool modelLoaded_ = false;
+
+    bool applyingDeviceChange_ = false;  // re-entrancy guard for setAudioDeviceSetup
+    bool userChoseInput_ = false;        // manual pick disables USB auto-select
+    int  rescanTick_ = 0;                // slow hot-plug poll (timer runs at 30 Hz)
 };
