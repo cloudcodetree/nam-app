@@ -64,6 +64,10 @@ void PlayScreen::layout() {
     const int nw = navBar_.getWidth() / 4;
     for (int i = 0; i < 4; ++i)
         navRects_[(size_t) i] = { navBar_.getX() + i * nw, navBar_.getY(), nw, navBar_.getHeight() };
+
+    // The tuner panel (left half of the meters row) opens the strobe tuner.
+    tunerRect_ = { metersRow_.getX(), metersRow_.getY(),
+                   (metersRow_.getWidth() - 10) / 2, metersRow_.getHeight() };
 }
 
 void PlayScreen::paint (juce::Graphics& g) {
@@ -234,6 +238,7 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     if (nextRect_.contains (p)) { if (onNext) onNext(); return; }
     if (libRect_.contains (p)) { if (onLibrary) onLibrary(); return; }
     if (ioRect_.contains (p))  { if (onSettings) onSettings(); return; }
+    if (tunerRect_.contains (p)) { if (onTuner) onTuner(); return; }
     for (int i = 0; i < 4; ++i)
         if (navRects_[(size_t) i].contains (p)) { if (onNav) onNav (i); return; }
 }

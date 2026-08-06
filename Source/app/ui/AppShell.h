@@ -12,6 +12,7 @@
 #include "app/ui/LibraryScreen.h"
 #include "app/ui/LiveScreen.h"
 #include "app/ui/AudioSettingsScreen.h"
+#include "app/ui/TunerScreen.h"
 
 // Cross-platform app shell: owns every screen and swaps the visible one on
 // navigation. Holds the shared dsp::ToneEngine so screens drive it. The
@@ -73,7 +74,7 @@ public:
     void resized() override;
 
 private:
-    enum class Screen { Play, Edit, Library, Browse, Live, Devices };
+    enum class Screen { Play, Edit, Library, Browse, Live, Devices, Tuner };
     void show (Screen s);
     void refreshDevices();
     void runBrowseSearch (juce::String query);
@@ -89,6 +90,7 @@ private:
     std::unique_ptr<LibraryScreen> library_;
     std::unique_ptr<LiveScreen>    live_;
     std::unique_ptr<AudioSettingsScreen> devices_;
+    std::unique_ptr<TunerScreen>   tuner_;
     juce::Component* current_ = nullptr;
 
     BrowseServices svc_;

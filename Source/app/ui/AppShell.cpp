@@ -15,10 +15,12 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     library_ = std::make_unique<LibraryScreen>();
     live_    = std::make_unique<LiveScreen>();
     devices_ = std::make_unique<AudioSettingsScreen>();
+    tuner_   = std::make_unique<TunerScreen>();
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) browse_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get(), (juce::Component*) devices_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) devices_.get(),
+                                (juce::Component*) tuner_.get() })
         addChildComponent (*c);
 
     play_->onNav = [this] (int tab) {
@@ -31,6 +33,8 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_->onSettings = [this] { show (Screen::Devices); };
     play_->onPrev     = [this] { stepCollection (-1); };
     play_->onNext     = [this] { stepCollection (+1); };
+    play_->onTuner    = [this] { show (Screen::Tuner); };
+    tuner_->onBack    = [this] { show (Screen::Play); };
     devices_->onBack  = [this] { show (Screen::Play); };
     edit_->onDone    = [this] { show (Screen::Play); };
     browse_->onBack  = [this] { show (Screen::Play); };
@@ -316,6 +320,7 @@ void AppShell::show (Screen s) {
         case Screen::Library: target = library_.get(); break;
         case Screen::Live:    target = live_.get();    break;
         case Screen::Devices: target = devices_.get(); break;
+        case Screen::Tuner:   target = tuner_.get();   break;
         case Screen::Play:    default: target = play_.get(); break;
     }
     if (current_ == target) return;
@@ -333,6 +338,7 @@ void AppShell::setLevels (float in, float out) {
 
 void AppShell::setTunerPitch (float hz) {
     if (play_ == nullptr) return;
+    if (tuner_ != nullptr) tuner_->setPitch (hz);
     if (hz <= 0.0f) { play_->setTuner ({}, 0.0f, false); return; }
     static const char* names[] = { "C", "C#", "D", "D#", "E", "F",
                                    "F#", "G", "G#", "A", "A#", "B" };
@@ -348,6 +354,7 @@ void AppShell::resized() {
     auto b = getLocalBounds();
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) browse_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get(), (juce::Component*) devices_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) devices_.get(),
+                                (juce::Component*) tuner_.get() })
         if (c != nullptr) c->setBounds (b);
 }
