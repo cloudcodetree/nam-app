@@ -133,8 +133,12 @@ std::string buildRefreshFormBody(const std::string& publishableKey,
 }
 
 std::string modelsUrl(const std::string& toneId, const std::string& architecture) {
-    return std::string(kBaseUrl) + "/models?tone_id=" + urlEncode(toneId) +
-           "&architecture=" + urlEncode(architecture) + "&page_size=50";
+    std::string url = std::string(kBaseUrl) + "/models?tone_id=" + urlEncode(toneId);
+    // architecture is an optional filter; omitting it returns the tone's
+    // full file list (all NAM architectures, IR file sets).
+    if (!architecture.empty())
+        url += "&architecture=" + urlEncode(architecture);
+    return url + "&page_size=50";
 }
 
 TokenResponse parseTokenResponse(const std::string& json) {

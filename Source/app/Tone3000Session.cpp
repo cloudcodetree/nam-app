@@ -372,10 +372,11 @@ public:
           done_(std::move(done)) {}
 
     void run() override {
+        // Merge BOTH architecture lists (deduped by id): the site shows every
+        // file a tone has — A2 and A1 variants, and IR file sets.
         std::vector<nam::ModelInfo> models;
         juce::String error;
-        bool ok = false;
-        for (const char* architecture : {"2", "1"}) {
+        for (const char* architecture : {"2", "1", ""}) {
             if (threadShouldExit()) { error = "cancelled"; break; }
             const juce::URL url{juce::String(nam::modelsUrl(toneId_, architecture))};
             juce::MemoryBlock bytes;
@@ -386,10 +387,16 @@ public:
             }
             const juce::String body =
                 juce::String::createStringFromData(bytes.getData(), (int) bytes.getSize());
-            models = nam::parseModelList(body.toStdString());
-            if (!models.empty()) { ok = true; error.clear(); break; }
+            for (auto& m : nam::parseModelList(body.toStdString())) {
+                bool seen = false;
+                for (const auto& existing : models)
+                    if (existing.id == m.id) { seen = true; break; }
+                if (!seen) models.push_back(std::move(m));
+            }
         }
-        if (!ok && error.isEmpty()) error = "no models for this tone";
+        const bool ok = !models.empty();
+        if (ok) error.clear();
+        else if (error.isEmpty()) error = "no models for this tone";
 
         auto callback = std::move(done_);
         if (callback) {

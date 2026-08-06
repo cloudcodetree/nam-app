@@ -107,7 +107,8 @@ void AppShell::setBrowseServices (BrowseServices services) {
         const auto model = models[(size_t) modelIdx];
         browse_->setLoading (idx, 0.04f);
         browse_->setStatus ("Preparing variant" + kEllipsis);
-        svc_.auditionModel (tone.id, model, [this, idx, modelIdx] (bool ok, juce::String msg) {
+        svc_.auditionModel (tone.id, model, tone.format == "ir",
+                            [this, idx, modelIdx] (bool ok, juce::String msg) {
             browse_->setLoading (-1, 0.0f);
             if (! ok) { browse_->setStatus ("Audition failed: " + msg); return; }
             auditioningPack_ = idx;
@@ -246,6 +247,10 @@ void AppShell::show (Screen s) {
         browseLoadedOnce_ = true;
         runBrowseSearch ({});
     }
+    // While browsing, the live guitar path is muted: stopping an audition
+    // must mean silence, not the mic through an amp model. Play re-arms it.
+    if (svc_.muteLiveInput)
+        svc_.muteLiveInput (s == Screen::Browse);
     // Leaving Browse stops any audition demo.
     if (s != Screen::Browse && auditioningPack_ >= 0)
         stopAudition();

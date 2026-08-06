@@ -23,6 +23,7 @@ AndroidAudioApp::AndroidAudioApp() {
     if ((__system_property_get("ro.boot.qemu", qemu) > 0 && qemu[0] == '1')
         || (__system_property_get("ro.kernel.qemu", qemu) > 0 && qemu[0] == '1')) {
         liveMuted_.store(true, std::memory_order_relaxed);
+        alwaysMuteLive_ = true;
         preRenderAuditions_ = true;   // QEMU can't run NAM inference in real time
     }
 
@@ -45,9 +46,11 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.audition = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doAudition(std::move(t), std::move(done));
     };
-    browse.auditionModel = [this](std::string toneId, nam::ModelInfo m, AppShell::DoneFn done) {
-        doAuditionModel(toneId, m, std::move(done));
+    browse.auditionModel = [this](std::string toneId, nam::ModelInfo m, bool isIr,
+                                  AppShell::DoneFn done) {
+        doAuditionModel(toneId, m, isIr, std::move(done));
     };
+    browse.muteLiveInput = [this](bool m) { setLiveInputMuted(m); };
     browse.listModels = [this](std::string toneId,
             std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
         doListModels(toneId, std::move(done));
@@ -655,7 +658,7 @@ void AndroidAudioApp::setDemoActive(bool on) {
 }
 
 void AndroidAudioApp::setLiveInputMuted(bool muted) {
-    liveMuted_.store(muted, std::memory_order_relaxed);
+    liveMuted_.store(muted || alwaysMuteLive_, std::memory_order_relaxed);
 }
 
 void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered, bool preservePosition) {
@@ -835,42 +838,46 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
     });
 }
 
-// IR tones: the downloaded .wav becomes the cab impulse under whatever amp
-// model is loaded. Live devices swap it in gapless; the emulator re-renders
-// the bundled model with this IR.
+// Loads a downloaded IR .wav as the engine's cab impulse under the current
+// amp model. Live devices swap it in gapless; the emulator re-renders the
+// bundled model with this IR.
+void AndroidAudioApp::applyIrAudition(juce::File irWav, const std::string& cacheKey,
+                                       juce::String displayName,
+                                       std::function<void(bool, juce::String)> done) {
+    auto ir = nam::loadImpulseResponse(irWav.getFullPathName().toStdString(),
+                                       (int) sampleRate_, dsp::kMaxIrTaps);
+    if (ir == nullptr) { done(false, "IR load failed"); return; }
+    engine_.setImpulse(ir);
+    engine_.setIrEnabled(true);
+    if (preRenderAuditions_) {
+        auditionFromFile(juce::File(juce::String(copyBundledModelToFile())),
+                         false, cacheKey, displayName, done, ir);
+        return;
+    }
+    if (! demoOn_.load(std::memory_order_relaxed)) {
+        demoPos_.store(0, std::memory_order_relaxed);
+        demoLive_.store(true, std::memory_order_relaxed);
+        demoOn_.store(true, std::memory_order_relaxed);
+    }
+    done(true, displayName);
+}
+
 void AndroidAudioApp::doAuditionIr(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
     const auto irFile = modelCacheFile("ir_" + tone.id);
-    auto apply = [this, done, tone](juce::File f) {
-        auto ir = nam::loadImpulseResponse(f.getFullPathName().toStdString(),
-                                           (int) sampleRate_, dsp::kMaxIrTaps);
-        if (ir == nullptr) { done(false, "IR load failed"); return; }
-        engine_.setImpulse(ir);
-        engine_.setIrEnabled(true);
-        if (preRenderAuditions_) {
-            const std::string key = tone.id + "#ir#" + std::to_string(demoTrack_);
-            auditionFromFile(juce::File(juce::String(copyBundledModelToFile())),
-                             false, key, juce::String(tone.title), done, ir);
-            return;
-        }
-        if (! demoOn_.load(std::memory_order_relaxed)) {
-            demoPos_.store(0, std::memory_order_relaxed);
-            demoLive_.store(true, std::memory_order_relaxed);
-            demoOn_.store(true, std::memory_order_relaxed);
-        }
-        done(true, juce::String(tone.title));
-    };
+    const std::string key = tone.id + "#ir#" + std::to_string(demoTrack_);
+    const juce::String title (tone.title);
 
-    if (irFile.existsAsFile()) { apply(irFile); return; }
-    withValidToken([this, tone, done, irFile, apply](bool ok) {
+    if (irFile.existsAsFile()) { applyIrAudition(irFile, key, title, done); return; }
+    withValidToken([this, tone, done, irFile, key, title](bool ok) {
         if (! ok) { done(false, "connect first"); return; }
         const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
         t3kSession_->downloadToneModel(tone.id, tempDir,
-            [done, irFile, apply](bool dlOk, juce::File file, juce::String nameOrErr) {
+            [this, done, irFile, key, title](bool dlOk, juce::File file, juce::String nameOrErr) {
                 if (! dlOk) { done(false, nameOrErr); return; }
                 irFile.getParentDirectory().createDirectory();
-                if (file.moveFileTo(irFile)) apply(irFile);
-                else apply(file);
+                if (file.moveFileTo(irFile)) applyIrAudition(irFile, key, title, done);
+                else applyIrAudition(file, key, title, done);
             });
     });
 }
@@ -945,9 +952,9 @@ void AndroidAudioApp::doDownloadOnly(nam::ToneInfo tone,
 }
 
 void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::ModelInfo& model,
-        std::function<void(bool, juce::String)> done) {
+        bool isIr, std::function<void(bool, juce::String)> done) {
     const std::string key = toneId + "#" + model.id + "#" + std::to_string(demoTrack_)
-                            + "#c" + std::to_string(cab_);
+                            + (isIr ? "#ir" : "#c" + std::to_string(cab_));
     const juce::String display (model.name.empty() ? model.id : model.name);
     if (const auto* hit = cachedAudition(key)) {
         installRenderedDemo(std::vector<float>(*hit), true);
@@ -956,23 +963,24 @@ void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::Mode
     }
 
     const auto cachedFile = modelCacheFile("m_" + toneId + "_" + model.id);
-    if (cachedFile.existsAsFile()) {
-        auditionFromFile(cachedFile, false, key, display, done);
-        return;
-    }
+    auto play = [this, isIr, key, display, done](juce::File f, bool deleteAfter) {
+        if (isIr) applyIrAudition(f, key, display, done);   // IR variant = cab swap
+        else auditionFromFile(f, deleteAfter, key, display, done);
+    };
+    if (cachedFile.existsAsFile()) { play(cachedFile, false); return; }
 
-    withValidToken([this, model, done, key, cachedFile](bool ok) {
+    withValidToken([this, model, done, cachedFile, play](bool ok) {
         if (! ok) { done(false, "connect first"); return; }
         const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
         t3kSession_->downloadModel(model, tempDir,
-            [this, done, key, cachedFile](bool dlOk, juce::File file, juce::String nameOrErr) {
+            [this, done, cachedFile, play](bool dlOk, juce::File file, juce::String nameOrErr) {
                 if (! dlOk) { done(false, nameOrErr); return; }
                 cachedFile.getParentDirectory().createDirectory();
                 if (file.moveFileTo(cachedFile)) {
                     pruneModelCache();
-                    auditionFromFile(cachedFile, false, key, nameOrErr, done);
+                    play(cachedFile, false);
                 } else {
-                    auditionFromFile(file, true, key, nameOrErr, done);
+                    play(file, true);
                 }
             });
     });

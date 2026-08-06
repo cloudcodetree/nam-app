@@ -39,7 +39,8 @@ public:
         DownloadFn keep;           // favorite: import the downloaded model
         DownloadFn downloadOnly;   // fetch best quality locally, no play/import
         AuditionFn audition;                                   // auto variant
-        std::function<void (std::string, nam::ModelInfo, DoneFn)> auditionModel;
+        std::function<void (std::string, nam::ModelInfo, bool /*isIr*/, DoneFn)> auditionModel;
+        std::function<void (bool)> muteLiveInput;   // Browse mutes the guitar path
         std::function<void (std::string,
             std::function<void (bool, std::vector<nam::ModelInfo>, juce::String)>)> listModels;
         // Async: may need to fetch the DI track first (full TONE3000 catalog).

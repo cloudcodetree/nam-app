@@ -71,7 +71,10 @@ private:
     // Audition: download a tone's model (no library import), render the
     // selected dry demo riff through it offline, and loop the result.
     void doAudition(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
-    void doAuditionModel(const std::string& toneId, const nam::ModelInfo& model,
+    void doAuditionModel(const std::string& toneId, const nam::ModelInfo& model, bool isIr,
+                         std::function<void(bool, juce::String)> done);
+    void applyIrAudition(juce::File irWav, const std::string& cacheKey,
+                         juce::String displayName,
                          std::function<void(bool, juce::String)> done);
     void doListModels(const std::string& toneId,
                       std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done);
@@ -142,6 +145,7 @@ private:
     std::atomic<size_t> demoPos_ { 0 };
     std::atomic<bool>   demoOn_ { false };
     std::atomic<bool>   liveMuted_ { false };
+    bool alwaysMuteLive_ = false;   // emulator: synthetic mic, never unmute
 
     bool applyingDeviceChange_ = false;  // re-entrancy guard for setAudioDeviceSetup
     bool userChoseInput_ = false;        // manual pick disables USB auto-select
