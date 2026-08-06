@@ -91,7 +91,7 @@ void AppShell::setBrowseServices (BrowseServices services) {
         if (! svc_.audition) return;
         const auto tone = browseResults_[(size_t) idx];
         browse_->setLoading (idx, 0.04f);
-        browse_->setStatus ("Loading \"" + juce::String (tone.title) + "\"" + kEllipsis);
+        browse_->setStatus ("Preparing \"" + juce::String (tone.title) + "\"" + kEllipsis);
         svc_.audition (tone, [this, idx, tone] (bool ok, juce::String msg) {
             browse_->setLoading (-1, 0.0f);
             if (! ok) { browse_->setStatus ("Audition failed: " + msg); return; }
@@ -110,7 +110,7 @@ void AppShell::setBrowseServices (BrowseServices services) {
         const auto tone = browseResults_[(size_t) idx];
         const auto model = models[(size_t) modelIdx];
         browse_->setLoading (idx, 0.04f);
-        browse_->setStatus ("Loading variant" + kEllipsis);
+        browse_->setStatus ("Preparing variant" + kEllipsis);
         svc_.auditionModel (tone.id, model, [this, idx, modelIdx] (bool ok, juce::String msg) {
             browse_->setLoading (-1, 0.0f);
             if (! ok) { browse_->setStatus ("Audition failed: " + msg); return; }

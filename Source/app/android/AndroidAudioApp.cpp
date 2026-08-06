@@ -742,18 +742,22 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         }
     }
 
-    // Local model file? Prefer the best-quality keep download, else the
-    // audition (smallest) one. Either way: no network.
+    // Local model file? No network either way. Live mode prefers the
+    // best-quality keep download; pre-render mode (emulator) prefers the
+    // smallest variant — a full-size model takes far longer to render.
     const auto keepFile = modelCacheFile("keep_" + tone.id);
-    if (keepFile.existsAsFile()) {
-        auditionFromFile(keepFile, false, key, juce::String(tone.title), done);
+    const auto autoFile = modelCacheFile("auto_" + tone.id);
+    const auto& first  = preRenderAuditions_ ? autoFile : keepFile;
+    const auto& second = preRenderAuditions_ ? keepFile : autoFile;
+    if (first.existsAsFile()) {
+        auditionFromFile(first, false, key, juce::String(tone.title), done);
         return;
     }
-    const auto cachedFile = modelCacheFile("auto_" + tone.id);
-    if (cachedFile.existsAsFile()) {
-        auditionFromFile(cachedFile, false, key, juce::String(tone.title), done);
+    if (second.existsAsFile()) {
+        auditionFromFile(second, false, key, juce::String(tone.title), done);
         return;
     }
+    const auto cachedFile = autoFile;   // download target below
 
     withValidToken([this, tone, done, key, cachedFile](bool ok) {
         if (! ok) { done(false, "connect first"); return; }
