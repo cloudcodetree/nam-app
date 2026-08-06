@@ -459,9 +459,9 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
     // MIT-licensed web-player repo (48 kHz mono 24-bit). Decoded with
     // dr_wav; linear-resampled if the device rate differs. Falls back to
     // the synthesized riffs below if anything is missing.
-    const char* diResources[3] = { "di_chords_wav", "di_lead_wav", "di_chugs_wav" };
+    const char* diResources[4] = { "di_chords_wav", "di_lead_wav", "di_chugs_wav", "di_bass_wav" };
     bool allDecoded = true;
-    for (int t = 0; t < 3; ++t) {
+    for (int t = 0; t < 4; ++t) {
         int size = 0;
         const char* data = BinaryData::getNamedResource(diResources[t], size);
         bool ok = false;
@@ -524,10 +524,11 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
     buildKsLoop(demoTracks_[0], sr, 3.2, chords, std::size(chords));
     buildKsLoop(demoTracks_[1], sr, 3.2, lead,   std::size(lead));
     buildKsLoop(demoTracks_[2], sr, 3.2, chugs,  std::size(chugs));
+    demoTracks_[3] = demoTracks_[0];   // bass fallback: reuse chords synth
 }
 
 void AndroidAudioApp::setDemoTrack(int index) {
-    demoTrack_ = juce::jlimit(0, 2, index);
+    demoTrack_ = juce::jlimit(0, 3, index);
 }
 
 void AndroidAudioApp::setDemoActive(bool on) {

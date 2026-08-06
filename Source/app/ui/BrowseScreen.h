@@ -48,6 +48,8 @@ private:
     int expanded_ = -1;
     int playingPack_ = -1, playingModel_ = -1;
     int demoTrack_ = 0;
+    bool diMenuOpen_ = false;
+    std::vector<juce::Rectangle<int>> diMenuRowRects() const;   // screen space
     int sort_ = 0;                            // 0 trending · 1 most kept
     bool filtersOpen_ = false;
     juce::StringArray selectedTags_;          // active filter chips
@@ -65,8 +67,7 @@ private:
     struct Row {
         juce::Rectangle<int> frame, header, playBtn, badge;
         std::vector<juce::Rectangle<int>> modelRects;
-        std::vector<juce::Rectangle<int>> trackChips;
-        juce::Rectangle<int> keepBtn;
+        juce::Rectangle<int> diBtn, keepBtn;
     };
     std::vector<Row> rows_;
     juce::Rectangle<int> listArea_;

@@ -104,7 +104,7 @@ private:
     void renderAuditionFile(juce::File file, std::string cacheKey,
                             juce::String displayName,
                             std::function<void(bool, juce::String)> done);
-    std::array<std::vector<float>, 3> demoTracks_;   // chords / lead / chugs
+    std::array<std::vector<float>, 4> demoTracks_;   // chords / lead / chugs / bass
     int demoTrack_ = 0;
     // Rendered-audition cache (message thread only): tone id -> processed
     // riff. Re-tapping a tone plays instantly instead of re-downloading and

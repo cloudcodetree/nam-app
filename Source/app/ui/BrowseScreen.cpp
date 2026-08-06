@@ -18,7 +18,13 @@ constexpr int kDragThreshold = 8;
 
 const char* kTagChips[]  = { "metal", "blues", "clean", "vintage", "high gain" };
 const char* kMakeChips[] = { "Marshall", "Fender", "Vox", "Mesa", "Orange", "EVH" };
-const char* kTrackNames[] = { "CHORDS", "LEAD", "CHUGS" };
+// TONE3000 web-player DI tracks (bundled; names as published in their repo).
+const char* kDiNames[] = { "Mayer - Guitar", "Slide Lead - Guitar",
+                           "Metalcore - Guitar", "Smokin' - Bass" };
+const char* kDiDescs[] = { "clean chords", "expressive slide lead",
+                           "palm-muted metal", "fingerstyle bass groove" };
+constexpr int kNumDi = 4;
+constexpr int kDiRowH = 44;
 }
 
 BrowseScreen::BrowseScreen() {
@@ -146,11 +152,8 @@ void BrowseScreen::relayout() {
         row.badge   = { row.header.getRight() - 58, y + rowH / 2 - 11, 46, 22 };
         if (open) {
             int iy = y + rowH + 4;
-            row.trackChips.clear();
-            const int tw = (listArea_.getWidth() - 24 - 12) / 3;
-            for (int t = 0; t < 3; ++t)
-                row.trackChips.push_back ({ listArea_.getX() + 12 + t * (tw + 6), iy, tw, 30 });
-            iy += 38;
+            row.diBtn = { listArea_.getX() + 12, iy, listArea_.getWidth() - 24, 40 };
+            iy += 48;
             row.modelRects.clear();
             const int nModels = models_[i].size();
             if (nModels == 0) iy += 26;    // "loading models…" line
@@ -271,21 +274,28 @@ void BrowseScreen::paint (juce::Graphics& g) {
 
         if (! open) continue;
 
-        // Demo riff chips
-        for (int c = 0; c < 3 && c < (int) row.trackChips.size(); ++c) {
-            const bool on = (c == demoTrack_);
-            auto cr = S (row.trackChips[(size_t) c]);
-            drawPill (g, cr.toFloat(), on ? col::accentA (0.12f) : juce::Colours::transparentBlack,
-                      on ? col::accentA (0.6f) : col::inkA (0.16f));
-            text (kTrackNames[c], uiFontTracked (10.0f, true),
-                  on ? col::accentAlt : col::inkA (0.6f), cr, juce::Justification::centred);
+        // Demo DI dropdown button
+        {
+            auto db = S (row.diBtn);
+            g.setColour (col::inkA (0.04f));
+            g.fillRoundedRectangle (db.toFloat(), 10.0f);
+            g.setColour (diMenuOpen_ ? col::accentA (0.5f) : col::inkA (0.16f));
+            g.drawRoundedRectangle (db.toFloat().reduced (0.5f), 10.0f, 1.0f);
+            auto inner = db.reduced (12, 0);
+            text (juce::String::fromUTF8 ("\xE2\x99\xAB"), uiFont (12.0f, false),
+                  col::inkA (0.45f), inner.removeFromLeft (20), juce::Justification::centredLeft);
+            text (juce::String::fromUTF8 (diMenuOpen_ ? "\xE2\x96\xB4" : "\xE2\x96\xBE"),
+                  uiFont (10.0f, false), col::inkA (0.5f),
+                  inner.removeFromRight (16), juce::Justification::centred);
+            text ("Demo: " + juce::String (kDiNames[demoTrack_]), uiFont (12.0f, true),
+                  col::ink, inner, juce::Justification::centredLeft);
         }
 
         // Model variants
         if (models_[i].isEmpty()) {
             text ("loading models" + juce::String::fromUTF8 ("\xE2\x80\xA6"), uiFont (12.0f, false),
                   col::inkA (0.4f),
-                  { frame.getX() + 24, S (row.trackChips[0]).getBottom() + 8, frame.getWidth() - 40, 22 },
+                  { frame.getX() + 24, S (row.diBtn).getBottom() + 8, frame.getWidth() - 40, 22 },
                   juce::Justification::centredLeft);
         }
         for (int mI = 0; mI < models_[i].size() && mI < (int) row.modelRects.size(); ++mI) {
@@ -330,6 +340,35 @@ void BrowseScreen::paint (juce::Graphics& g) {
     }
     g.restoreState();
 
+    // DI dropdown menu — drawn over everything, anchored to the open row's
+    // dropdown button.
+    if (diMenuOpen_ && expanded_ >= 0 && expanded_ < (int) rows_.size()) {
+        const auto rowRects = diMenuRowRects();
+        if (! rowRects.empty()) {
+            auto panel = rowRects.front().getUnion (rowRects.back()).expanded (0, 4);
+            juce::DropShadow (juce::Colours::black.withAlpha (0.6f), 24, { 0, 10 })
+                .drawForRectangle (g, panel);
+            g.setColour (col::bgGradTop.brighter (0.03f));
+            g.fillRoundedRectangle (panel.toFloat(), 10.0f);
+            g.setColour (col::inkA (0.18f));
+            g.drawRoundedRectangle (panel.toFloat().reduced (0.5f), 10.0f, 1.0f);
+            for (int d = 0; d < kNumDi && d < (int) rowRects.size(); ++d) {
+                const bool on = (d == demoTrack_);
+                auto rr = rowRects[(size_t) d];
+                if (on) { g.setColour (col::accentA (0.08f)); g.fillRect (rr); }
+                auto inner = rr.reduced (14, 4);
+                text (on ? juce::String::fromUTF8 ("\xE2\x9C\x93") : juce::String(),
+                      uiFont (11.0f, false), col::accentAlt,
+                      inner.removeFromLeft (16), juce::Justification::centredLeft);
+                text (kDiNames[d], uiFont (12.0f, true), on ? col::accentAlt : col::ink,
+                      inner.removeFromTop (inner.getHeight() / 2 + 3),
+                      juce::Justification::bottomLeft);
+                text (kDiDescs[d], uiFont (10.0f, false), col::inkA (0.4f),
+                      inner, juce::Justification::topLeft);
+            }
+        }
+    }
+
     // Status
     g.setColour (col::inkA (0.06f));
     g.fillRect (statusRect_.getX(), statusRect_.getY(), statusRect_.getWidth(), 1);
@@ -337,10 +376,27 @@ void BrowseScreen::paint (juce::Graphics& g) {
           statusRect_.reduced (20, 0), juce::Justification::centred);
 }
 
+std::vector<juce::Rectangle<int>> BrowseScreen::diMenuRowRects() const {
+    std::vector<juce::Rectangle<int>> out;
+    if (expanded_ < 0 || expanded_ >= (int) rows_.size()) return out;
+    const auto btn = rows_[(size_t) expanded_].diBtn.translated (0, listArea_.getY() - (int) scrollY_);
+    int top = btn.getBottom() + 4;
+    const int totalH = kNumDi * kDiRowH;
+    if (top + totalH > getHeight() - 40)               // overflow: open upwards
+        top = juce::jmax (8, btn.getY() - 4 - totalH);
+    for (int d = 0; d < kNumDi; ++d)
+        out.push_back ({ btn.getX(), top + d * kDiRowH, btn.getWidth(), kDiRowH });
+    return out;
+}
+
 void BrowseScreen::mouseDown (const juce::MouseEvent& e) {
     pressY_ = e.getPosition().y;
     pressScroll_ = scrollY_;
     dragged_ = false;
+    // Keep keyboard focus off the search field unless it was tapped —
+    // otherwise Android re-shows the soft keyboard on every tap.
+    if (! searchBox_.contains (e.getPosition()))
+        unfocusAllComponents();
 }
 
 void BrowseScreen::mouseDrag (const juce::MouseEvent& e) {
@@ -355,12 +411,24 @@ void BrowseScreen::mouseDrag (const juce::MouseEvent& e) {
 }
 
 void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
-    if (dragged_) return;
+    if (dragged_) { diMenuOpen_ = false; return; }
     const auto p = e.getPosition();
 
-    // Tapping outside the search field dismisses the soft keyboard.
-    if (! searchBox_.contains (p) && search_.hasKeyboardFocus (true))
-        unfocusAllComponents();
+    // Open DI menu consumes the tap: pick a track or dismiss.
+    if (diMenuOpen_) {
+        const auto rowRects = diMenuRowRects();
+        for (int d = 0; d < (int) rowRects.size(); ++d)
+            if (rowRects[(size_t) d].contains (p)) {
+                demoTrack_ = d;
+                diMenuOpen_ = false;
+                if (onDemoTrack) onDemoTrack (d);
+                repaint();
+                return;
+            }
+        diMenuOpen_ = false;
+        repaint();
+        return;
+    }
 
     if (backRect_.expanded (10).contains (p)) { if (onBack) onBack(); return; }
     if (filtersBtn_.contains (p)) { filtersOpen_ = ! filtersOpen_; relayout(); repaint(); return; }
@@ -388,13 +456,11 @@ void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
 
         if (row.playBtn.contains (cp)) { if (onPlayPack) onPlayPack ((int) i); return; }
         if (open) {
-            for (int c = 0; c < (int) row.trackChips.size(); ++c)
-                if (row.trackChips[(size_t) c].contains (cp)) {
-                    demoTrack_ = c;
-                    if (onDemoTrack) onDemoTrack (c);
-                    repaint();
-                    return;
-                }
+            if (row.diBtn.contains (cp)) {
+                diMenuOpen_ = true;
+                repaint();
+                return;
+            }
             for (int mI = 0; mI < (int) row.modelRects.size(); ++mI)
                 if (row.modelRects[(size_t) mI].contains (cp)) {
                     if (onPlayModel) onPlayModel ((int) i, mI);
@@ -404,6 +470,7 @@ void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
         }
         if (row.header.contains (cp)) {
             expanded_ = open ? -1 : (int) i;
+            diMenuOpen_ = false;
             relayout();
             repaint();
             if (! open && onExpand && models_[i].isEmpty()) onExpand ((int) i);

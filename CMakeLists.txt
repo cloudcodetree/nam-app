@@ -80,7 +80,8 @@ if(NAM_BUILD_APP)
             # chugs="Metalcore".
             ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_chords.wav
             ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_lead.wav
-            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_chugs.wav)
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_chugs.wav
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_bass.wav)
 
         target_sources(NamPlayer PRIVATE
             Source/app/android/AndroidMain.cpp
