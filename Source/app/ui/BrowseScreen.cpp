@@ -51,7 +51,23 @@ BrowseScreen::~BrowseScreen() { stopTimer(); }
 
 void BrowseScreen::timerCallback() {
     ++animTicks_;
-    if (playingPack_ >= 0) repaint (listArea_);
+    if (playingPack_ >= 0 || loadingPack_ >= 0) repaint (listArea_);
+}
+
+void BrowseScreen::setLoading (int packIdx, float progress) {
+    loadingPack_ = packIdx;
+    loadProgress_ = juce::jlimit (0.0f, 1.0f, progress);
+    repaint (listArea_);
+}
+
+void BrowseScreen::setLoadingProgress (float progress) {
+    loadProgress_ = juce::jlimit (0.0f, 1.0f, progress);
+    if (loadingPack_ >= 0) repaint (listArea_);
+}
+
+void BrowseScreen::setCachedFlags (std::vector<bool> cached) {
+    cached_ = std::move (cached);
+    repaint (listArea_);
 }
 
 juce::String BrowseScreen::composedQuery() const {
@@ -71,6 +87,7 @@ void BrowseScreen::setResults (std::vector<nam::ToneInfo> tones) {
                           [] (const auto& a, const auto& b) { return a.downloads > b.downloads; });
     models_.assign (tones_.size(), {});
     kept_.assign (tones_.size(), false);
+    cached_.assign (tones_.size(), false);
     expanded_ = -1;
     playingPack_ = playingModel_ = -1;
     scrollY_ = 0.0f;
@@ -250,14 +267,31 @@ void BrowseScreen::paint (juce::Graphics& g) {
         g.setColour (packPlaying ? col::accentA (0.5f) : open ? col::accentA (0.35f) : col::inkA (0.1f));
         g.drawRoundedRectangle (frame.toFloat().reduced (0.5f), 14.0f, 1.0f);
 
-        // Header line: ▶ + title/meta + badge
+        // Header line: ▶ + title/meta + badge. Cached (instant-play) packs
+        // show an inverted button: filled ink circle, dark glyph.
         auto play = S (row.playBtn);
-        g.setColour (packPlaying ? col::accent : juce::Colours::transparentBlack);
+        const bool packLoading = ((int) i == loadingPack_);
+        const bool packCached = i < cached_.size() && cached_[i] && ! packPlaying && ! packLoading;
+        g.setColour (packPlaying ? col::accent
+                     : packCached ? col::ink : juce::Colours::transparentBlack);
         g.fillEllipse (play.toFloat());
-        g.setColour (packPlaying ? col::accent : col::inkA (0.25f));
+        g.setColour (packPlaying ? col::accent
+                     : packCached ? col::ink : col::inkA (packLoading ? 0.12f : 0.25f));
         g.drawEllipse (play.toFloat().reduced (0.5f), 1.0f);
         text (packPlaying ? kStop : kPlay, uiFont (13.0f, false),
-              packPlaying ? col::inkOnAccent : col::ink, play, juce::Justification::centred);
+              packPlaying ? col::inkOnAccent
+              : packCached ? col::bg : col::inkA (packLoading ? 0.45f : 1.0f),
+              play, juce::Justification::centred);
+        if (packLoading) {
+            // Clockwise progress ring from 12 o'clock around the button.
+            juce::Path arc;
+            const auto b = play.toFloat().expanded (3.5f);
+            arc.addArc (b.getX(), b.getY(), b.getWidth(), b.getHeight(),
+                        0.0f, juce::MathConstants<float>::twoPi * loadProgress_, true);
+            g.setColour (col::meterLime);
+            g.strokePath (arc, juce::PathStrokeType (2.5f, juce::PathStrokeType::curved,
+                                                     juce::PathStrokeType::rounded));
+        }
 
         auto head = S (row.header).withTrimmedLeft (64).withTrimmedRight (64);
         text (juce::String (t.title), uiFont (14.0f, true), col::ink,

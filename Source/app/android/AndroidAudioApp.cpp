@@ -48,6 +48,9 @@ AndroidAudioApp::AndroidAudioApp() {
     };
     browse.setDemoTrack = [this](int t) { setDemoTrack(t); };
     browse.stopDemo     = [this] { setDemoActive(false); };
+    browse.isAuditionCached = [this](std::string toneId) {
+        return cachedAudition(toneId + "#auto#" + std::to_string(demoTrack_)) != nullptr;
+    };
     shell_->setBrowseServices(std::move(browse));
     shell_->setLibraryService(
         [this] { return library_.all(nam::LibraryType::Model); },
@@ -564,6 +567,16 @@ const std::vector<float>* AndroidAudioApp::cachedAudition(const std::string& ton
     return nullptr;
 }
 
+void AndroidAudioApp::withValidToken(std::function<void(bool)> then) {
+    auto finish = [this, then](bool ok) {
+        if (ok)
+            t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+        then(ok);
+    };
+    if (t3kAuth_.hasValidToken()) { finish(true); return; }
+    t3kAuth_.tryRefresh([finish](bool refreshed) { finish(refreshed); });
+}
+
 // Renders the selected dry riff through the model file OFFLINE (background
 // thread, separate engine instance) — playback then costs nothing on the
 // audio thread. Deletes the file afterwards; caches under `cacheKey`.
@@ -587,10 +600,22 @@ void AndroidAudioApp::renderAuditionFile(juce::File file, std::string cacheKey,
 
         auto out = std::make_shared<std::vector<float>>(dry->size(), 0.0f);
         std::vector<float> chunk(block, 0.0f);
+        float lastReported = 0.0f;
         for (size_t i = 0; i < dry->size(); i += block) {
             const int n = (int) std::min((size_t) block, dry->size() - i);
             std::copy(dry->begin() + (long) i, dry->begin() + (long) i + n, chunk.begin());
             offline->render(chunk.data(), out->data() + i, n);
+
+            // Progress ring: report render progress (the dominant cost),
+            // mapped over 0.1..1.0 (the first 10% covers the download).
+            const float frac = (float) i / (float) dry->size();
+            if (frac - lastReported >= 0.03f) {
+                lastReported = frac;
+                juce::MessageManager::callAsync([this, frac] {
+                    if (shell_ != nullptr)
+                        shell_->setAuditionProgress(0.1f + 0.9f * frac);
+                });
+            }
         }
 
         // Normalise the audition to a healthy, consistent level.
@@ -619,17 +644,16 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         return;
     }
 
-    if (! t3kAuth_.hasValidToken()) { done(false, "connect first"); return; }
-    if (t3kSession_ == nullptr)
-        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
-
-    const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
-    t3kSession_->downloadToneModel(tone.id, tempDir,
-        [this, done, key](bool ok, juce::File file, juce::String nameOrErr) {
-            if (! ok) { done(false, nameOrErr); return; }
-            renderAuditionFile(file, key, nameOrErr, done);
-        },
-        true /* preferSmallest: quick, cheap audition variant */);
+    withValidToken([this, tone, done, key](bool ok) {
+        if (! ok) { done(false, "connect first"); return; }
+        const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+        t3kSession_->downloadToneModel(tone.id, tempDir,
+            [this, done, key](bool dlOk, juce::File file, juce::String nameOrErr) {
+                if (! dlOk) { done(false, nameOrErr); return; }
+                renderAuditionFile(file, key, nameOrErr, done);
+            },
+            true /* preferSmallest: quick, cheap audition variant */);
+    });
 }
 
 void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::ModelInfo& model,
@@ -642,32 +666,35 @@ void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::Mode
         return;
     }
 
-    if (! t3kAuth_.hasValidToken()) { done(false, "connect first"); return; }
-    if (t3kSession_ == nullptr)
-        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
-
-    const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
-    t3kSession_->downloadModel(model, tempDir,
-        [this, done, key](bool ok, juce::File file, juce::String nameOrErr) {
-            if (! ok) { done(false, nameOrErr); return; }
-            renderAuditionFile(file, key, nameOrErr, done);
-        });
+    withValidToken([this, model, done, key](bool ok) {
+        if (! ok) { done(false, "connect first"); return; }
+        const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+        t3kSession_->downloadModel(model, tempDir,
+            [this, done, key](bool dlOk, juce::File file, juce::String nameOrErr) {
+                if (! dlOk) { done(false, nameOrErr); return; }
+                renderAuditionFile(file, key, nameOrErr, done);
+            });
+    });
 }
 
 void AndroidAudioApp::doListModels(const std::string& toneId,
         std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
-    if (! t3kAuth_.hasValidToken()) { done(false, {}, "connect first"); return; }
-    if (t3kSession_ == nullptr)
-        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
-    t3kSession_->listToneModels(toneId, std::move(done));
+    withValidToken([this, toneId, done](bool ok) {
+        if (! ok) { done(false, {}, "connect first"); return; }
+        t3kSession_->listToneModels(toneId, std::move(done));
+    });
 }
 
 void AndroidAudioApp::doDownload(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
-    if (! t3kAuth_.hasValidToken()) { done(false, "connect first (pick a station)"); return; }
-    if (t3kSession_ == nullptr)
-        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+    withValidToken([this, tone, done](bool tokenOk) {
+        if (! tokenOk) { done(false, "connect first"); return; }
+        doDownloadWithSession(tone, done);
+    });
+}
 
+void AndroidAudioApp::doDownloadWithSession(nam::ToneInfo tone,
+        std::function<void(bool, juce::String)> done) {
     const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
     t3kSession_->downloadToneModel(tone.id, tempDir,
         [this, done](bool ok, juce::File file, juce::String nameOrErr) {

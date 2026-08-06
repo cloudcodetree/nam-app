@@ -43,8 +43,12 @@ public:
             std::function<void (bool, std::vector<nam::ModelInfo>, juce::String)>)> listModels;
         std::function<void (int)>  setDemoTrack;
         std::function<void()>      stopDemo;
+        std::function<bool (std::string)> isAuditionCached;   // toneId, current riff
     };
     void setBrowseServices (BrowseServices services);
+
+    // Host reports offline-render progress (0..1) for the in-flight audition.
+    void setAuditionProgress (float progress);
 
     // Library service: list kept models + load one into the engine.
     using GetModelsFn = std::function<std::vector<nam::LibraryEntry>()>;
@@ -68,6 +72,7 @@ private:
     void refreshDevices();
     void runBrowseSearch (juce::String query);
     void stopAudition();
+    void refreshCachedFlags();
 
     dsp::ToneEngine& engine_;
     std::unique_ptr<PlayScreen>    play_;

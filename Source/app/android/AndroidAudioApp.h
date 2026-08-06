@@ -58,6 +58,7 @@ private:
     void doSearch(juce::String query,
                   std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
     void doDownload(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
+    void doDownloadWithSession(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
 
     // Audition: download a tone's model (no library import), render the
     // selected dry demo riff through it offline, and loop the result.
@@ -73,6 +74,10 @@ private:
 
     // Library: load a kept model file into the running engine.
     void loadModelEntry(const nam::LibraryEntry& e);
+
+    // Runs `then(true)` with a valid token (refreshing silently if needed;
+    // recreates the session so it carries the fresh token), else then(false).
+    void withValidToken(std::function<void(bool)> then);
 
     static juce::File tokenStoreFile();
     static std::string defaultLibraryDir();

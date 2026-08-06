@@ -27,6 +27,9 @@ public:
     void setPlaying (int packIdx, int modelIdx);          // -1,-1 = stopped
     void setKept (int packIdx);
     void setStatus (juce::String s);
+    void setLoading (int packIdx, float progress);        // -1 = not loading
+    void setLoadingProgress (float progress);             // keep current pack
+    void setCachedFlags (std::vector<bool> cached);       // instant-play packs
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -44,9 +47,11 @@ private:
 
     std::vector<nam::ToneInfo> tones_;
     std::vector<juce::StringArray> models_;   // per row (empty until loaded)
-    std::vector<bool> kept_;
+    std::vector<bool> kept_, cached_;
     int expanded_ = -1;
     int playingPack_ = -1, playingModel_ = -1;
+    int loadingPack_ = -1;
+    float loadProgress_ = 0.0f;
     int demoTrack_ = 0;
     bool diMenuOpen_ = false;
     std::vector<juce::Rectangle<int>> diMenuRowRects() const;   // screen space

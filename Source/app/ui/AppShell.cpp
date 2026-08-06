@@ -77,13 +77,16 @@ void AppShell::setBrowseServices (BrowseServices services) {
         }
         if (! svc_.audition) return;
         const auto tone = browseResults_[(size_t) idx];
+        browse_->setLoading (idx, 0.04f);
         browse_->setStatus ("Loading \"" + juce::String (tone.title) + "\"" + kEllipsis);
         svc_.audition (tone, [this, idx, tone] (bool ok, juce::String msg) {
+            browse_->setLoading (-1, 0.0f);
             if (! ok) { browse_->setStatus ("Audition failed: " + msg); return; }
             auditioningPack_ = idx;
             auditioningModel_ = -1;
             browse_->setPlaying (idx, -1);
             browse_->setStatus ("Auditioning \"" + juce::String (tone.title) + "\"");
+            refreshCachedFlags();
         });
     };
 
@@ -93,8 +96,10 @@ void AppShell::setBrowseServices (BrowseServices services) {
         if (modelIdx < 0 || modelIdx >= (int) models.size()) return;
         const auto tone = browseResults_[(size_t) idx];
         const auto model = models[(size_t) modelIdx];
+        browse_->setLoading (idx, 0.04f);
         browse_->setStatus ("Loading variant" + kEllipsis);
         svc_.auditionModel (tone.id, model, [this, idx, modelIdx] (bool ok, juce::String msg) {
+            browse_->setLoading (-1, 0.0f);
             if (! ok) { browse_->setStatus ("Audition failed: " + msg); return; }
             auditioningPack_ = idx;
             auditioningModel_ = modelIdx;
@@ -105,6 +110,7 @@ void AppShell::setBrowseServices (BrowseServices services) {
 
     browse_->onDemoTrack = [this] (int track) {
         if (svc_.setDemoTrack) svc_.setDemoTrack (track);
+        refreshCachedFlags();
         // Re-render the current audition with the new riff, if one is playing.
         if (auditioningPack_ >= 0) {
             const int pack = auditioningPack_, model = auditioningModel_;
@@ -118,6 +124,19 @@ void AppShell::stopAudition() {
     if (svc_.stopDemo) svc_.stopDemo();
     auditioningPack_ = auditioningModel_ = -1;
     browse_->setPlaying (-1, -1);
+    browse_->setLoading (-1, 0.0f);
+}
+
+void AppShell::setAuditionProgress (float progress) {
+    browse_->setLoadingProgress (progress);
+}
+
+void AppShell::refreshCachedFlags() {
+    if (! svc_.isAuditionCached) return;
+    std::vector<bool> flags (browseResults_.size(), false);
+    for (size_t i = 0; i < browseResults_.size(); ++i)
+        flags[i] = svc_.isAuditionCached (browseResults_[i].id);
+    browse_->setCachedFlags (std::move (flags));
 }
 
 void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) {
@@ -137,6 +156,7 @@ void AppShell::runBrowseSearch (juce::String q) {
         browseResults_ = tones;
         browseModels_.assign (tones.size(), {});
         browse_->setResults (tones);
+        refreshCachedFlags();
         browse_->setStatus (juce::String ((int) tones.size())
                             + (tones.size() == 1 ? " pack" : " packs")
                             + " " + kDotSep + " tap a pack to expand " + kDotSep
