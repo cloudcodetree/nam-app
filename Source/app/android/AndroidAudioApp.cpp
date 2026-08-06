@@ -62,13 +62,16 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.setCab       = [this](int c) { setCab(c); };
     browse.isAuditionCached = [this](std::string toneId) {
         if (preRenderAuditions_)
-            return cachedAudition(toneId + "#auto#" + std::to_string(demoTrack_)) != nullptr;
-        // Live mode: a local model file means instant audition, any riff.
+            return cachedAudition(toneId + "#best#" + std::to_string(demoTrack_)
+                                  + "#c" + std::to_string(cab_)) != nullptr;
+        // Live mode: any local file means instant audition, any riff.
         return modelCacheFile("keep_" + toneId).existsAsFile()
-            || modelCacheFile("auto_" + toneId).existsAsFile();
+            || modelCacheFile("auto_" + toneId).existsAsFile()
+            || modelCacheFile("ir_" + toneId).existsAsFile();
     };
     browse.isDownloaded = [](std::string toneId) {
-        return modelCacheFile("keep_" + toneId).existsAsFile();
+        return modelCacheFile("keep_" + toneId).existsAsFile()
+            || modelCacheFile("ir_" + toneId).existsAsFile();
     };
     shell_->setBrowseServices(std::move(browse));
     shell_->setLibraryService(
@@ -731,7 +734,8 @@ void AndroidAudioApp::pruneModelCache() {
 void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
                                         const std::string& cacheKey,
                                         juce::String displayName,
-                                        std::function<void(bool, juce::String)> done) {
+                                        std::function<void(bool, juce::String)> done,
+                                        std::shared_ptr<const std::vector<float>> overrideIr) {
     // Deliberately do NOT stop the current demo: it keeps playing until the
     // new tone is ready, then swaps in place — clean A/B comparisons.
     const std::string path = file.getFullPathName().toStdString();
@@ -739,7 +743,8 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
     const int liveBlock = blockSize_;
     const bool forcePre = preRenderAuditions_;
     auto dry = std::make_shared<std::vector<float>>(demoTracks_[(size_t) demoTrack_]);
-    auto cabIr = (cab_ > 0) ? cabIrs_[(size_t) cab_] : nullptr;
+    auto cabIr = overrideIr != nullptr ? overrideIr
+                 : (cab_ > 0) ? cabIrs_[(size_t) cab_] : nullptr;
 
     juce::Thread::launch([this, path, sr, liveBlock, forcePre, dry, deleteAfter,
                           cacheKey, displayName, done, cabIr] {
@@ -830,8 +835,50 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
     });
 }
 
+// IR tones: the downloaded .wav becomes the cab impulse under whatever amp
+// model is loaded. Live devices swap it in gapless; the emulator re-renders
+// the bundled model with this IR.
+void AndroidAudioApp::doAuditionIr(nam::ToneInfo tone,
+        std::function<void(bool, juce::String)> done) {
+    const auto irFile = modelCacheFile("ir_" + tone.id);
+    auto apply = [this, done, tone](juce::File f) {
+        auto ir = nam::loadImpulseResponse(f.getFullPathName().toStdString(),
+                                           (int) sampleRate_, dsp::kMaxIrTaps);
+        if (ir == nullptr) { done(false, "IR load failed"); return; }
+        engine_.setImpulse(ir);
+        engine_.setIrEnabled(true);
+        if (preRenderAuditions_) {
+            const std::string key = tone.id + "#ir#" + std::to_string(demoTrack_);
+            auditionFromFile(juce::File(juce::String(copyBundledModelToFile())),
+                             false, key, juce::String(tone.title), done, ir);
+            return;
+        }
+        if (! demoOn_.load(std::memory_order_relaxed)) {
+            demoPos_.store(0, std::memory_order_relaxed);
+            demoLive_.store(true, std::memory_order_relaxed);
+            demoOn_.store(true, std::memory_order_relaxed);
+        }
+        done(true, juce::String(tone.title));
+    };
+
+    if (irFile.existsAsFile()) { apply(irFile); return; }
+    withValidToken([this, tone, done, irFile, apply](bool ok) {
+        if (! ok) { done(false, "connect first"); return; }
+        const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+        t3kSession_->downloadToneModel(tone.id, tempDir,
+            [done, irFile, apply](bool dlOk, juce::File file, juce::String nameOrErr) {
+                if (! dlOk) { done(false, nameOrErr); return; }
+                irFile.getParentDirectory().createDirectory();
+                if (file.moveFileTo(irFile)) apply(irFile);
+                else apply(file);
+            });
+    });
+}
+
 void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
+    if (tone.format == "ir") { doAuditionIr(std::move(tone), std::move(done)); return; }
+
     const std::string key = tone.id + "#best#" + std::to_string(demoTrack_)
                             + "#c" + std::to_string(cab_);
     // Rendered-audio cache: instant replay (covers heavy pre-rendered
@@ -880,17 +927,18 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
 
 void AndroidAudioApp::doDownloadOnly(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
-    const auto keepFile = modelCacheFile("keep_" + tone.id);
-    if (keepFile.existsAsFile()) { done(true, juce::String(tone.title)); return; }
+    const bool isIr = (tone.format == "ir");
+    const auto localFile = modelCacheFile((isIr ? "ir_" : "keep_") + tone.id);
+    if (localFile.existsAsFile()) { done(true, juce::String(tone.title)); return; }
 
-    withValidToken([this, tone, done, keepFile](bool ok) {
+    withValidToken([this, tone, done, localFile](bool ok) {
         if (! ok) { done(false, "connect first"); return; }
         const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
         t3kSession_->downloadToneModelForKeep(tone.id, tempDir,
-            [done, keepFile](bool dlOk, juce::File file, juce::String nameOrErr) {
+            [done, localFile](bool dlOk, juce::File file, juce::String nameOrErr) {
                 if (! dlOk) { done(false, nameOrErr); return; }
-                keepFile.getParentDirectory().createDirectory();
-                if (! file.moveFileTo(keepFile)) { done(false, "could not store download"); return; }
+                localFile.getParentDirectory().createDirectory();
+                if (! file.moveFileTo(localFile)) { done(false, "could not store download"); return; }
                 done(true, nameOrErr);
             });
     });
@@ -938,14 +986,16 @@ void AndroidAudioApp::doListModels(const std::string& toneId,
     });
 }
 
-// Keep = favorite: imports the already-downloaded model into the Library.
-// If it was never downloaded, fetch it first (best quality), then import.
+// Keep = favorite: imports the already-downloaded file into the Library
+// (models as Model, IR tones as Ir). Fetches first only if never downloaded.
 void AndroidAudioApp::doDownload(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
-    const auto keepFile = modelCacheFile("keep_" + tone.id);
-    if (keepFile.existsAsFile()) {
-        auto* entry = nam::importIntoLibrary(library_, keepFile.getFullPathName().toStdString(),
-                                             nam::LibraryType::Model, nowSeconds());
+    const bool isIr = (tone.format == "ir");
+    const auto localFile = modelCacheFile((isIr ? "ir_" : "keep_") + tone.id);
+    if (localFile.existsAsFile()) {
+        auto* entry = nam::importIntoLibrary(library_, localFile.getFullPathName().toStdString(),
+                                             isIr ? nam::LibraryType::Ir : nam::LibraryType::Model,
+                                             nowSeconds());
         if (entry == nullptr) { done(false, "import failed"); return; }
         library_.save();
         done(true, juce::String(entry->displayName));
@@ -953,6 +1003,6 @@ void AndroidAudioApp::doDownload(nam::ToneInfo tone,
     }
     doDownloadOnly(tone, [this, tone, done](bool ok, juce::String msg) {
         if (! ok) { done(false, msg); return; }
-        doDownload(tone, done);   // keep file exists now -> import branch
+        doDownload(tone, done);   // local file exists now -> import branch
     });
 }

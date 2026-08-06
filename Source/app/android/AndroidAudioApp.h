@@ -62,7 +62,11 @@ private:
     void doDownloadOnly(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
     void auditionFromFile(juce::File file, bool deleteAfter, const std::string& cacheKey,
                           juce::String displayName,
-                          std::function<void(bool, juce::String)> done);
+                          std::function<void(bool, juce::String)> done,
+                          std::shared_ptr<const std::vector<float>> overrideIr = nullptr);
+    // IR tones: audition = load the .wav as the cab impulse under the current
+    // amp model (the demo keeps rolling — gapless cab A/B).
+    void doAuditionIr(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
 
     // Audition: download a tone's model (no library import), render the
     // selected dry demo riff through it offline, and loop the result.

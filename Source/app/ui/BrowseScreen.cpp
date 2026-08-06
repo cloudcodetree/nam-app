@@ -387,8 +387,9 @@ void BrowseScreen::paint (juce::Graphics& g) {
         auto badge = S (row.badge);
         g.setColour (col::inkA (0.15f));
         g.drawRoundedRectangle (badge.toFloat(), 6.0f, 1.0f);
-        text (t.a2Count > 0 ? "A2" : "A1", uiFontTracked (9.0f, true), col::accentAlt,
-              badge, juce::Justification::centred);
+        const bool isIr = (t.format == "ir");
+        text (isIr ? "IR" : t.a2Count > 0 ? "A2" : "A1", uiFontTracked (9.0f, true),
+              isIr ? col::meterLime : col::accentAlt, badge, juce::Justification::centred);
 
         if (! open) continue;
 
