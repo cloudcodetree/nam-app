@@ -59,11 +59,16 @@ private:
                   std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
     void doDownload(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
 
-    // Audition: download a tone's model into the engine (no library import)
-    // and run the built-in dry riff through it (no guitar needed).
+    // Audition: download a tone's model (no library import), render the
+    // selected dry demo riff through it offline, and loop the result.
     void doAudition(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
+    void doAuditionModel(const std::string& toneId, const nam::ModelInfo& model,
+                         std::function<void(bool, juce::String)> done);
+    void doListModels(const std::string& toneId,
+                      std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done);
+    void setDemoTrack(int index);         // 0 chords · 1 lead · 2 chugs
     void setDemoActive(bool on);
-    void setLiveInputMuted(bool muted);   // Radio browsing: don't amplify the mic
+    void setLiveInputMuted(bool muted);   // browsing: don't amplify the mic
     void buildDemoLoop(double sampleRate);
 
     // Library: load a kept model file into the running engine.
@@ -94,9 +99,13 @@ private:
     // the finished slot back (no inference on the audio thread — an emulated
     // CPU can't run NAM in real time). Slots are never freed: RT-safe.
     void installRenderedDemo(std::vector<float> rendered);
-    void cacheAudition(const std::string& toneId, const std::vector<float>& rendered);
-    const std::vector<float>* cachedAudition(const std::string& toneId) const;
-    std::vector<float> demoLoop_;
+    void cacheAudition(const std::string& key, const std::vector<float>& rendered);
+    const std::vector<float>* cachedAudition(const std::string& key) const;
+    void renderAuditionFile(juce::File file, std::string cacheKey,
+                            juce::String displayName,
+                            std::function<void(bool, juce::String)> done);
+    std::array<std::vector<float>, 3> demoTracks_;   // chords / lead / chugs
+    int demoTrack_ = 0;
     // Rendered-audition cache (message thread only): tone id -> processed
     // riff. Re-tapping a tone plays instantly instead of re-downloading and
     // re-rendering. ~600 KB per entry; capped.

@@ -58,13 +58,25 @@ public:
     void search(const std::string& query, int page,
                 std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
 
+    // Fetches the model variants for one tone (A2 first, A1 fallback).
+    // `done` runs exactly once on the message thread. Superseding cancels.
+    void listToneModels(const std::string& toneId,
+                        std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done);
+
+    // Downloads one specific model (no list lookup). Same contract as
+    // downloadToneModel; shares (and supersedes) its download slot.
+    void downloadModel(const nam::ModelInfo& model, juce::File destDir,
+                       std::function<void(bool, juce::File, juce::String)> done);
+
 private:
     class DownloadThread;
     class SearchThread;
+    class ListModelsThread;
 
     std::string accessToken_;
     std::unique_ptr<DownloadThread> downloadThread_;
     std::unique_ptr<SearchThread> searchThread_;
+    std::unique_ptr<ListModelsThread> listThread_;
 };
 
 } // namespace nam

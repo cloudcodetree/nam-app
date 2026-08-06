@@ -166,12 +166,14 @@ class Tone3000Session::DownloadThread : public juce::Thread {
 public:
     DownloadThread(std::string accessToken, std::string toneId, juce::File destDir,
                     bool preferSmallest,
-                    std::function<void(bool, juce::File, juce::String)> done)
+                    std::function<void(bool, juce::File, juce::String)> done,
+                    nam::ModelInfo explicitModel = {})
         : juce::Thread("Tone3000Download"),
           accessToken_(std::move(accessToken)),
           toneId_(std::move(toneId)),
           destDir_(std::move(destDir)),
           preferSmallest_(preferSmallest),
+          explicitModel_(std::move(explicitModel)),
           done_(std::move(done)) {}
 
     void run() override {
@@ -195,11 +197,17 @@ private:
             return false;
         }
 
+        // A caller that already knows exactly which model it wants (Browse:
+        // per-variant audition) skips the list fetch entirely.
+        std::vector<nam::ModelInfo> models;
+        if (!explicitModel_.modelUrl.empty())
+            models.push_back(explicitModel_);
+
         // --- Step 1: fetch the model list for this tone. TONE3000 returns
         // the legacy A1 list when no `architecture` param is given (empty
         // for A2-format tones), so ask for A2 ("2") first and only fall
         // back to A1 ("1") if that comes back empty. ---
-        std::vector<nam::ModelInfo> models;
+        if (models.empty())
         for (const char* architecture : {"2", "1"}) {
             const juce::URL modelsUrl{juce::String(nam::modelsUrl(toneId_, architecture))};
             juce::MemoryBlock listBytes;
@@ -283,6 +291,7 @@ private:
     std::string toneId_;
     juce::File destDir_;
     bool preferSmallest_ = false;
+    nam::ModelInfo explicitModel_;
     std::function<void(bool, juce::File, juce::String)> done_;
 };
 
@@ -351,6 +360,51 @@ private:
     std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done_;
 };
 
+// Fetches the model list for one tone (A2 first, A1 fallback) on its own
+// thread. Same lifecycle discipline as SearchThread.
+class Tone3000Session::ListModelsThread : public juce::Thread {
+public:
+    ListModelsThread(std::string accessToken, std::string toneId,
+                     std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done)
+        : juce::Thread("Tone3000ListModels"),
+          accessToken_(std::move(accessToken)),
+          toneId_(std::move(toneId)),
+          done_(std::move(done)) {}
+
+    void run() override {
+        std::vector<nam::ModelInfo> models;
+        juce::String error;
+        bool ok = false;
+        for (const char* architecture : {"2", "1"}) {
+            if (threadShouldExit()) { error = "cancelled"; break; }
+            const juce::URL url{juce::String(nam::modelsUrl(toneId_, architecture))};
+            juce::MemoryBlock bytes;
+            juce::String getError;
+            if (!authenticatedGet(*this, accessToken_, url, true, bytes, getError)) {
+                error = "could not reach TONE3000 to list models";
+                continue;
+            }
+            const juce::String body =
+                juce::String::createStringFromData(bytes.getData(), (int) bytes.getSize());
+            models = nam::parseModelList(body.toStdString());
+            if (!models.empty()) { ok = true; error.clear(); break; }
+        }
+        if (!ok && error.isEmpty()) error = "no models for this tone";
+
+        auto callback = std::move(done_);
+        if (callback) {
+            juce::MessageManager::callAsync([callback, ok, models, error] {
+                callback(ok, models, error);
+            });
+        }
+    }
+
+private:
+    std::string accessToken_;
+    std::string toneId_;
+    std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done_;
+};
+
 Tone3000Session::Tone3000Session(std::string accessToken) : accessToken_(std::move(accessToken)) {}
 
 Tone3000Session::~Tone3000Session() {
@@ -358,6 +412,29 @@ Tone3000Session::~Tone3000Session() {
         downloadThread_->stopThread(20000);
     if (searchThread_)
         searchThread_->stopThread(20000);
+    if (listThread_)
+        listThread_->stopThread(20000);
+}
+
+void Tone3000Session::listToneModels(const std::string& toneId,
+        std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
+    if (listThread_) {
+        listThread_->stopThread(20000);
+        listThread_.reset();
+    }
+    listThread_ = std::make_unique<ListModelsThread>(accessToken_, toneId, std::move(done));
+    listThread_->startThread();
+}
+
+void Tone3000Session::downloadModel(const nam::ModelInfo& model, juce::File destDir,
+        std::function<void(bool, juce::File, juce::String)> done) {
+    if (downloadThread_) {
+        downloadThread_->stopThread(20000);
+        downloadThread_.reset();
+    }
+    downloadThread_ = std::make_unique<DownloadThread>(accessToken_, model.id, std::move(destDir),
+                                                        false, std::move(done), model);
+    downloadThread_->startThread();
 }
 
 void Tone3000Session::downloadToneModel(const std::string& toneId, juce::File destDir,

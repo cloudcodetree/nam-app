@@ -8,7 +8,7 @@
 #include "model/LibraryEntry.h"
 #include "app/ui/PlayScreen.h"
 #include "app/ui/EditScreen.h"
-#include "app/ui/RadioScreen.h"
+#include "app/ui/BrowseScreen.h"
 #include "app/ui/LibraryScreen.h"
 #include "app/ui/LiveScreen.h"
 #include "app/ui/AudioSettingsScreen.h"
@@ -27,18 +27,24 @@ public:
     // Play (let the OS do the default = leave the app).
     bool handleBackButton();
 
-    // TONE3000 service (Radio search/download), owned by the host.
+    // TONE3000 / Browse services, owned by the host. Auditioning renders the
+    // demo riff through a model; leaving Browse stops the demo automatically.
+    using DoneFn     = std::function<void (bool, juce::String)>;
     using SearchFn   = std::function<void (juce::String,
                              std::function<void (bool, std::vector<nam::ToneInfo>, juce::String)>)>;
-    using DownloadFn = std::function<void (nam::ToneInfo,
-                             std::function<void (bool, juce::String)>)>;
-    void setTone3000 (SearchFn search, DownloadFn download);
-
-    // Audition service: play the built-in demo riff through a tone's model
-    // (audition) and stop it (leaving the Radio screen stops automatically).
-    using AuditionFn = std::function<void (nam::ToneInfo,
-                             std::function<void (bool, juce::String)>)>;
-    void setAuditionService (AuditionFn audition, std::function<void()> stopDemo);
+    using DownloadFn = std::function<void (nam::ToneInfo, DoneFn)>;
+    using AuditionFn = std::function<void (nam::ToneInfo, DoneFn)>;
+    struct BrowseServices {
+        SearchFn   search;
+        DownloadFn keep;
+        AuditionFn audition;                                   // auto variant
+        std::function<void (std::string, nam::ModelInfo, DoneFn)> auditionModel;
+        std::function<void (std::string,
+            std::function<void (bool, std::vector<nam::ModelInfo>, juce::String)>)> listModels;
+        std::function<void (int)>  setDemoTrack;
+        std::function<void()>      stopDemo;
+    };
+    void setBrowseServices (BrowseServices services);
 
     // Library service: list kept models + load one into the engine.
     using GetModelsFn = std::function<std::vector<nam::LibraryEntry>()>;
@@ -57,32 +63,31 @@ public:
     void resized() override;
 
 private:
-    enum class Screen { Play, Edit, Library, Radio, Live, Devices };
+    enum class Screen { Play, Edit, Library, Browse, Live, Devices };
     void show (Screen s);
     void refreshDevices();
-    void runRadioSearch (juce::String query);
+    void runBrowseSearch (juce::String query);
+    void stopAudition();
 
     dsp::ToneEngine& engine_;
     std::unique_ptr<PlayScreen>    play_;
     std::unique_ptr<EditScreen>    edit_;
-    std::unique_ptr<RadioScreen>   radio_;
+    std::unique_ptr<BrowseScreen>  browse_;
     std::unique_ptr<LibraryScreen> library_;
     std::unique_ptr<LiveScreen>    live_;
     std::unique_ptr<AudioSettingsScreen> devices_;
     juce::Component* current_ = nullptr;
 
-    SearchFn    searchFn_;
-    DownloadFn  downloadFn_;
-    AuditionFn  auditionFn_;
-    std::function<void()> stopDemoFn_;
-    int  auditioning_ = -1;
-    bool radioLoadedOnce_ = false;
+    BrowseServices svc_;
+    int  auditioningPack_ = -1, auditioningModel_ = -1;
+    bool browseLoadedOnce_ = false;
     GetModelsFn getModels_;
     LoadModelFn loadModel_;
     GetDevicesFn   getDevices_;
     SelectDeviceFn selectInput_, selectOutput_, selectRate_, selectBuffer_;
     RescanFn       rescanDevices_;
-    std::vector<nam::ToneInfo> radioResults_;
+    std::vector<nam::ToneInfo> browseResults_;
+    std::vector<std::vector<nam::ModelInfo>> browseModels_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppShell)
 };

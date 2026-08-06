@@ -26,19 +26,27 @@ AndroidAudioApp::AndroidAudioApp() {
 
     shell_ = std::make_unique<AppShell>(engine_);
     addAndMakeVisible(*shell_);
-    shell_->setTone3000(
-        [this](juce::String q,
-               std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
-            doSearch(std::move(q), std::move(done));
-        },
-        [this](nam::ToneInfo t, std::function<void(bool, juce::String)> done) {
-            doDownload(std::move(t), std::move(done));
-        });
-    shell_->setAuditionService(
-        [this](nam::ToneInfo t, std::function<void(bool, juce::String)> done) {
-            doAudition(std::move(t), std::move(done));
-        },
-        [this] { setDemoActive(false); });
+    AppShell::BrowseServices browse;
+    browse.search = [this](juce::String q,
+            std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+        doSearch(std::move(q), std::move(done));
+    };
+    browse.keep = [this](nam::ToneInfo t, AppShell::DoneFn done) {
+        doDownload(std::move(t), std::move(done));
+    };
+    browse.audition = [this](nam::ToneInfo t, AppShell::DoneFn done) {
+        doAudition(std::move(t), std::move(done));
+    };
+    browse.auditionModel = [this](std::string toneId, nam::ModelInfo m, AppShell::DoneFn done) {
+        doAuditionModel(toneId, m, std::move(done));
+    };
+    browse.listModels = [this](std::string toneId,
+            std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
+        doListModels(toneId, std::move(done));
+    };
+    browse.setDemoTrack = [this](int t) { setDemoTrack(t); };
+    browse.stopDemo     = [this] { setDemoActive(false); };
+    shell_->setBrowseServices(std::move(browse));
     shell_->setLibraryService(
         [this] { return library_.all(nam::LibraryType::Model); },
         [this](nam::LibraryEntry e) { loadModelEntry(e); });
@@ -412,44 +420,71 @@ void AndroidAudioApp::loadModelEntry(const nam::LibraryEntry& e) {
     }
 }
 
-// --- Audition (demo riff) -------------------------------------------------
-// Pre-renders a short looping dry-guitar riff via Karplus-Strong plucked
-// strings: E-minor noodle over ~3.2 s. Runs at prepare time (message thread),
-// so allocation is fine; the audio thread only reads the finished buffer.
-void AndroidAudioApp::buildDemoLoop(double sr) {
-    const double loopSec = 3.2;
-    demoLoop_.assign((size_t) (sr * loopSec), 0.0f);
+// --- Audition (demo riffs) ------------------------------------------------
+// Pre-renders three short looping dry-guitar riffs via Karplus-Strong
+// plucked strings: open chords, a pentatonic lead, and palm-muted chugs.
+// Runs at prepare time (message thread); the audio thread only reads the
+// finished buffers.
+namespace {
+struct DemoNote { double freq, t; float amp; double ring; float decay; };
 
-    struct Note { double freq, t; float amp; };
-    const Note notes[] = {
-        { 82.41, 0.0,  0.95f },   // E2
-        { 98.00, 0.4,  0.70f },   // G2
-        { 110.0, 0.8,  0.80f },   // A2
-        { 82.41, 1.2,  0.95f },   // E2
-        { 123.47, 1.6, 0.70f },   // B2
-        { 110.0, 2.0,  0.80f },   // A2
-        { 98.00, 2.4,  0.70f },   // G2
-        { 82.41, 2.8,  0.95f },   // E2 (rings into the loop start)
-    };
-
+void buildKsLoop(std::vector<float>& loop, double sr, double loopSec,
+                 const DemoNote* notes, size_t count) {
+    loop.assign((size_t) (sr * loopSec), 0.0f);
     juce::Random rng(7);
-    for (const auto& n : notes) {
+    for (size_t k = 0; k < count; ++k) {
+        const auto& n = notes[k];
         const int start = (int) (n.t * sr);
         const int N = juce::jmax(2, (int) (sr / n.freq));
         std::vector<float> line((size_t) N);
         for (auto& v : line) v = rng.nextFloat() * 2.0f - 1.0f;
-
-        const int len = (int) (sr * 1.4);   // ring time per pluck
+        const int len = (int) (sr * n.ring);
         int idx = 0;
-        for (int i = 0; i < len && start + i < (int) demoLoop_.size(); ++i) {
+        for (int i = 0; i < len && start + i < (int) loop.size(); ++i) {
             const int j = (idx + 1) % N;
-            const float out = 0.5f * (line[(size_t) idx] + line[(size_t) j]) * 0.996f;
+            const float out = 0.5f * (line[(size_t) idx] + line[(size_t) j]) * n.decay;
             line[(size_t) idx] = out;
             idx = j;
-            demoLoop_[(size_t) (start + i)] += out * n.amp * 0.35f;
+            loop[(size_t) (start + i)] += out * n.amp * 0.35f;
         }
     }
-    for (auto& v : demoLoop_) v = std::tanh(v);   // gentle safety clip
+    for (auto& v : loop) v = std::tanh(v);   // gentle safety clip
+}
+}
+
+void AndroidAudioApp::buildDemoLoop(double sr) {
+    // 0: open chords in E minor (the original riff).
+    static const DemoNote chords[] = {
+        { 82.41, 0.0,  0.95f, 1.4, 0.996f }, { 98.00, 0.4,  0.70f, 1.4, 0.996f },
+        { 110.0, 0.8,  0.80f, 1.4, 0.996f }, { 82.41, 1.2,  0.95f, 1.4, 0.996f },
+        { 123.47, 1.6, 0.70f, 1.4, 0.996f }, { 110.0, 2.0,  0.80f, 1.4, 0.996f },
+        { 98.00, 2.4,  0.70f, 1.4, 0.996f }, { 82.41, 2.8,  0.95f, 1.4, 0.996f },
+    };
+    // 1: single-note E-minor pentatonic lead, higher register.
+    static const DemoNote lead[] = {
+        { 164.81, 0.0, 0.80f, 1.0, 0.996f }, { 196.00, 0.4, 0.75f, 1.0, 0.996f },
+        { 220.00, 0.8, 0.80f, 1.0, 0.996f }, { 246.94, 1.2, 0.85f, 1.0, 0.996f },
+        { 293.66, 1.5, 0.80f, 1.0, 0.996f }, { 329.63, 1.9, 0.90f, 1.3, 0.997f },
+        { 246.94, 2.5, 0.75f, 0.9, 0.996f }, { 220.00, 2.8, 0.70f, 0.9, 0.996f },
+    };
+    // 2: palm-muted low-E chugs with open accents (short ring = mute).
+    static const DemoNote chugs[] = {
+        { 82.41, 0.0,  0.95f, 0.12, 0.960f }, { 82.41, 0.2,  0.85f, 0.12, 0.960f },
+        { 82.41, 0.4,  0.90f, 0.12, 0.960f }, { 82.41, 0.6,  0.85f, 0.12, 0.960f },
+        { 82.41, 0.8,  1.00f, 0.55, 0.992f },   // open accent
+        { 82.41, 1.2,  0.90f, 0.12, 0.960f }, { 82.41, 1.4,  0.85f, 0.12, 0.960f },
+        { 98.00, 1.6,  0.95f, 0.30, 0.985f },   // G2 stab
+        { 82.41, 2.0,  0.90f, 0.12, 0.960f }, { 82.41, 2.2,  0.85f, 0.12, 0.960f },
+        { 110.0, 2.4,  0.95f, 0.40, 0.988f },   // A2 stab
+        { 82.41, 2.8,  0.95f, 0.12, 0.960f }, { 82.41, 3.0,  0.85f, 0.12, 0.960f },
+    };
+    buildKsLoop(demoTracks_[0], sr, 3.2, chords, std::size(chords));
+    buildKsLoop(demoTracks_[1], sr, 3.2, lead,   std::size(lead));
+    buildKsLoop(demoTracks_[2], sr, 3.2, chugs,  std::size(chugs));
+}
+
+void AndroidAudioApp::setDemoTrack(int index) {
+    demoTrack_ = juce::jlimit(0, 2, index);
 }
 
 void AndroidAudioApp::setDemoActive(bool on) {
@@ -485,67 +520,102 @@ const std::vector<float>* AndroidAudioApp::cachedAudition(const std::string& ton
     return nullptr;
 }
 
+// Renders the selected dry riff through the model file OFFLINE (background
+// thread, separate engine instance) — playback then costs nothing on the
+// audio thread. Deletes the file afterwards; caches under `cacheKey`.
+void AndroidAudioApp::renderAuditionFile(juce::File file, std::string cacheKey,
+                                          juce::String displayName,
+                                          std::function<void(bool, juce::String)> done) {
+    const std::string path = file.getFullPathName().toStdString();
+    const double sr = sampleRate_;
+    auto dry = std::make_shared<std::vector<float>>(demoTracks_[(size_t) demoTrack_]);
+    juce::Thread::launch([this, path, sr, dry, done, displayName, cacheKey] {
+        constexpr int block = 256;
+        auto offline = std::make_unique<dsp::ToneEngine>();
+        offline->prepare((int) sr, block);
+        auto m = nam::NamModel::load(path, (int) sr, block);
+        juce::File(juce::String(path)).deleteFile();
+        if (m == nullptr) {
+            juce::MessageManager::callAsync([done] { done(false, "model load failed"); });
+            return;
+        }
+        offline->setModel(std::move(m));
+
+        auto out = std::make_shared<std::vector<float>>(dry->size(), 0.0f);
+        std::vector<float> chunk(block, 0.0f);
+        for (size_t i = 0; i < dry->size(); i += block) {
+            const int n = (int) std::min((size_t) block, dry->size() - i);
+            std::copy(dry->begin() + (long) i, dry->begin() + (long) i + n, chunk.begin());
+            offline->render(chunk.data(), out->data() + i, n);
+        }
+
+        // Normalise the audition to a healthy, consistent level.
+        float pk = 0.0f;
+        for (float v : *out) pk = std::max(pk, std::fabs(v));
+        if (pk > 0.0001f) {
+            const float g = 0.6f / pk;
+            for (auto& v : *out) v *= g;
+        }
+
+        juce::MessageManager::callAsync([this, out, done, displayName, cacheKey] {
+            cacheAudition(cacheKey, *out);
+            installRenderedDemo(std::move(*out));
+            done(true, displayName);
+        });
+    });
+}
+
 void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
-    // Re-tap of a tone we already rendered: play instantly, no network.
-    if (const auto* hit = cachedAudition(tone.id)) {
+    // Re-tap of a tone+riff we already rendered: play instantly, no network.
+    const std::string key = tone.id + "#auto#" + std::to_string(demoTrack_);
+    if (const auto* hit = cachedAudition(key)) {
         installRenderedDemo(std::vector<float>(*hit));
         done(true, juce::String(tone.title));
         return;
     }
 
-    if (! t3kAuth_.hasValidToken()) { done(false, "connect first (pick a station)"); return; }
+    if (! t3kAuth_.hasValidToken()) { done(false, "connect first"); return; }
     if (t3kSession_ == nullptr)
         t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
 
     const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
-    const std::string toneId = tone.id;
     t3kSession_->downloadToneModel(tone.id, tempDir,
-        [this, done, toneId](bool ok, juce::File file, juce::String nameOrErr) {
+        [this, done, key](bool ok, juce::File file, juce::String nameOrErr) {
             if (! ok) { done(false, nameOrErr); return; }
-
-            // Render the dry riff through the tone OFFLINE (background
-            // thread, separate engine instance) — playback then costs
-            // nothing on the audio thread.
-            const std::string path = file.getFullPathName().toStdString();
-            const double sr = sampleRate_;
-            auto dry = std::make_shared<std::vector<float>>(demoLoop_);
-            juce::Thread::launch([this, path, sr, dry, done, nameOrErr, toneId] {
-                constexpr int block = 256;
-                auto offline = std::make_unique<dsp::ToneEngine>();
-                offline->prepare((int) sr, block);
-                auto m = nam::NamModel::load(path, (int) sr, block);
-                juce::File(juce::String(path)).deleteFile();
-                if (m == nullptr) {
-                    juce::MessageManager::callAsync([done] { done(false, "model load failed"); });
-                    return;
-                }
-                offline->setModel(std::move(m));
-
-                auto out = std::make_shared<std::vector<float>>(dry->size(), 0.0f);
-                std::vector<float> chunk(block, 0.0f);
-                for (size_t i = 0; i < dry->size(); i += block) {
-                    const int n = (int) std::min((size_t) block, dry->size() - i);
-                    std::copy(dry->begin() + (long) i, dry->begin() + (long) i + n, chunk.begin());
-                    offline->render(chunk.data(), out->data() + i, n);
-                }
-
-                // Normalise the audition to a healthy, consistent level.
-                float pk = 0.0f;
-                for (float v : *out) pk = std::max(pk, std::fabs(v));
-                if (pk > 0.0001f) {
-                    const float g = 0.6f / pk;
-                    for (auto& v : *out) v *= g;
-                }
-
-                juce::MessageManager::callAsync([this, out, done, nameOrErr, toneId] {
-                    cacheAudition(toneId, *out);
-                    installRenderedDemo(std::move(*out));
-                    done(true, nameOrErr);
-                });
-            });
+            renderAuditionFile(file, key, nameOrErr, done);
         },
         true /* preferSmallest: quick, cheap audition variant */);
+}
+
+void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::ModelInfo& model,
+        std::function<void(bool, juce::String)> done) {
+    const std::string key = toneId + "#" + model.id + "#" + std::to_string(demoTrack_);
+    const juce::String display (model.name.empty() ? model.id : model.name);
+    if (const auto* hit = cachedAudition(key)) {
+        installRenderedDemo(std::vector<float>(*hit));
+        done(true, display);
+        return;
+    }
+
+    if (! t3kAuth_.hasValidToken()) { done(false, "connect first"); return; }
+    if (t3kSession_ == nullptr)
+        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+
+    const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    t3kSession_->downloadModel(model, tempDir,
+        [this, done, key](bool ok, juce::File file, juce::String nameOrErr) {
+            if (! ok) { done(false, nameOrErr); return; }
+            renderAuditionFile(file, key, nameOrErr, done);
+        });
+}
+
+void AndroidAudioApp::doListModels(const std::string& toneId,
+        std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
+    if (! t3kAuth_.hasValidToken()) { done(false, {}, "connect first"); return; }
+    if (t3kSession_ == nullptr)
+        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+    t3kSession_->listToneModels(toneId, std::move(done));
 }
 
 void AndroidAudioApp::doDownload(nam::ToneInfo tone,
