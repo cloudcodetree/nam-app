@@ -793,7 +793,7 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
 
 void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
-    const std::string key = tone.id + "#auto#" + std::to_string(demoTrack_);
+    const std::string key = tone.id + "#best#" + std::to_string(demoTrack_);
     // Rendered-audio cache: instant replay (covers heavy pre-rendered
     // models on device and everything on the emulator).
     if (const auto* hit = cachedAudition(key)) {
@@ -803,31 +803,39 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         return;
     }
 
-    // Pack auditions always use the SMALLEST variant: full-size "standard"
-    // models exceed real-time inference even on fast phones (choppy audio)
-    // and take ages to pre-render on the emulator. The best-quality keep
-    // download is for the Library / explicit variant picks.
-    const auto cachedFile = modelCacheFile("auto_" + tone.id);
-    if (cachedFile.existsAsFile()) {
-        auditionFromFile(cachedFile, false, key, juce::String(tone.title), done);
+    // Pack auditions default to BEST quality: with optimized builds and
+    // measured-speed routing, heavy models either run live or pre-render
+    // briefly. The file is shared with the ↓ download (keep_ scope) — one
+    // fetch serves audition, download state, and KEEP.
+    const auto keepFile = modelCacheFile("keep_" + tone.id);
+    if (keepFile.existsAsFile()) {
+        auditionFromFile(keepFile, false, key, juce::String(tone.title), done);
         return;
     }
+    const auto legacySmallest = modelCacheFile("auto_" + tone.id);
 
-    withValidToken([this, tone, done, key, cachedFile](bool ok) {
-        if (! ok) { done(false, "connect first"); return; }
+    withValidToken([this, tone, done, key, keepFile, legacySmallest](bool ok) {
+        if (! ok) {
+            // Offline fallback: an older smallest-variant download still plays.
+            if (legacySmallest.existsAsFile())
+                auditionFromFile(legacySmallest, false, key, juce::String(tone.title), done);
+            else
+                done(false, "connect first");
+            return;
+        }
         const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
         t3kSession_->downloadToneModel(tone.id, tempDir,
-            [this, done, key, cachedFile](bool dlOk, juce::File file, juce::String nameOrErr) {
+            [this, done, key, keepFile](bool dlOk, juce::File file, juce::String nameOrErr) {
                 if (! dlOk) { done(false, nameOrErr); return; }
-                cachedFile.getParentDirectory().createDirectory();
-                if (file.moveFileTo(cachedFile)) {
+                keepFile.getParentDirectory().createDirectory();
+                if (file.moveFileTo(keepFile)) {
                     pruneModelCache();
-                    auditionFromFile(cachedFile, false, key, nameOrErr, done);
+                    auditionFromFile(keepFile, false, key, nameOrErr, done);
                 } else {
                     auditionFromFile(file, true, key, nameOrErr, done);
                 }
             },
-            true /* preferSmallest: quick, cheap audition variant */);
+            false /* best quality */);
     });
 }
 

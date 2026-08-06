@@ -403,7 +403,7 @@ void BrowseScreen::paint (juce::Graphics& g) {
         else if (selVariant_[i] >= 0 && selVariant_[i] < models_[i].size())
             varLabel = "Model: " + models_[i][selVariant_[i]];
         else
-            varLabel = "Model: Auto (smallest)";
+            varLabel = "Model: Auto (best)";
         dropdownBtn (row.varBtn, varLabel, menu_ == Menu::Variant);
 
         // ♥ KEEP = favorites (uses the already-downloaded model)
