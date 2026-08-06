@@ -20,8 +20,10 @@ AndroidAudioApp::AndroidAudioApp() {
     // live guitar path.
     char qemu[PROP_VALUE_MAX] = {};
     if ((__system_property_get("ro.boot.qemu", qemu) > 0 && qemu[0] == '1')
-        || (__system_property_get("ro.kernel.qemu", qemu) > 0 && qemu[0] == '1'))
+        || (__system_property_get("ro.kernel.qemu", qemu) > 0 && qemu[0] == '1')) {
         liveMuted_.store(true, std::memory_order_relaxed);
+        preRenderAuditions_ = true;   // QEMU can't run NAM inference in real time
+    }
 
     library_.load();
     t3kAuth_.loadTokens();   // reuse a prior refresh token if present
@@ -36,6 +38,9 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.keep = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doDownload(std::move(t), std::move(done));
     };
+    browse.downloadOnly = [this](nam::ToneInfo t, AppShell::DoneFn done) {
+        doDownloadOnly(std::move(t), std::move(done));
+    };
     browse.audition = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doAudition(std::move(t), std::move(done));
     };
@@ -49,7 +54,14 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.setDemoTrack = [this](int t) { setDemoTrack(t); };
     browse.stopDemo     = [this] { setDemoActive(false); };
     browse.isAuditionCached = [this](std::string toneId) {
-        return cachedAudition(toneId + "#auto#" + std::to_string(demoTrack_)) != nullptr;
+        if (preRenderAuditions_)
+            return cachedAudition(toneId + "#auto#" + std::to_string(demoTrack_)) != nullptr;
+        // Live mode: a local model file means instant audition, any riff.
+        return modelCacheFile("keep_" + toneId).existsAsFile()
+            || modelCacheFile("auto_" + toneId).existsAsFile();
+    };
+    browse.isDownloaded = [](std::string toneId) {
+        return modelCacheFile("keep_" + toneId).existsAsFile();
     };
     shell_->setBrowseServices(std::move(browse));
     shell_->setLibraryService(
@@ -114,8 +126,25 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
 
     float inPk = 0.0f;
     bool bypassEngine = false;
+    const bool demoOn = demoOn_.load(std::memory_order_relaxed);
     const int slot = demoSlot_.load(std::memory_order_relaxed);
-    if (demoOn_.load(std::memory_order_relaxed) && slot >= 0
+    if (demoOn && demoLive_.load(std::memory_order_relaxed)) {
+        // Live audition (real device): feed the DRY DI loop into the engine
+        // as if it were the guitar input — real-time inference, no waiting.
+        const auto& loop = demoTracks_[(size_t) demoTrackRT_.load(std::memory_order_relaxed)];
+        if (! loop.empty()) {
+            size_t pos = demoPos_.load(std::memory_order_relaxed);
+            for (int i = 0; i < n && i < cap; ++i) {
+                if (pos >= loop.size()) pos = 0;
+                const float v = loop[pos++];
+                mono_[(size_t) i] = v;
+                inPk = juce::jmax(inPk, std::fabs(v));
+            }
+            demoPos_.store(pos, std::memory_order_relaxed);
+        } else {
+            for (int i = 0; i < n && i < cap; ++i) mono_[(size_t) i] = 0.0f;
+        }
+    } else if (demoOn && slot >= 0
         && ! demoSlots_[(size_t) slot].empty()) {
         // Audition: play back the offline-rendered (model-processed) riff.
         // No inference on the audio thread.
@@ -532,11 +561,38 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
 
 void AndroidAudioApp::setDemoTrack(int index) {
     demoTrack_ = juce::jlimit(0, 3, index);
+    demoTrackRT_.store(demoTrack_, std::memory_order_relaxed);
+}
+
+// Live audition path (real devices): load the model off-thread, swap it into
+// the live engine, and stream the dry DI loop through it in real time.
+void AndroidAudioApp::startLiveAudition(juce::File modelFile, juce::String displayName,
+                                         std::function<void(bool, juce::String)> done) {
+    const std::string path = modelFile.getFullPathName().toStdString();
+    const double sr = sampleRate_;
+    const int block = blockSize_;
+    juce::Thread::launch([this, path, sr, block, displayName, done] {
+        auto m = nam::NamModel::load(path, (int) sr, block);
+        // Raw-release so the copyable std::function can carry it; re-wrapped
+        // (or freed) on the message thread.
+        nam::NamModel* raw = m.release();
+        juce::MessageManager::callAsync([this, raw, displayName, done] {
+            std::unique_ptr<nam::NamModel> model(raw);
+            if (model == nullptr) { done(false, "model load failed"); return; }
+            engine_.setModel(std::move(model));
+            modelLoaded_ = true;
+            demoPos_.store(0, std::memory_order_relaxed);
+            demoLive_.store(true, std::memory_order_relaxed);
+            demoOn_.store(true, std::memory_order_relaxed);
+            done(true, displayName);
+        });
+    });
 }
 
 void AndroidAudioApp::setDemoActive(bool on) {
     demoPos_.store(0, std::memory_order_relaxed);
     demoOn_.store(on, std::memory_order_relaxed);
+    if (! on) demoLive_.store(false, std::memory_order_relaxed);
 }
 
 void AndroidAudioApp::setLiveInputMuted(bool muted) {
@@ -661,20 +717,41 @@ void AndroidAudioApp::renderAuditionFile(juce::File file, bool deleteAfter,
     });
 }
 
+// Routes a local model file into the right audition mode: real devices
+// stream the dry DI through the live engine (instant, real-time inference);
+// the emulator pre-renders offline (it can't run NAM in real time).
+void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
+                                        const std::string& cacheKey,
+                                        juce::String displayName,
+                                        std::function<void(bool, juce::String)> done) {
+    if (preRenderAuditions_)
+        renderAuditionFile(file, deleteAfter, cacheKey, displayName, done);
+    else
+        startLiveAudition(file, displayName, done);
+}
+
 void AndroidAudioApp::doAudition(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
-    // Re-tap of a tone+riff we already rendered: play instantly, no network.
     const std::string key = tone.id + "#auto#" + std::to_string(demoTrack_);
-    if (const auto* hit = cachedAudition(key)) {
-        installRenderedDemo(std::vector<float>(*hit));
-        done(true, juce::String(tone.title));
-        return;
+    if (preRenderAuditions_) {
+        // Rendered-audio cache only matters in pre-render mode.
+        if (const auto* hit = cachedAudition(key)) {
+            installRenderedDemo(std::vector<float>(*hit));
+            done(true, juce::String(tone.title));
+            return;
+        }
     }
 
-    // Model file already on disk from a previous riff? Skip the network.
+    // Local model file? Prefer the best-quality keep download, else the
+    // audition (smallest) one. Either way: no network.
+    const auto keepFile = modelCacheFile("keep_" + tone.id);
+    if (keepFile.existsAsFile()) {
+        auditionFromFile(keepFile, false, key, juce::String(tone.title), done);
+        return;
+    }
     const auto cachedFile = modelCacheFile("auto_" + tone.id);
     if (cachedFile.existsAsFile()) {
-        renderAuditionFile(cachedFile, false, key, juce::String(tone.title), done);
+        auditionFromFile(cachedFile, false, key, juce::String(tone.title), done);
         return;
     }
 
@@ -687,12 +764,30 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
                 cachedFile.getParentDirectory().createDirectory();
                 if (file.moveFileTo(cachedFile)) {
                     pruneModelCache();
-                    renderAuditionFile(cachedFile, false, key, nameOrErr, done);
+                    auditionFromFile(cachedFile, false, key, nameOrErr, done);
                 } else {
-                    renderAuditionFile(file, true, key, nameOrErr, done);
+                    auditionFromFile(file, true, key, nameOrErr, done);
                 }
             },
             true /* preferSmallest: quick, cheap audition variant */);
+    });
+}
+
+void AndroidAudioApp::doDownloadOnly(nam::ToneInfo tone,
+        std::function<void(bool, juce::String)> done) {
+    const auto keepFile = modelCacheFile("keep_" + tone.id);
+    if (keepFile.existsAsFile()) { done(true, juce::String(tone.title)); return; }
+
+    withValidToken([this, tone, done, keepFile](bool ok) {
+        if (! ok) { done(false, "connect first"); return; }
+        const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
+        t3kSession_->downloadToneModelForKeep(tone.id, tempDir,
+            [done, keepFile](bool dlOk, juce::File file, juce::String nameOrErr) {
+                if (! dlOk) { done(false, nameOrErr); return; }
+                keepFile.getParentDirectory().createDirectory();
+                if (! file.moveFileTo(keepFile)) { done(false, "could not store download"); return; }
+                done(true, nameOrErr);
+            });
     });
 }
 
@@ -700,15 +795,17 @@ void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::Mode
         std::function<void(bool, juce::String)> done) {
     const std::string key = toneId + "#" + model.id + "#" + std::to_string(demoTrack_);
     const juce::String display (model.name.empty() ? model.id : model.name);
-    if (const auto* hit = cachedAudition(key)) {
-        installRenderedDemo(std::vector<float>(*hit));
-        done(true, display);
-        return;
+    if (preRenderAuditions_) {
+        if (const auto* hit = cachedAudition(key)) {
+            installRenderedDemo(std::vector<float>(*hit));
+            done(true, display);
+            return;
+        }
     }
 
     const auto cachedFile = modelCacheFile("m_" + toneId + "_" + model.id);
     if (cachedFile.existsAsFile()) {
-        renderAuditionFile(cachedFile, false, key, display, done);
+        auditionFromFile(cachedFile, false, key, display, done);
         return;
     }
 
@@ -721,9 +818,9 @@ void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::Mode
                 cachedFile.getParentDirectory().createDirectory();
                 if (file.moveFileTo(cachedFile)) {
                     pruneModelCache();
-                    renderAuditionFile(cachedFile, false, key, nameOrErr, done);
+                    auditionFromFile(cachedFile, false, key, nameOrErr, done);
                 } else {
-                    renderAuditionFile(file, true, key, nameOrErr, done);
+                    auditionFromFile(file, true, key, nameOrErr, done);
                 }
             });
     });
@@ -737,25 +834,21 @@ void AndroidAudioApp::doListModels(const std::string& toneId,
     });
 }
 
+// Keep = favorite: imports the already-downloaded model into the Library.
+// If it was never downloaded, fetch it first (best quality), then import.
 void AndroidAudioApp::doDownload(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
-    withValidToken([this, tone, done](bool tokenOk) {
-        if (! tokenOk) { done(false, "connect first"); return; }
-        doDownloadWithSession(tone, done);
+    const auto keepFile = modelCacheFile("keep_" + tone.id);
+    if (keepFile.existsAsFile()) {
+        auto* entry = nam::importIntoLibrary(library_, keepFile.getFullPathName().toStdString(),
+                                             nam::LibraryType::Model, nowSeconds());
+        if (entry == nullptr) { done(false, "import failed"); return; }
+        library_.save();
+        done(true, juce::String(entry->displayName));
+        return;
+    }
+    doDownloadOnly(tone, [this, tone, done](bool ok, juce::String msg) {
+        if (! ok) { done(false, msg); return; }
+        doDownload(tone, done);   // keep file exists now -> import branch
     });
-}
-
-void AndroidAudioApp::doDownloadWithSession(nam::ToneInfo tone,
-        std::function<void(bool, juce::String)> done) {
-    const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
-    t3kSession_->downloadToneModelForKeep(tone.id, tempDir,
-        [this, done](bool ok, juce::File file, juce::String nameOrErr) {
-            if (! ok) { done(false, nameOrErr); return; }
-            auto* entry = nam::importIntoLibrary(library_, file.getFullPathName().toStdString(),
-                                                 nam::LibraryType::Model, nowSeconds());
-            file.deleteFile();
-            if (entry == nullptr) { done(false, "import failed"); return; }
-            library_.save();
-            done(true, juce::String(entry->displayName));
-        });
 }

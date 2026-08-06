@@ -58,7 +58,10 @@ private:
     void doSearch(juce::String query,
                   std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
     void doDownload(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
-    void doDownloadWithSession(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
+    void doDownloadOnly(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
+    void auditionFromFile(juce::File file, bool deleteAfter, const std::string& cacheKey,
+                          juce::String displayName,
+                          std::function<void(bool, juce::String)> done);
 
     // Audition: download a tone's model (no library import), render the
     // selected dry demo riff through it offline, and loop the result.
@@ -116,6 +119,11 @@ private:
     static void pruneModelCache();
     std::array<std::vector<float>, 4> demoTracks_;   // chords / lead / chugs / bass
     int demoTrack_ = 0;
+    std::atomic<int>  demoTrackRT_ { 0 };   // audio-thread copy of demoTrack_
+    std::atomic<bool> demoLive_ { false };  // live mode: dry DI -> engine in RT
+    bool preRenderAuditions_ = false;       // emulator: can't run NAM in RT
+    void startLiveAudition(juce::File modelFile, juce::String displayName,
+                           std::function<void(bool, juce::String)> done);
     // Rendered-audition cache (message thread only): tone id -> processed
     // riff. Re-tapping a tone plays instantly instead of re-downloading and
     // re-rendering. ~600 KB per entry; capped.

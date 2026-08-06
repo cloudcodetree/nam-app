@@ -36,7 +36,8 @@ public:
     using AuditionFn = std::function<void (nam::ToneInfo, DoneFn)>;
     struct BrowseServices {
         SearchFn   search;
-        DownloadFn keep;
+        DownloadFn keep;           // favorite: import the downloaded model
+        DownloadFn downloadOnly;   // fetch best quality locally, no play/import
         AuditionFn audition;                                   // auto variant
         std::function<void (std::string, nam::ModelInfo, DoneFn)> auditionModel;
         std::function<void (std::string,
@@ -44,6 +45,7 @@ public:
         std::function<void (int)>  setDemoTrack;
         std::function<void()>      stopDemo;
         std::function<bool (std::string)> isAuditionCached;   // toneId, current riff
+        std::function<bool (std::string)> isDownloaded;       // best-quality on disk
     };
     void setBrowseServices (BrowseServices services);
 
