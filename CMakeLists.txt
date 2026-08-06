@@ -73,7 +73,14 @@ if(NAM_BUILD_APP)
         juce_add_binary_data(NamPlayerData SOURCES
             ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/model.nam
             ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/fonts/LibreCaslon.ttf
-            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/fonts/WorkSans.ttf)
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/fonts/WorkSans.ttf
+            # Audition DI tracks: real guitar recordings from TONE3000's
+            # MIT-licensed neural-amp-modeler-wasm repo (ui/public/inputs),
+            # trimmed to 12 s. chords="Mayer", lead="Slide Lead",
+            # chugs="Metalcore".
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_chords.wav
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_lead.wav
+            ${CMAKE_SOURCE_DIR}/Builds/Android/app/src/main/assets/di/di_chugs.wav)
 
         target_sources(NamPlayer PRIVATE
             Source/app/android/AndroidMain.cpp

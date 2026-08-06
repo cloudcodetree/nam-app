@@ -9,6 +9,8 @@
 #include <cmath>
 #include <sys/system_properties.h>
 
+#include "dr_wav.h"
+
 AndroidAudioApp::AndroidAudioApp() {
     setLookAndFeel(&laf_);
 
@@ -453,6 +455,47 @@ void buildKsLoop(std::vector<float>& loop, double sr, double loopSec,
 }
 
 void AndroidAudioApp::buildDemoLoop(double sr) {
+    // Preferred source: real DI recordings bundled from TONE3000's
+    // MIT-licensed web-player repo (48 kHz mono 24-bit). Decoded with
+    // dr_wav; linear-resampled if the device rate differs. Falls back to
+    // the synthesized riffs below if anything is missing.
+    const char* diResources[3] = { "di_chords_wav", "di_lead_wav", "di_chugs_wav" };
+    bool allDecoded = true;
+    for (int t = 0; t < 3; ++t) {
+        int size = 0;
+        const char* data = BinaryData::getNamedResource(diResources[t], size);
+        bool ok = false;
+        if (data != nullptr && size > 0) {
+            unsigned int ch = 0, fileSr = 0;
+            drwav_uint64 frames = 0;
+            float* raw = drwav_open_memory_and_read_pcm_frames_f32(
+                data, (size_t) size, &ch, &fileSr, &frames, nullptr);
+            if (raw != nullptr && ch >= 1 && frames > 0) {
+                std::vector<float> mono((size_t) frames);
+                for (drwav_uint64 i = 0; i < frames; ++i)
+                    mono[(size_t) i] = raw[i * ch];   // mono files: ch==1
+                if ((double) fileSr != sr && fileSr > 0) {
+                    const double ratio = (double) fileSr / sr;
+                    std::vector<float> res((size_t) ((double) frames / ratio));
+                    for (size_t i = 0; i < res.size(); ++i) {
+                        const double pos = (double) i * ratio;
+                        const size_t i0 = (size_t) pos;
+                        const float frac = (float) (pos - (double) i0);
+                        const float a = mono[juce::jmin(i0, mono.size() - 1)];
+                        const float b = mono[juce::jmin(i0 + 1, mono.size() - 1)];
+                        res[i] = a + (b - a) * frac;
+                    }
+                    mono = std::move(res);
+                }
+                demoTracks_[(size_t) t] = std::move(mono);
+                ok = true;
+            }
+            if (raw != nullptr) drwav_free(raw, nullptr);
+        }
+        if (! ok) allDecoded = false;
+    }
+    if (allDecoded) return;
+
     // 0: open chords in E minor (the original riff).
     static const DemoNote chords[] = {
         { 82.41, 0.0,  0.95f, 1.4, 0.996f }, { 98.00, 0.4,  0.70f, 1.4, 0.996f },
