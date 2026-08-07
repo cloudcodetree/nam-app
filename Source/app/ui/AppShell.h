@@ -56,6 +56,9 @@ public:
         std::function<bool (std::string)> isAuditionCached;   // toneId, current riff
         std::function<bool (std::string)> isDownloaded;       // best-quality on disk
         std::function<bool (std::string)> isKept;             // in the tone deck
+        // Library id of the entry imported for a tone ("" if not kept) —
+        // lets Play snap to the deck entry of the last-auditioned tone.
+        std::function<std::string (std::string)> libraryIdForTone;
     };
     void setBrowseServices (BrowseServices services);
 
@@ -105,6 +108,7 @@ private:
     juce::Component* current_ = nullptr;
 
     BrowseServices svc_;
+    std::string auditionToneId_;   // engine still runs this tone after Browse
     int  auditioningPack_ = -1, auditioningModel_ = -1;
     bool browseLoadedOnce_ = false;
     int  collectionIndex_ = -1;               // Play screen position in the Library

@@ -49,6 +49,9 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.isKept = [this](std::string toneId) {
         return ! libraryIdForTone(toneId).empty();
     };
+    browse.libraryIdForTone = [this](std::string toneId) {
+        return libraryIdForTone(toneId);
+    };
     browse.downloadOnly = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doDownloadOnly(std::move(t), std::move(done));
     };
@@ -1229,15 +1232,31 @@ std::string AndroidAudioApp::toneIdFromEntry(const nam::LibraryEntry& e) {
 }
 
 void AndroidAudioApp::fetchArtwork(nam::ToneInfo tone) {
-    if (tone.imageUrl.empty() || artworkFile(tone.id).existsAsFile()) return;
+    // tone.id and imageUrl are API-supplied: the id becomes a filename (must
+    // not traverse out of the artwork dir) and the URL is fetched (https
+    // only, bounded size). Tone ids are numeric on the real API.
+    const bool idIsNumeric = ! tone.id.empty()
+        && std::all_of(tone.id.begin(), tone.id.end(),
+                       [](unsigned char c) { return std::isdigit(c); });
+    if (! idIsNumeric || tone.id.size() > 20) return;
+    if (tone.imageUrl.rfind("https://", 0) != 0 || tone.imageUrl.size() > 2048) return;
+    if (artworkFile(tone.id).existsAsFile()) return;
     juce::Thread::launch([tone] {
         juce::URL url { juce::String(tone.imageUrl) };
         auto stream = url.createInputStream(
             juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
                 .withConnectionTimeoutMs(15000));
         if (stream == nullptr) return;
+        // Bounded read: a hostile/misconfigured server must not OOM the app.
+        constexpr size_t kMaxImageBytes = 8 * 1024 * 1024;
         juce::MemoryBlock raw;
-        stream->readIntoMemoryBlock(raw);
+        while (! stream->isExhausted()) {
+            if (raw.getSize() >= kMaxImageBytes) return;
+            juce::HeapBlock<char> chunk(65536);
+            const int n = stream->read(chunk.getData(), 65536);
+            if (n <= 0) break;
+            raw.append(chunk.getData(), (size_t) n);
+        }
         auto img = juce::ImageFileFormat::loadFrom(raw.getData(), raw.getSize());
         if (! img.isValid()) return;   // e.g. webp — JUCE can't decode it
         // Downscale so per-swipe decode stays cheap (card is ~<700 px wide).
@@ -1254,7 +1273,19 @@ void AndroidAudioApp::fetchArtwork(nam::ToneInfo tone) {
         if (! out.openedOk()) return;
         juce::JPEGImageFormat jpeg;
         jpeg.setQuality(0.85f);
-        if (! jpeg.writeImageToStream(img, out)) dest.deleteFile();
+        if (! jpeg.writeImageToStream(img, out)) { dest.deleteFile(); return; }
+        out.flush();
+        // Cache hygiene (mirrors pruneModelCache): keep the most recent 64.
+        auto dir = dest.getParentDirectory();
+        juce::Array<juce::File> files = dir.findChildFiles(juce::File::findFiles, false, "*.jpg");
+        if (files.size() > 64) {
+            files.sort();   // fallback order; refine below by mod time
+            std::sort(files.begin(), files.end(), [](const juce::File& a, const juce::File& b) {
+                return a.getLastModificationTime() < b.getLastModificationTime();
+            });
+            for (int i = 0; i < files.size() - 64; ++i)
+                files.getReference(i).deleteFile();
+        }
     });
 }
 

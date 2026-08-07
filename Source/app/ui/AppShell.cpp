@@ -103,6 +103,7 @@ void AppShell::setBrowseServices (BrowseServices services) {
             browse_->setStatus ("Auditioning \"" + juce::String (tone.title) + "\"");
             refreshCachedFlags();
             // The engine now runs this tone: reflect it on the Play screen.
+            auditionToneId_ = tone.id;
             collectionIndex_ = -1;
             play_->setNowPlaying (juce::String (tone.title),
                                   (tone.gear.empty() ? juce::String ("TONE3000")
@@ -121,13 +122,14 @@ void AppShell::setBrowseServices (BrowseServices services) {
         browse_->setLoading (idx, 0.04f);
         browse_->setStatus ("Preparing variant" + kEllipsis);
         svc_.auditionModel (tone.id, model, tone.format == "ir",
-                            [this, idx, modelIdx] (bool ok, juce::String msg) {
+                            [this, idx, modelIdx, tone] (bool ok, juce::String msg) {
             browse_->setLoading (-1, 0.0f);
             if (! ok) { browse_->setStatus ("Audition failed: " + msg); return; }
             auditioningPack_ = idx;
             auditioningModel_ = modelIdx;
             browse_->setPlaying (idx, modelIdx);
             browse_->setStatus ("Auditioning \"" + msg + "\"");
+            if (tone.format != "ir") auditionToneId_ = tone.id;   // IRs swap the cab, not the amp
             collectionIndex_ = -1;
             play_->setNowPlaying (msg, "TONE3000", {});
             play_->setPosition (-1, 0);
@@ -209,6 +211,7 @@ void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) 
 }
 
 void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {
+    auditionToneId_.clear();   // a library entry owns the engine now
     int idx = -1, count = 0;
     if (getModels_) {
         const auto entries = getModels_();
@@ -324,6 +327,25 @@ void AppShell::show (Screen s) {
     // Leaving Browse stops any audition demo.
     if (s != Screen::Browse && auditioningPack_ >= 0)
         stopAudition();
+
+    // Arriving at Play with an audition tone still in the engine: if that
+    // tone was hearted into the deck, promote it to the ACTIVE library entry
+    // (real load — position, artwork, and boot persistence follow). If it
+    // was never kept the engine keeps running it live; nothing to reload.
+    if (s == Screen::Play && ! auditionToneId_.empty()) {
+        const auto toneId = auditionToneId_;
+        auditionToneId_.clear();
+        if (getModels_ && loadModel_ && svc_.libraryIdForTone) {
+            const auto libId = svc_.libraryIdForTone (toneId);
+            if (! libId.empty())
+                for (const auto& e : getModels_())
+                    if (e.id == libId) {
+                        loadModel_ (e);
+                        showEntryAsNowPlaying (e);
+                        break;
+                    }
+        }
+    }
 
     juce::Component* target = play_.get();
     switch (s) {
