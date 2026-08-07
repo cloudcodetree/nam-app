@@ -287,11 +287,20 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
     const int dy = e.getPosition().y - pressPos_.y;
     const bool tap = std::abs (dx) < 12 && std::abs (dy) < 12;
 
-    // A tap on the card flips it (front -> settings back -> front).
+    // Settings face: any tap that isn't an interactive element flips back
+    // (sliders end up in dragParam_; buttons acted in mouseDown).
+    if (flipped_) {
+        if (tap && ! prevRect_.contains (pressPos_) && ! nextRect_.contains (pressPos_)
+                && ! libRect_.contains (pressPos_) && ! tunerRect_.contains (pressPos_))
+            toggleFlip();
+        return;   // no swiping while the settings face is up
+    }
+
+    // A tap on the card flips it around to the settings face.
     if (tap && artRect_.contains (pressPos_)) { toggleFlip(); return; }
 
     // Swipe across the hero area steps through the collection (front only).
-    if (flipped_ || ! hero_.contains (pressPos_)) return;
+    if (! hero_.contains (pressPos_)) return;
     if (std::abs (dx) > 60 && std::abs (dx) > std::abs (dy) * 2) {
         if (dx < 0) { if (onNext) onNext(); }
         else        { if (onPrev) onPrev(); }
