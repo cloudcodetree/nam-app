@@ -1306,6 +1306,9 @@ std::string AndroidAudioApp::libraryIdForTone(const std::string& toneId) const {
 
 void AndroidAudioApp::doToggleKeep(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
+    // IRs are cabs, not tones — they can't join the Play deck, so hearting
+    // them is disabled (search is nam-only; this guards cached results).
+    if (tone.format == "ir") { done(false, "IR packs can't be added to the deck"); return; }
     const auto id = libraryIdForTone(tone.id);
     if (! id.empty()) {
         library_.remove(id);

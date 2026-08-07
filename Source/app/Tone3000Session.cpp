@@ -333,7 +333,9 @@ private:
         }
 
         const juce::URL searchUrl{
-            juce::String(nam::buildSearchUrl(query_, page_, /*pageSize*/ 25, /*namOnly*/ false))};
+            // nam only: IR packs are cabs, not playable tones — they clutter
+            // the browse list and can't join the Play deck.
+            juce::String(nam::buildSearchUrl(query_, page_, /*pageSize*/ 25, /*namOnly*/ true))};
         juce::MemoryBlock bytes;
         juce::String getError;
         if (!authenticatedGet(*this, accessToken_, searchUrl, true, bytes, getError)) {
