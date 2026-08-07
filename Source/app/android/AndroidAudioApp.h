@@ -72,6 +72,10 @@ private:
     bool defaultFetchKicked_ = false;
     // Library id of the entry imported for this tone ("" if not kept).
     std::string libraryIdForTone(const std::string& toneId) const;
+    // TONE3000 artwork: cached on disk per tone, shown as Play "album art".
+    static juce::File artworkFile(const std::string& toneId);
+    static std::string toneIdFromEntry(const nam::LibraryEntry& e);
+    void fetchArtwork(nam::ToneInfo tone);   // async download+downscale (no-op if cached)
     void auditionFromFile(juce::File file, bool deleteAfter, const std::string& cacheKey,
                           juce::String displayName,
                           std::function<void(bool, juce::String)> done,

@@ -20,6 +20,11 @@ void PlayScreen::setPosition (int index, int count) {
     repaint (transportRect_);
 }
 
+void PlayScreen::setArtwork (juce::Image art) {
+    art_ = std::move (art);
+    repaint (artRect_);
+}
+
 void PlayScreen::setTuner (juce::String note, float cents, bool active) {
     if (note == tunerNote_ && active == tunerActive_
         && std::abs (cents - tunerCents_) < 1.0f)
@@ -89,18 +94,35 @@ void PlayScreen::paint (juce::Graphics& g) {
         juce::Path clip; clip.addRoundedRectangle (artRect_.toFloat(), 14.0f);
         g.saveState();
         g.reduceClipRegion (clip);
-        juce::ColourGradient ag (col::bgGradTop.brighter (0.06f), (float) artRect_.getCentreX(),
-                                 (float) artRect_.getY(), col::bg, (float) artRect_.getCentreX(),
-                                 (float) artRect_.getBottom(), false);
-        g.setGradientFill (ag); g.fillRect (artRect_);
-        juce::ColourGradient glow (col::accentA (0.16f), (float) artRect_.getCentreX(),
-                                   (float) artRect_.getBottom(), col::accent.withAlpha (0.0f),
-                                   (float) artRect_.getCentreX(), (float) artRect_.getY(), false);
-        g.setGradientFill (glow); g.fillRect (artRect_);
-        // big faint tone initial as "album art"
-        text (name_.substring (0, 1).toUpperCase(),
-              displayFont (artRect_.getHeight() * 0.62f), col::inkA (0.10f),
-              artRect_, juce::Justification::centred);
+        if (art_.isValid()) {
+            // Cover-fit the TONE3000 photo (centre crop, preserve aspect).
+            const float scale = juce::jmax ((float) artRect_.getWidth()  / (float) art_.getWidth(),
+                                            (float) artRect_.getHeight() / (float) art_.getHeight());
+            const float w = art_.getWidth() * scale, h = art_.getHeight() * scale;
+            g.drawImageTransformed (art_,
+                juce::AffineTransform::scale (scale)
+                    .translated (artRect_.getCentreX() - w * 0.5f,
+                                 artRect_.getCentreY() - h * 0.5f));
+            // Bottom scrim keeps the card readable against bright photos.
+            juce::ColourGradient scrim (col::bg.withAlpha (0.55f), (float) artRect_.getCentreX(),
+                                        (float) artRect_.getBottom(), col::bg.withAlpha (0.0f),
+                                        (float) artRect_.getCentreX(),
+                                        (float) artRect_.getCentreY(), false);
+            g.setGradientFill (scrim); g.fillRect (artRect_);
+        } else {
+            juce::ColourGradient ag (col::bgGradTop.brighter (0.06f), (float) artRect_.getCentreX(),
+                                     (float) artRect_.getY(), col::bg, (float) artRect_.getCentreX(),
+                                     (float) artRect_.getBottom(), false);
+            g.setGradientFill (ag); g.fillRect (artRect_);
+            juce::ColourGradient glow (col::accentA (0.16f), (float) artRect_.getCentreX(),
+                                       (float) artRect_.getBottom(), col::accent.withAlpha (0.0f),
+                                       (float) artRect_.getCentreX(), (float) artRect_.getY(), false);
+            g.setGradientFill (glow); g.fillRect (artRect_);
+            // big faint tone initial as "album art"
+            text (name_.substring (0, 1).toUpperCase(),
+                  displayFont (artRect_.getHeight() * 0.62f), col::inkA (0.10f),
+                  artRect_, juce::Justification::centred);
+        }
         g.restoreState();
         g.setColour (col::inkA (0.10f));
         g.drawRoundedRectangle (artRect_.toFloat(), 14.0f, 1.0f);

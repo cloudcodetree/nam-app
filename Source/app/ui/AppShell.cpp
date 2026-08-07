@@ -226,12 +226,14 @@ void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {
         family = juce::String (isA2 ? "A2" : "A1") + " " + kDotSep + " MY TONES";
     }
     play_->setNowPlaying (juce::String (e.displayName), family, {});
+    play_->setArtwork (artwork_ ? artwork_ (e) : juce::Image());
     play_->setPosition (idx, count);
 }
 
 void AppShell::setNowPlayingInfo (juce::String name, juce::String family) {
     collectionIndex_ = -1;
     play_->setNowPlaying (std::move (name), std::move (family), {});
+    play_->setArtwork ({});
     play_->setPosition (-1, 0);
 }
 

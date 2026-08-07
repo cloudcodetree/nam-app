@@ -67,6 +67,10 @@ public:
     using LoadModelFn = std::function<void (nam::LibraryEntry)>;
     void setLibraryService (GetModelsFn getModels, LoadModelFn loadModel);
 
+    // Host loads cached TONE3000 artwork for a kept tone ({} = none cached).
+    using ArtworkFn = std::function<juce::Image (const nam::LibraryEntry&)>;
+    void setArtworkService (ArtworkFn artwork) { artwork_ = std::move (artwork); }
+
     // Audio settings service: enumerate devices/rates/buffers, apply picks.
     using GetDevicesFn   = std::function<AudioSettingsState()>;
     using SelectDeviceFn = std::function<void (juce::String)>;
@@ -113,6 +117,7 @@ private:
     double latencyMs_ = 0.0;
     GetModelsFn getModels_;
     LoadModelFn loadModel_;
+    ArtworkFn   artwork_;
     GetDevicesFn   getDevices_;
     SelectDeviceFn selectInput_, selectOutput_, selectRate_, selectBuffer_;
     RescanFn       rescanDevices_;

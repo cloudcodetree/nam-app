@@ -7,6 +7,7 @@
 #include "model/LibraryEntry.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <sys/system_properties.h>
@@ -88,6 +89,11 @@ AndroidAudioApp::AndroidAudioApp() {
     shell_->setLibraryService(
         [this] { return library_.all(nam::LibraryType::Model); },
         [this](nam::LibraryEntry e) { loadModelEntry(e); });
+    shell_->setArtworkService([](const nam::LibraryEntry& e) {
+        const auto id = toneIdFromEntry(e);
+        return id.empty() ? juce::Image()
+                          : juce::ImageFileFormat::loadFrom(artworkFile(id));
+    });
     shell_->setAudioDeviceService(
         [this] { return audioSettingsState(); },
         [this](juce::String name) { selectInputDevice(name); },
@@ -592,9 +598,19 @@ void AndroidAudioApp::doSearch(juce::String query,
     if (! t3kAuth_.isConfigured()) { done(false, {}, "not configured (.env key missing)"); return; }
 
     // Runs the actual search with a fresh session built from the current token.
-    auto run = [this, query, done] {
+    // Backfill artwork for tones kept before art caching existed (or whose
+    // download failed): any kept result missing its file gets a quiet fetch.
+    auto withBackfill = [this, done](bool ok, std::vector<nam::ToneInfo> tones,
+                                     juce::String err) {
+        if (ok)
+            for (const auto& t : tones)
+                if (! libraryIdForTone(t.id).empty()) fetchArtwork(t);
+        done(ok, std::move(tones), std::move(err));
+    };
+
+    auto run = [this, query, withBackfill] {
         t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
-        t3kSession_->search(query.toStdString(), 1, done);
+        t3kSession_->search(query.toStdString(), 1, withBackfill);
     };
 
     if (t3kAuth_.hasValidToken()) { run(); return; }
@@ -1166,6 +1182,7 @@ void AndroidAudioApp::fetchPopularDefault() {
                         best = &t;
                 if (best == nullptr) return;
                 const auto tone = *best;
+                fetchArtwork(tone);
                 doDownloadOnly(tone, [this, tone](bool dlOk, juce::String) {
                     if (! dlOk) return;
                     const auto keep = modelCacheFile("keep_" + tone.id);
@@ -1188,6 +1205,56 @@ void AndroidAudioApp::fetchPopularDefault() {
                     }
                 });
             });
+    });
+}
+
+juce::File AndroidAudioApp::artworkFile(const std::string& toneId) {
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("NAM Player/artwork").getChildFile(toneId + ".jpg");
+}
+
+std::string AndroidAudioApp::toneIdFromEntry(const nam::LibraryEntry& e) {
+    // Kept entries came from keep_<toneId>.nam / ir_<toneId>.nam (possibly
+    // " (2)"-suffixed); the tone id is the digit run after the prefix.
+    for (const char* prefix : { "keep_", "ir_" }) {
+        const auto& f = e.fileName;
+        const auto plen = std::string(prefix).size();
+        if (f.rfind(prefix, 0) != 0) continue;
+        std::string id;
+        for (size_t i = plen; i < f.size() && std::isdigit((unsigned char) f[i]); ++i)
+            id += f[i];
+        if (! id.empty()) return id;
+    }
+    return {};
+}
+
+void AndroidAudioApp::fetchArtwork(nam::ToneInfo tone) {
+    if (tone.imageUrl.empty() || artworkFile(tone.id).existsAsFile()) return;
+    juce::Thread::launch([tone] {
+        juce::URL url { juce::String(tone.imageUrl) };
+        auto stream = url.createInputStream(
+            juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                .withConnectionTimeoutMs(15000));
+        if (stream == nullptr) return;
+        juce::MemoryBlock raw;
+        stream->readIntoMemoryBlock(raw);
+        auto img = juce::ImageFileFormat::loadFrom(raw.getData(), raw.getSize());
+        if (! img.isValid()) return;   // e.g. webp — JUCE can't decode it
+        // Downscale so per-swipe decode stays cheap (card is ~<700 px wide).
+        constexpr int kMaxDim = 700;
+        if (juce::jmax(img.getWidth(), img.getHeight()) > kMaxDim) {
+            const float s = (float) kMaxDim / (float) juce::jmax(img.getWidth(), img.getHeight());
+            img = img.rescaled(juce::roundToInt(img.getWidth() * s),
+                               juce::roundToInt(img.getHeight() * s),
+                               juce::Graphics::highResamplingQuality);
+        }
+        const auto dest = artworkFile(tone.id);
+        dest.getParentDirectory().createDirectory();
+        juce::FileOutputStream out(dest);
+        if (! out.openedOk()) return;
+        juce::JPEGImageFormat jpeg;
+        jpeg.setQuality(0.85f);
+        if (! jpeg.writeImageToStream(img, out)) dest.deleteFile();
     });
 }
 
@@ -1215,6 +1282,7 @@ void AndroidAudioApp::doToggleKeep(nam::ToneInfo tone,
         done(true, juce::String(tone.title));
         return;
     }
+    fetchArtwork(tone);   // Play-screen art for the newly kept tone
     doDownload(std::move(tone), std::move(done));
 }
 

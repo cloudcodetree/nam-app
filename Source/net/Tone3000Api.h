@@ -24,6 +24,7 @@ struct ToneInfo {
     long long   a2Count = 0;
     long long   a1Count = 0;
     long long   downloads = 0;
+    std::string imageUrl;   // first entry of `images` ("" if none)
 };
 
 // Percent-encodes every byte except the unreserved set [A-Za-z0-9-._~]

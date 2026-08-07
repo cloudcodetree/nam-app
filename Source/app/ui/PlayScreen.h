@@ -19,6 +19,8 @@ public:
     // Live tuner state (owner runs pitch detection on the raw input).
     void setTuner (juce::String note, float cents, bool active);
     void setPosition (int index, int count);   // place in the collection (-1 = not in it)
+    // TONE3000 artwork for the current tone (invalid image = initial-letter art).
+    void setArtwork (juce::Image art);
 
     std::function<void()>     onLibrary;
     std::function<void()>     onPrev, onNext;   // step through the collection
@@ -31,6 +33,7 @@ public:
 
 private:
     juce::String name_ { "Bundled Tone" }, family_ { "NAM PLAYER" }, author_;
+    juce::Image  art_;
     int   index_    = -1;
     int   count_    = 0;
     float inLevel_  = 0.0f;
