@@ -7,7 +7,9 @@
 // The "Play" screen (resting state) from the Hi-Fi design: hero tone card,
 // transport, tuner + live IN/OUT meters, and the PLAY/EDIT/RADIO/LIVE nav bar.
 // Pure presentation — the owner feeds live meter levels and handles nav.
-class PlayScreen : public juce::Component {
+// Tapping the art card flips it to a per-tone settings face (quick sliders);
+// tapping again flips back.
+class PlayScreen : public juce::Component, private juce::Timer {
 public:
     PlayScreen();
 
@@ -29,15 +31,33 @@ public:
     std::function<void()>     onLibrary;
     std::function<void()>     onPrev, onNext;   // step through the collection
     std::function<void()>     onTuner;          // tuner panel -> strobe tuner
+    // Card-back slider moved: (param index, normalised 0..1). The owner maps
+    // to engine ranges (mirrors the EDIT screen mappings).
+    std::function<void (int, float)> onToneParam;
+    static constexpr int kNumToneParams = 7;    // GAIN BASS MID TREBLE GATE DLY VERB
 
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
 
 private:
+    void timerCallback() override;
+    void toggleFlip();
+    void applyParamFromX (int idx, int x);
+
     juce::String name_ { "Bundled Tone" }, family_ { "NAM PLAYER" }, author_;
     juce::Image  art_;
+    // Card flip: 0 = artwork front, 1 = settings back.
+    bool  flipped_ = false;
+    float flip_ = 0.0f;
+    int   dragParam_ = -1;
+    struct ToneParam { const char* label; float v; };
+    std::array<ToneParam, (size_t) kNumToneParams> params_ { {
+        { "GAIN", 0.5f }, { "BASS", 0.5f }, { "MID", 0.5f }, { "TREBLE", 0.5f },
+        { "GATE", 0.2f }, { "DELAY", 0.0f }, { "REVERB", 0.0f } } };
+    std::array<juce::Rectangle<int>, (size_t) kNumToneParams> paramRows_;
     int   index_    = -1;
     int   count_    = 0;
     float inLevel_  = 0.0f;

@@ -267,6 +267,7 @@ void TunerScreen::mouseDown (const juce::MouseEvent& e) {
             repaint();
             return;
         }
-    // Panel mode: any other tap on the card collapses it.
+    // Panel mode: any tap that isn't a mode pill dismisses the card (the
+    // outside scrim handles taps beyond it).
     if (panelMode_ && onBack) onBack();
 }

@@ -41,6 +41,20 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
 
     devices_->onSetInputDb = [this] (float db) { engine_.setInputDb (db); };
 
+    // Card-back quick sliders -> engine (same ranges as the EDIT screen).
+    play_->onToneParam = [this] (int idx, float v) {
+        switch (idx) {
+            case 0: engine_.setInputDb (-24.0f + v * 48.0f); break;
+            case 1: engine_.setLowDb  ((v - 0.5f) * 12.5f); break;
+            case 2: engine_.setMidDb  ((v - 0.5f) * 12.5f); break;
+            case 3: engine_.setHighDb ((v - 0.5f) * 12.5f); break;
+            case 4: engine_.setGateThresholdDb (-70.0f + v * 50.0f); break;
+            case 5: engine_.setDelayMix (v);   engine_.setDelayEnabled (v > 0.001f); break;
+            case 6: engine_.setReverbMix (v);  engine_.setReverbEnabled (v > 0.001f); break;
+            default: break;
+        }
+    };
+
     show (Screen::Play);
 }
 
