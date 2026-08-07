@@ -18,6 +18,12 @@ public:
 
     void setPitch (float hz);   // 0 = no pitch
 
+    // Panel mode: rendered as a rounded card growing out of the Play tuner
+    // panel (no BACK pill / hero background; the panel below collapses it).
+    void setPanelMode (bool on);
+    // Height the panel-mode card wants (content-sized, not full screen).
+    static constexpr int kPanelHeight = 470;
+
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -30,6 +36,7 @@ private:
 
     enum class Mode { Strobe, Needle, Bars };
     Mode mode_ = Mode::Strobe;
+    bool panelMode_ = false;
     std::array<juce::Rectangle<int>, 3> modeRects_;
 
     float hz_ = 0.0f;

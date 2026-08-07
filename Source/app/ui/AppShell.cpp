@@ -18,6 +18,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     live_    = std::make_unique<LiveScreen>();
     devices_ = std::make_unique<AudioSettingsScreen>();
     tuner_   = std::make_unique<TunerScreen>();
+    tuner_->setPanelMode (true);   // hosted as a card over Play, not a screen
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) browse_.get(), (juce::Component*) library_.get(),
@@ -345,9 +346,13 @@ void AppShell::toggleTuner() {
     if (play_ == nullptr || tuner_ == nullptr) return;
     auto& animator = juce::Desktop::getInstance().getAnimator();
     // Grows out of the Play tuner panel; the panel itself stays exposed
-    // below the overlay as the collapse handle.
+    // below the overlay as the collapse handle. Content-sized card, same
+    // width/border language as the panel.
     const auto panel = play_->tunerPanelBounds() + play_->getPosition();
-    const auto expanded = play_->getBounds().withBottom (panel.getY() - 8);
+    const int h = juce::jmin (TunerScreen::kPanelHeight,
+                              panel.getY() - play_->getY() - 16);
+    const juce::Rectangle<int> expanded { panel.getX(), panel.getY() - 8 - h,
+                                          panel.getWidth(), h };
     if (! tunerOpen_) {
         tunerOpen_ = true;
         animator.cancelAnimation (tuner_.get(), false);
@@ -489,7 +494,9 @@ void AppShell::resized() {
     // The tuner overlay tracks the Play tuner panel, not the screen grid.
     if (tuner_ != nullptr && tunerOpen_) {
         const auto panel = play_->tunerPanelBounds() + play_->getPosition();
-        tuner_->setBounds (play_->getBounds().withBottom (panel.getY() - 8));
+        const int h = juce::jmin (TunerScreen::kPanelHeight,
+                                  panel.getY() - play_->getY() - 16);
+        tuner_->setBounds ({ panel.getX(), panel.getY() - 8 - h, panel.getWidth(), h });
     }
 }
 

@@ -14,6 +14,13 @@ const juce::String kCentsSign = juce::String::fromUTF8 ("\xC2\xA2");     // ¢
 TunerScreen::TunerScreen() { setOpaque (true); startTimerHz (60); }
 TunerScreen::~TunerScreen() { stopTimer(); }
 
+void TunerScreen::setPanelMode (bool on) {
+    panelMode_ = on;
+    setOpaque (! on);   // rounded card corners are transparent
+    if (! getLocalBounds().isEmpty()) resized();
+    repaint();
+}
+
 void TunerScreen::setPitch (float hz) {
     if (hz <= 0.0f) {
         // Hold the last reading briefly so the display doesn't flicker
@@ -53,10 +60,14 @@ void TunerScreen::timerCallback() {
 
 void TunerScreen::resized() {
     auto r = getLocalBounds();
-    auto top = r.removeFromTop (juce::jmax (56, r.getHeight() / 14));
-    backRect_ = { top.getX() + 20, top.getCentreY() - 16, 84, 32 };
-
-    r.reduce (26, 0);
+    if (panelMode_) {
+        backRect_ = {};             // the panel below is the collapse handle
+        r.reduce (20, 14);
+    } else {
+        auto top = r.removeFromTop (juce::jmax (56, r.getHeight() / 14));
+        backRect_ = { top.getX() + 20, top.getCentreY() - 16, 84, 32 };
+        r.reduce (26, 0);
+    }
     modeRow_ = r.removeFromTop (40);
     {
         const int w = juce::jmin (110, (modeRow_.getWidth() - 16) / 3);
@@ -75,15 +86,28 @@ void TunerScreen::resized() {
 }
 
 void TunerScreen::paint (juce::Graphics& g) {
-    paintHeroBackground (g, getLocalBounds());
+    if (panelMode_) {
+        // Same card treatment as the Play tuner panel it grows out of.
+        const auto card = getLocalBounds().toFloat();
+        g.setColour (col::bg);
+        g.fillRoundedRectangle (card, 12.0f);
+        g.setColour (col::inkA (0.03f));
+        g.fillRoundedRectangle (card, 12.0f);
+        g.setColour (col::inkA (0.12f));
+        g.drawRoundedRectangle (card.reduced (0.5f), 12.0f, 1.0f);
+    } else {
+        paintHeroBackground (g, getLocalBounds());
+    }
     auto text = [&] (const juce::String& s, juce::Font f, juce::Colour c,
                      juce::Rectangle<int> rr, juce::Justification j) {
         g.setFont (f); g.setColour (c); g.drawText (s, rr, j, false);
     };
 
-    drawPill (g, backRect_.toFloat(), juce::Colours::transparentBlack, col::inkA (0.22f));
-    text (kBackGlyph + " BACK", uiFontTracked (12.0f, true), col::ink,
-          backRect_, juce::Justification::centred);
+    if (! panelMode_) {
+        drawPill (g, backRect_.toFloat(), juce::Colours::transparentBlack, col::inkA (0.22f));
+        text (kBackGlyph + " BACK", uiFontTracked (12.0f, true), col::ink,
+              backRect_, juce::Justification::centred);
+    }
 
     const bool inTune = active_ && std::abs (cents_) <= 3.0f;
 
