@@ -59,6 +59,8 @@ public:
         // Library id of the entry imported for a tone ("" if not kept) —
         // lets Play snap to the deck entry of the last-auditioned tone.
         std::function<std::string (std::string)> libraryIdForTone;
+        // The hearted deck as browse rows (favorites filter; works offline).
+        std::function<std::vector<nam::ToneInfo>()> listKept;
     };
     void setBrowseServices (BrowseServices services);
 
@@ -92,6 +94,7 @@ private:
     void show (Screen s);
     void refreshDevices();
     void runBrowseSearch (juce::String query);
+    void pushBrowseResults();                 // apply sort + sync the screen
     void stopAudition();
     void refreshCachedFlags();
     void stepCollection (int delta);          // Play ‹ › through the Library
@@ -125,7 +128,9 @@ private:
     GetDevicesFn   getDevices_;
     SelectDeviceFn selectInput_, selectOutput_, selectRate_, selectBuffer_;
     RescanFn       rescanDevices_;
-    std::vector<nam::ToneInfo> browseResults_;
+    std::vector<nam::ToneInfo> browseResults_;   // display order (matches rows)
+    std::vector<nam::ToneInfo> browseUnsorted_;  // as received (trending order)
+    int browseSort_ = 0;                         // 0 trending · 1 most kept
     std::vector<std::vector<nam::ModelInfo>> browseModels_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppShell)

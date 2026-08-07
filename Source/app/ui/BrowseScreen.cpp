@@ -20,6 +20,23 @@ constexpr int kDragThreshold = 8;
 
 const char* kTagChips[]  = { "metal", "blues", "clean", "vintage", "high gain" };
 const char* kMakeChips[] = { "Marshall", "Fender", "Vox", "Mesa", "Orange", "EVH" };
+
+// Vector heart (Android's filled U+2665 glyph falls back to the huge,
+// uncolourable colour-emoji font — text is out).
+juce::Path heartPath (juce::Rectangle<float> b) {
+    juce::Path p;
+    p.startNewSubPath (0.50f, 0.32f);
+    p.cubicTo (0.50f, 0.20f, 0.38f, 0.12f, 0.27f, 0.12f);
+    p.cubicTo (0.11f, 0.12f, 0.04f, 0.26f, 0.04f, 0.38f);
+    p.cubicTo (0.04f, 0.58f, 0.26f, 0.74f, 0.50f, 0.92f);
+    p.cubicTo (0.74f, 0.74f, 0.96f, 0.58f, 0.96f, 0.38f);
+    p.cubicTo (0.96f, 0.26f, 0.89f, 0.12f, 0.73f, 0.12f);
+    p.cubicTo (0.62f, 0.12f, 0.50f, 0.20f, 0.50f, 0.32f);
+    p.closeSubPath();
+    p.applyTransform (juce::AffineTransform::scale (b.getWidth(), b.getHeight())
+                          .translated (b.getX(), b.getY()));
+    return p;
+}
 }
 
 BrowseScreen::BrowseScreen() {
@@ -65,14 +82,14 @@ juce::String BrowseScreen::composedQuery() const {
 }
 
 void BrowseScreen::runSearch() {
+    favoritesOnly_ = false;   // a live search leaves the deck view
     if (onQuery) onQuery (composedQuery());
 }
 
 void BrowseScreen::setResults (std::vector<nam::ToneInfo> tones) {
+    // Display order == the owner's order (sorting lives with the owner so
+    // row indices always match its result list).
     tones_ = std::move (tones);
-    if (sort_ == 1)
-        std::stable_sort (tones_.begin(), tones_.end(),
-                          [] (const auto& a, const auto& b) { return a.downloads > b.downloads; });
     models_.assign (tones_.size(), {});
     kept_.assign (tones_.size(), false);
     cached_.assign (tones_.size(), false);
@@ -154,6 +171,7 @@ void BrowseScreen::relayout() {
     auto frow = r.removeFromTop (44).reduced (20, 6);
     filtersBtn_ = frow.removeFromLeft (108);
     sortBtn_    = frow.removeFromLeft (110);
+    favBtn_     = frow.removeFromLeft (52);
     countRect_  = frow;
 
     filterChips_.clear();
@@ -282,6 +300,20 @@ void BrowseScreen::paint (juce::Graphics& g) {
     text (juce::String (sort_ == 0 ? "Trending" : "Most kept")
               + " " + juce::String::fromUTF8 ("\xE2\x96\xBE"),
           uiFont (12.0f, true), col::inkA (0.6f), sortBtn_, juce::Justification::centred);
+    // Favorites: heart pill toggling between the catalog and the deck.
+    {
+        drawPill (g, favBtn_.reduced (0, 4).toFloat(),
+                  favoritesOnly_ ? col::accentA (0.12f) : juce::Colours::transparentBlack,
+                  favoritesOnly_ ? col::accentA (0.6f) : col::inkA (0.2f));
+        const auto hb = favBtn_.toFloat().withSizeKeepingCentre (16.0f, 16.0f);
+        if (favoritesOnly_) {
+            g.setColour (col::accent);
+            g.fillPath (heartPath (hb));
+        } else {
+            g.setColour (col::inkA (0.6f));
+            g.strokePath (heartPath (hb), juce::PathStrokeType (1.4f));
+        }
+    }
     text (juce::String ((int) tones_.size()) + " packs", uiFont (11.0f, false), col::inkA (0.4f),
           countRect_, juce::Justification::centredRight);
 
@@ -351,28 +383,15 @@ void BrowseScreen::paint (juce::Graphics& g) {
               isIr ? col::meterLime : col::accentAlt, badge, juce::Justification::centred);
 
         // Heart: quick add/remove from the tone deck (persisted library state).
-        // Drawn as a path — Android renders the filled U+2665 glyph via the
-        // colour-emoji fallback font (huge, red, uncolourable), so text is out.
         {
             const bool kept = i < kept_.size() && kept_[i];
             const auto hb = S (row.starBtn).toFloat().withSizeKeepingCentre (24.0f, 24.0f);
-            juce::Path heart;
-            heart.startNewSubPath (0.50f, 0.32f);
-            heart.cubicTo (0.50f, 0.20f, 0.38f, 0.12f, 0.27f, 0.12f);
-            heart.cubicTo (0.11f, 0.12f, 0.04f, 0.26f, 0.04f, 0.38f);
-            heart.cubicTo (0.04f, 0.58f, 0.26f, 0.74f, 0.50f, 0.92f);
-            heart.cubicTo (0.74f, 0.74f, 0.96f, 0.58f, 0.96f, 0.38f);
-            heart.cubicTo (0.96f, 0.26f, 0.89f, 0.12f, 0.73f, 0.12f);
-            heart.cubicTo (0.62f, 0.12f, 0.50f, 0.20f, 0.50f, 0.32f);
-            heart.closeSubPath();
-            heart.applyTransform (juce::AffineTransform::scale (hb.getWidth(), hb.getHeight())
-                                      .translated (hb.getX(), hb.getY()));
             if (kept) {
                 g.setColour (col::accent);
-                g.fillPath (heart);
+                g.fillPath (heartPath (hb));
             } else {
                 g.setColour (col::inkA (0.35f));
-                g.strokePath (heart, juce::PathStrokeType (1.6f));
+                g.strokePath (heartPath (hb), juce::PathStrokeType (1.6f));
             }
         }
 
@@ -570,7 +589,15 @@ void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
     if (filtersBtn_.contains (p)) { filtersOpen_ = true; relayout(); repaint(); return; }
     if (sortBtn_.contains (p)) {
         sort_ = (sort_ + 1) % 2;
-        setResults (std::move (tones_));
+        repaint();
+        if (onSort) onSort (sort_);   // owner re-pushes results in the new order
+        return;
+    }
+    if (favBtn_.contains (p)) {
+        favoritesOnly_ = ! favoritesOnly_;
+        repaint();
+        if (favoritesOnly_) { if (onFavorites) onFavorites(); }
+        else                runSearch();
         return;
     }
     if (! listArea_.contains (p)) return;

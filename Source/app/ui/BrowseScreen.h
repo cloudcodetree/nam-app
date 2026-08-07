@@ -24,6 +24,8 @@ public:
     std::function<void (int)>  onKeep;                    // favorite -> library
     std::function<void (int)>  onDemoTrack;               // DI track index
     std::function<void (int)>  onCab;                     // cab IR index (0 = none)
+    std::function<void (int)>  onSort;                    // sort mode changed (owner re-pushes)
+    std::function<void()>      onFavorites;               // show the hearted deck
 
     void setResults (std::vector<nam::ToneInfo> tones);
     void setModels (int packIdx, juce::StringArray names);
@@ -73,6 +75,7 @@ private:
     float menuScroll_ = 0.0f;
     bool menuDragging_ = false;
     int sort_ = 0;                            // 0 trending · 1 most kept
+    bool favoritesOnly_ = false;              // showing the hearted deck
     bool filtersOpen_ = false;
     juce::StringArray selectedTags_;
     juce::String status_ { "Tuning in to TONE3000" };
@@ -81,7 +84,7 @@ private:
     juce::TextEditor search_;
 
     juce::Rectangle<int> backRect_, badgeRect_, searchBox_, filtersBtn_,
-                         sortBtn_, countRect_, filterPanel_, statusRect_;
+                         sortBtn_, favBtn_, countRect_, filterPanel_, statusRect_;
     struct Chip { juce::String label; juce::Rectangle<int> rect; };
     std::vector<Chip> filterChips_;
     struct Row {

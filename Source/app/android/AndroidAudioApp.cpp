@@ -52,6 +52,26 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.libraryIdForTone = [this](std::string toneId) {
         return libraryIdForTone(toneId);
     };
+    browse.listKept = [this] {
+        // The deck as browse rows. Entries without a TONE3000 id (sideloaded
+        // files) can't drive the TONE3000 row actions, so they stay out.
+        std::vector<nam::ToneInfo> out;
+        for (const auto& e : library_.all(nam::LibraryType::Model)) {
+            const auto toneId = toneIdFromEntry(e);
+            if (toneId.empty()) continue;
+            nam::ToneInfo t;
+            t.id = toneId;
+            t.title = e.displayName;
+            t.format = "nam";
+            const auto a = juce::String(e.arch).toLowerCase();
+            if (a.contains("slim") || a.startsWith("2") || a.startsWith("a2"))
+                t.a2Count = 1;
+            else
+                t.a1Count = 1;
+            out.push_back(std::move(t));
+        }
+        return out;
+    };
     browse.downloadOnly = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doDownloadOnly(std::move(t), std::move(done));
     };

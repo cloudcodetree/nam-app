@@ -1,6 +1,7 @@
 #include "app/ui/AppShell.h"
 #include "app/ui/NamLookAndFeel.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -44,6 +45,22 @@ void AppShell::setBrowseServices (BrowseServices services) {
     svc_ = std::move (services);
 
     browse_->onQuery = [this] (juce::String q) { runBrowseSearch (std::move (q)); };
+
+    browse_->onSort = [this] (int mode) {
+        browseSort_ = mode;
+        pushBrowseResults();
+    };
+
+    browse_->onFavorites = [this] {
+        stopAudition();
+        browseUnsorted_ = svc_.listKept ? svc_.listKept() : std::vector<nam::ToneInfo>{};
+        pushBrowseResults();
+        browse_->setStatus (browseUnsorted_.empty()
+            ? ("Deck is empty " + kDotSep + " " + kHeart + " tones to collect them")
+            : ("Your tone deck " + kDotSep + " "
+               + juce::String ((int) browseUnsorted_.size())
+               + (browseUnsorted_.size() == 1 ? " tone" : " tones")));
+    };
 
     browse_->onKeep = [this] (int idx) {
         if (! svc_.keep || idx < 0 || idx >= (int) browseResults_.size()) return;
@@ -263,15 +280,25 @@ void AppShell::runBrowseSearch (juce::String q) {
                                     : ("Searching \"" + q + "\"" + kEllipsis));
     svc_.search (q, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String err) {
         if (! ok) { browse_->setStatus ("TONE3000: " + err); return; }
-        browseResults_ = tones;
-        browseModels_.assign (tones.size(), {});
-        browse_->setResults (tones);
-        refreshCachedFlags();
-        browse_->setStatus (juce::String ((int) tones.size())
-                            + (tones.size() == 1 ? " pack" : " packs")
+        browseUnsorted_ = std::move (tones);
+        pushBrowseResults();
+        browse_->setStatus (juce::String ((int) browseUnsorted_.size())
+                            + (browseUnsorted_.size() == 1 ? " pack" : " packs")
                             + " " + kDotSep + " tap a pack to expand " + kDotSep
                             + " " + kHeart + " keeps");
     });
+}
+
+void AppShell::pushBrowseResults() {
+    // Sorting lives HERE so browseResults_ order always matches the rows the
+    // screen displays (index-based callbacks depend on it).
+    browseResults_ = browseUnsorted_;
+    if (browseSort_ == 1)
+        std::stable_sort (browseResults_.begin(), browseResults_.end(),
+                          [] (const auto& a, const auto& b) { return a.downloads > b.downloads; });
+    browseModels_.assign (browseResults_.size(), {});
+    browse_->setResults (browseResults_);
+    refreshCachedFlags();
 }
 
 void AppShell::setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInput,
