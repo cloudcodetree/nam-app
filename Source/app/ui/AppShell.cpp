@@ -361,14 +361,13 @@ void AppShell::setTunerPitch (float hz) {
 
 juce::Rectangle<int> AppShell::contentBounds() const {
     auto b = getLocalBounds();
-    b.removeFromTop (meterBar_.getHeight());
-    b.removeFromBottom (navBar_.getHeight());
+    b.removeFromBottom (navBar_.getHeight() + meterBar_.getHeight());
     return b;
 }
 
 void AppShell::resized() {
     auto b = getLocalBounds();
-    meterBar_ = b.removeFromTop (12);
+    meterBar_ = b.removeFromBottom (12);   // very bottom, under the nav
     navBar_   = b.removeFromBottom (juce::jmax (64, getHeight() / 13));
     const int nw = navBar_.getWidth() / 4;
     for (int i = 0; i < 4; ++i)
@@ -386,7 +385,8 @@ void AppShell::paint (juce::Graphics& g) {
     g.setColour (nam::ui::col::bg);
     g.fillRect (meterBar_.getUnion (navBar_));
 
-    // Slim input meter (dB-scaled -60..0), full-width.
+    // Slim input meter (dB-scaled -60..0): grows symmetrically outward from
+    // the centre with level.
     {
         auto bar = meterBar_.reduced (20, 4).toFloat();
         g.setColour (nam::ui::col::inkA (0.08f));
@@ -395,10 +395,12 @@ void AppShell::paint (juce::Graphics& g) {
         const float frac = juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f);
         if (frac > 0.0f) {
             const float w = juce::jmax (3.0f, bar.getWidth() * frac);
-            juce::ColourGradient mg (nam::ui::col::meterGreen, bar.getX(), 0,
-                                     nam::ui::col::meterLime, bar.getX() + w, 0, false);
+            auto fill = bar.withSizeKeepingCentre (w, bar.getHeight());
+            juce::ColourGradient mg (nam::ui::col::meterLime, fill.getX(), 0,
+                                     nam::ui::col::meterLime, fill.getRight(), 0, false);
+            mg.addColour (0.5, nam::ui::col::meterGreen);
             g.setGradientFill (mg);
-            juce::Path p; p.addRoundedRectangle (bar.withWidth (w), 2.0f);
+            juce::Path p; p.addRoundedRectangle (fill, 2.0f);
             g.fillPath (p);
         }
     }
