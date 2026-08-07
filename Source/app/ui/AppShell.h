@@ -90,8 +90,9 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
-    enum class Screen { Play, Edit, Library, Browse, Live, Devices, Tuner };
+    enum class Screen { Play, Edit, Library, Browse, Live, Devices };
     void show (Screen s);
+    void toggleTuner();                       // expand/collapse the tuner overlay
     void refreshDevices();
     void runBrowseSearch (juce::String query);
     void pushBrowseResults();                 // apply sort + sync the screen
@@ -107,7 +108,8 @@ private:
     std::unique_ptr<LibraryScreen> library_;
     std::unique_ptr<LiveScreen>    live_;
     std::unique_ptr<AudioSettingsScreen> devices_;
-    std::unique_ptr<TunerScreen>   tuner_;
+    std::unique_ptr<TunerScreen>   tuner_;    // overlay above Play, not a screen
+    bool tunerOpen_ = false;
     juce::Component* current_ = nullptr;
 
     BrowseServices svc_;

@@ -22,6 +22,10 @@ public:
     // TONE3000 artwork for the current tone (invalid image = initial-letter art).
     void setArtwork (juce::Image art);
 
+    // The tuner panel rect (local coords) — the expanding tuner overlay
+    // grows upward from here and leaves it exposed as the collapse handle.
+    juce::Rectangle<int> tunerPanelBounds() const { return tunerRect_; }
+
     std::function<void()>     onLibrary;
     std::function<void()>     onPrev, onNext;   // step through the collection
     std::function<void()>     onTuner;          // tuner panel -> strobe tuner

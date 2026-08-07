@@ -28,8 +28,8 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_->onLibrary  = [this] { show (Screen::Library); };
     play_->onPrev     = [this] { stepCollection (-1); };
     play_->onNext     = [this] { stepCollection (+1); };
-    play_->onTuner    = [this] { show (Screen::Tuner); };
-    tuner_->onBack    = [this] { show (Screen::Play); };
+    play_->onTuner    = [this] { toggleTuner(); };
+    tuner_->onBack    = [this] { if (tunerOpen_) toggleTuner(); };
     devices_->onBack  = [this] { show (Screen::Play); };
     edit_->onDone    = [this] { show (Screen::Play); };
     browse_->onBack  = [this] { show (Screen::Play); };
@@ -336,11 +336,47 @@ void AppShell::refreshDevices() {
 }
 
 bool AppShell::handleBackButton() {
+    if (tunerOpen_) { toggleTuner(); return true; }
     if (current_ != nullptr && current_ != play_.get()) { show (Screen::Play); return true; }
     return false;
 }
 
+void AppShell::toggleTuner() {
+    if (play_ == nullptr || tuner_ == nullptr) return;
+    auto& animator = juce::Desktop::getInstance().getAnimator();
+    // Grows out of the Play tuner panel; the panel itself stays exposed
+    // below the overlay as the collapse handle.
+    const auto panel = play_->tunerPanelBounds() + play_->getPosition();
+    const auto expanded = play_->getBounds().withBottom (panel.getY() - 8);
+    if (! tunerOpen_) {
+        tunerOpen_ = true;
+        animator.cancelAnimation (tuner_.get(), false);
+        tuner_->setAlpha (1.0f);
+        tuner_->setBounds (panel);
+        tuner_->setVisible (true);
+        tuner_->toFront (false);
+        animator.animateComponent (tuner_.get(), expanded, 1.0f, 220, false, 1.0, 0.0);
+    } else {
+        tunerOpen_ = false;
+        animator.animateComponent (tuner_.get(), panel, 0.0f, 180, false, 1.0, 0.0);
+        juce::Timer::callAfterDelay (200,
+            [this, safe = juce::Component::SafePointer<TunerScreen> (tuner_.get())] {
+                if (safe == nullptr || tunerOpen_) return;
+                safe->setVisible (false);
+                safe->setAlpha (1.0f);
+            });
+    }
+}
+
 void AppShell::show (Screen s) {
+    // The tuner overlay belongs to Play: navigating anywhere closes it.
+    if (tunerOpen_ && s != Screen::Play) {
+        juce::Desktop::getInstance().getAnimator().cancelAnimation (tuner_.get(), false);
+        tuner_->setVisible (false);
+        tuner_->setAlpha (1.0f);
+        tunerOpen_ = false;
+    }
+
     // Refresh data-backed screens as they come into view.
     if (s == Screen::Library && getModels_) library_->setEntries (getModels_());
     if (s == Screen::Live && getModels_)     live_->setSlots (getModels_());
@@ -381,7 +417,6 @@ void AppShell::show (Screen s) {
         case Screen::Library: target = library_.get(); break;
         case Screen::Live:    target = live_.get();    break;
         case Screen::Devices: target = devices_.get(); break;
-        case Screen::Tuner:   target = tuner_.get();   break;
         case Screen::Play:    default: target = play_.get(); break;
     }
     // Persistent chrome: which nav tab is lit for this screen.
@@ -448,9 +483,14 @@ void AppShell::resized() {
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) browse_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get(), (juce::Component*) devices_.get(),
-                                (juce::Component*) tuner_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) devices_.get() })
         if (c != nullptr) c->setBounds (b);
+
+    // The tuner overlay tracks the Play tuner panel, not the screen grid.
+    if (tuner_ != nullptr && tunerOpen_) {
+        const auto panel = play_->tunerPanelBounds() + play_->getPosition();
+        tuner_->setBounds (play_->getBounds().withBottom (panel.getY() - 8));
+    }
 }
 
 void AppShell::paint (juce::Graphics& g) {
