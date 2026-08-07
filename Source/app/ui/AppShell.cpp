@@ -361,14 +361,15 @@ void AppShell::setTunerPitch (float hz) {
 
 juce::Rectangle<int> AppShell::contentBounds() const {
     auto b = getLocalBounds();
-    b.removeFromBottom (navBar_.getHeight() + meterBar_.getHeight());
+    b.removeFromTop (meterBar_.getHeight());
+    b.removeFromBottom (navBar_.getHeight());
     return b;
 }
 
 void AppShell::resized() {
     auto b = getLocalBounds();
+    meterBar_ = b.removeFromTop (12);
     navBar_   = b.removeFromBottom (juce::jmax (64, getHeight() / 13));
-    meterBar_ = b.removeFromBottom (12);
     const int nw = navBar_.getWidth() / 4;
     for (int i = 0; i < 4; ++i)
         navRects_[(size_t) i] = { navBar_.getX() + i * nw, navBar_.getY(), nw, navBar_.getHeight() };
