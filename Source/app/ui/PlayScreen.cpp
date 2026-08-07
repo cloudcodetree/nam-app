@@ -179,24 +179,37 @@ void PlayScreen::paint (juce::Graphics& g) {
         text ("TUNER", uiFontTracked (10.0f, true), col::inkA (0.4f),
               ti.removeFromRight (48), juce::Justification::centred);
         {
-            auto bars = ti; const int n = 5; const float bw = 3.0f;
-            const float step = (float) bars.getWidth() / (float) (n + 1);
-            const int heights[] = { 10, 14, 20, 14, 10 };
-            // Which bar does the current deviation land on? (-50..50 cents)
+            // Pedal-style LED segments (same look as the expanded BARS mode):
+            // 11 segments over -50..+50 cents, centre = in tune.
+            auto bars = ti.reduced (6, 0);
+            const int n = 11, gap = 5;
+            const int segW = juce::jmax (3, (bars.getWidth() - (n - 1) * gap) / n);
+            const int mid = n / 2;
             int lit = -1;
             bool inTune = false;
             if (tunerActive_) {
                 const float c = juce::jlimit (-49.0f, 49.0f, tunerCents_);
                 inTune = std::abs (c) <= 7.0f;
-                lit = inTune ? 2 : juce::jlimit (0, 4, (int) std::floor ((c + 50.0f) / 20.0f));
+                lit = inTune ? mid
+                             : juce::jlimit (0, n - 1,
+                                   (int) std::floor ((c + 50.0f) / (100.0f / (float) n)));
             }
+            const int baseH = 14;
             for (int i = 0; i < n; ++i) {
-                const float bx = bars.getX() + step * (i + 1) - bw * 0.5f;
-                const float bh = (float) heights[i];
-                juce::Rectangle<float> bar (bx, bars.getCentreY() - bh * 0.5f, bw, bh);
-                if (i == lit) g.setColour (inTune ? col::meterLime : col::accent);
-                else          g.setColour (col::inkA (i == 2 ? 0.35f : 0.2f));
-                g.fillRect (bar);
+                const int grow = (i == mid) ? baseH / 2 : baseH / 5 * std::abs (i - mid) / mid;
+                const int h = baseH + (i == mid ? baseH / 2 : grow);
+                juce::Rectangle<int> seg (bars.getX() + i * (segW + gap),
+                                          bars.getCentreY() - h / 2, segW, h);
+                const bool on = (i == lit);
+                const juce::Colour c = ! on ? col::inkA (0.10f)
+                                     : i == mid ? col::meterLime
+                                                : col::accent.withAlpha (0.9f);
+                if (on) {   // glow
+                    g.setColour (c.withAlpha (0.25f));
+                    g.fillRoundedRectangle (seg.toFloat().expanded (4.0f), 7.0f);
+                }
+                g.setColour (c);
+                g.fillRoundedRectangle (seg.toFloat(), 3.0f);
             }
         }
 
