@@ -404,7 +404,7 @@ void AppShell::paint (juce::Graphics& g) {
     }
 
     // Persistent nav
-    static const char* labels[] = { "PLAY", "EDIT", "RADIO", "LIVE" };
+    static const char* labels[] = { "PLAY", "EDIT", "TONES", "LIVE" };
     static const char* glyphsUtf8[] = { "\xE2\x96\xB6", "\xE2\x9C\x8E", "\xE2\x97\x89", "\xE2\x89\xA1" };
     for (int i = 0; i < 4; ++i) {
         const bool active = (i == activeTab_);
