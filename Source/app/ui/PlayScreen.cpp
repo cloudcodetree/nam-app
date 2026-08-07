@@ -69,6 +69,8 @@ void PlayScreen::layout() {
     // The tuner panel (full meters row) opens the strobe tuner.
     tunerRect_ = metersRow_;
 
+    gearRect_ = { artRect_.getRight() - 54, artRect_.getY() + 14, 40, 40 };
+
     // Card-back settings rows (drawn/hit only while flipped).
     {
         auto inner = artRect_.reduced (24, 18);
@@ -191,6 +193,18 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.restoreState();
         g.setColour (col::inkA (backFace ? 0.14f : 0.10f));
         g.drawRoundedRectangle (face.toFloat(), 14.0f, 1.0f);
+
+        // Corner affordance at rest: gear opens settings, ‹ goes back.
+        if (flip_ < 0.05f || flip_ > 0.95f) {
+            g.setColour (col::bg.withAlpha (0.5f));
+            g.fillEllipse (gearRect_.toFloat());
+            g.setColour (col::inkA (0.3f));
+            g.drawEllipse (gearRect_.toFloat().reduced (0.5f), 1.0f);
+            text (juce::String::fromUTF8 (backFace ? "\xE2\x80\xB9" : "\xE2\x9A\x99"),
+                  uiFont (backFace ? 22.0f : 18.0f, false), col::ink,
+                  backFace ? gearRect_.translated (-1, -2) : gearRect_,
+                  juce::Justification::centred);
+        }
     }
 
     // --- Tone text ------------------------------------------------------

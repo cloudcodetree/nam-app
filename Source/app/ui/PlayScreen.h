@@ -70,7 +70,8 @@ private:
     // Hit / layout rects, computed in resized(). (Nav lives in AppShell.)
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_,
                          metersRow_;
-    juce::Rectangle<int> libRect_, prevRect_, nextRect_, progressRect_, tunerRect_;
+    juce::Rectangle<int> libRect_, prevRect_, nextRect_, progressRect_, tunerRect_,
+                         gearRect_;   // card top-right: gear (front) / back (settings)
 
     void layout();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlayScreen)
