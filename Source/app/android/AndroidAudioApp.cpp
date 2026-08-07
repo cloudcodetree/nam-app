@@ -426,12 +426,22 @@ void AndroidAudioApp::selectInputDevice(const juce::String& name) {
 }
 
 void AndroidAudioApp::selectOutputDevice(const juce::String& name) {
+    // Picking the USB interface explicitly opens the LEGACY output path
+    // (192-frame bursts, audibly choppy — measured on the S25), while
+    // "System Default" routes to the same USB device on the MMAP FAST path.
+    // So a USB pick applies the default instead; the settings row's
+    // "system routing -> <device>" subtitle shows where sound actually goes.
+    juce::String effective = name;
+    if (name.containsIgnoreCase("usb") || name.containsIgnoreCase("irig"))
+        for (const auto& n : outputDeviceNames())
+            if (n.containsIgnoreCase("default")) { effective = n; break; }
+
     auto setup = deviceManager.getAudioDeviceSetup();
-    if (setup.outputDeviceName == name) return;
-    setup.outputDeviceName = name;
+    if (setup.outputDeviceName == effective) return;
+    setup.outputDeviceName = effective;
     setup.useDefaultOutputChannels = true;
     const auto err = applyDeviceSetup(setup);
-    juce::Logger::writeToLog("selectOutputDevice(" + name + ") -> "
+    juce::Logger::writeToLog("selectOutputDevice(" + name + " -> " + effective + ") -> "
                              + (err.isEmpty() ? "ok" : err));
 }
 
