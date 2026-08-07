@@ -459,9 +459,17 @@ void AppShell::setLatencyMs (double ms) {
 }
 
 void AppShell::setTunerPitch (float hz) {
+    // Hold the Play-panel reading through short detection dropouts (~1 s at
+    // the 10 Hz feed) so a decaying note fades out instead of cutting out.
+    if (hz <= 0.0f) {
+        if (tunerMiss_ < 10 && ++tunerMiss_ >= 10)
+            play_->setTuner ({}, 0.0f, false);
+        if (tuner_ != nullptr) tuner_->setPitch (0.0f);
+        return;
+    }
+    tunerMiss_ = 0;
     if (play_ == nullptr) return;
     if (tuner_ != nullptr) tuner_->setPitch (hz);
-    if (hz <= 0.0f) { play_->setTuner ({}, 0.0f, false); return; }
     static const char* names[] = { "C", "C#", "D", "D#", "E", "F",
                                    "F#", "G", "G#", "A", "A#", "B" };
     const double midi = 69.0 + 12.0 * std::log2 ((double) hz / 440.0);

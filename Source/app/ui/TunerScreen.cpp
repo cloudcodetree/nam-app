@@ -44,7 +44,7 @@ void TunerScreen::setPitch (float hz) {
 
 void TunerScreen::timerCallback() {
     if (! isVisible()) return;
-    if (++inactiveTicks_ > 45 && active_) {   // ~0.75 s without pitch
+    if (++inactiveTicks_ > 75 && active_) {   // ~1.25 s without pitch
         active_ = false;
         note_.clear();
     }

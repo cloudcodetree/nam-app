@@ -110,6 +110,7 @@ private:
     std::unique_ptr<AudioSettingsScreen> devices_;
     std::unique_ptr<TunerScreen>   tuner_;    // overlay above Play, not a screen
     bool tunerOpen_ = false;
+    int  tunerMiss_ = 0;                      // consecutive no-pitch feeds (panel hold)
     juce::Component* current_ = nullptr;
 
     BrowseServices svc_;

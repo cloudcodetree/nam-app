@@ -13,11 +13,12 @@ float detectPitchHz(const float* x, int n, double sr) {
     const int minLag = (int) (sr / 500.0);
     if (n < maxLag + minLag || minLag < 2) return 0.0f;
 
-    // Energy gate: don't chase noise.
+    // Energy gate: don't chase noise. ~-60 dBFS — low enough to track a
+    // decaying note's tail; YIN's periodicity threshold rejects hiss.
     double energy = 0.0;
     for (int i = 0; i < n; ++i) energy += (double) x[i] * x[i];
     const double rms = std::sqrt(energy / n);
-    if (rms < 0.004) return 0.0f;
+    if (rms < 0.001) return 0.0f;
 
     const int W = n - maxLag;   // comparison window
 
