@@ -103,6 +103,7 @@ AndroidAudioApp::AndroidAudioApp() {
     // interface (iRig) is attached, route input to it instead.
     deviceManager.addChangeListener(this);
     preferUsbInput();
+    clampBufferForLowLatency();
 
     setSize(900, 500);
     startTimerHz(30);
@@ -521,6 +522,7 @@ void AndroidAudioApp::selectSampleRate(const juce::String& label) {
 void AndroidAudioApp::selectBufferSize(const juce::String& label) {
     const int frames = label.getIntValue();
     if (frames <= 0) return;
+    userChoseBuffer_ = true;   // manual pick wins over the low-latency clamp
     auto setup = deviceManager.getAudioDeviceSetup();
     if (setup.bufferSize == frames) return;
     setup.bufferSize = frames;
@@ -531,8 +533,26 @@ void AndroidAudioApp::selectBufferSize(const juce::String& label) {
 void AndroidAudioApp::changeListenerCallback(juce::ChangeBroadcaster*) {
     // Device setup changed (stream restart etc.) — re-check USB routing unless
     // we caused the change ourselves or the user made an explicit choice.
-    if (applyingDeviceChange_ || userChoseInput_) return;
-    preferUsbInput();
+    if (applyingDeviceChange_) return;
+    if (! userChoseInput_) preferUsbInput();
+    clampBufferForLowLatency();
+}
+
+void AndroidAudioApp::clampBufferForLowLatency() {
+    if (userChoseBuffer_) return;
+    auto* dev = deviceManager.getCurrentAudioDevice();
+    if (dev == nullptr) return;
+    const auto sizes = dev->getAvailableBufferSizes();
+    if (sizes.isEmpty()) return;
+    int smallest = sizes[0];
+    for (int s : sizes) smallest = juce::jmin(smallest, s);
+    smallest = juce::jmax(96, smallest);
+    auto setup = deviceManager.getAudioDeviceSetup();
+    if (setup.bufferSize > 0 && setup.bufferSize <= smallest) return;
+    setup.bufferSize = smallest;
+    const auto err = applyDeviceSetup(setup);
+    juce::Logger::writeToLog("clampBufferForLowLatency(" + juce::String(smallest)
+                             + ") -> " + (err.isEmpty() ? "ok" : err));
 }
 
 bool AndroidAudioApp::handleBackButton() {

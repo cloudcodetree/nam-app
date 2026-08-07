@@ -31,6 +31,9 @@ public:
     void selectInputDevice(const juce::String& name);
     void selectOutputDevice(const juce::String& name);
     void rescanAudioDevices();   // re-enumerate (JUCE's Oboe scan is frozen at launch)
+    // Live guitar wants the smallest buffer the device offers; JUCE's Oboe
+    // default (1920 frames with a USB interface = 40 ms) is a media default.
+    void clampBufferForLowLatency();
     void selectSampleRate(const juce::String& label);   // e.g. "48k"
     void selectBufferSize(const juce::String& label);   // e.g. "192"
     AudioSettingsState audioSettingsState();
@@ -165,5 +168,6 @@ private:
 
     bool applyingDeviceChange_ = false;  // re-entrancy guard for setAudioDeviceSetup
     bool userChoseInput_ = false;        // manual pick disables USB auto-select
+    bool userChoseBuffer_ = false;       // manual pick disables the low-latency clamp
     int  rescanTick_ = 0;                // slow hot-plug poll (timer runs at 30 Hz)
 };
