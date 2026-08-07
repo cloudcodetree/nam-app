@@ -349,6 +349,22 @@ void AndroidAudioApp::timerCallback() {
         shell_->setTunerPitch(hz);
     }
 
+    // Audio watchdog: a USB flake can kill the duplex stream — JUCE stops
+    // the device and nothing restarts it ("engine stopped", silence until
+    // an app restart). If the device sits stopped for ~2 s, rebuild it.
+    if (! applyingDeviceChange_) {
+        auto* dev = deviceManager.getCurrentAudioDevice();
+        if (dev != nullptr && ! dev->isPlaying()) {
+            if (++engineDeadTicks_ == 60) {
+                engineDeadTicks_ = 0;
+                juce::Logger::writeToLog("audio watchdog: device stopped -> rescan");
+                rescanAudioDevices();
+            }
+        } else {
+            engineDeadTicks_ = 0;
+        }
+    }
+
     // Slow hot-plug poll (~every 3 s): Android doesn't notify JUCE when a USB
     // interface appears, so rescan until one is adopted or the user picks.
     if (! userChoseInput_ && ++rescanTick_ >= 90) {
