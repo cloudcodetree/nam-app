@@ -16,6 +16,10 @@
 AndroidAudioApp::AndroidAudioApp() {
     setLookAndFeel(&laf_);
 
+    // A guitar rig must not go dark mid-song: on Android this sets
+    // FLAG_KEEP_SCREEN_ON for the window (cleared when the app closes).
+    juce::Desktop::getInstance().setScreenSaverEnabled(false);
+
     // On the emulator the "microphone" is synthetic noise: amplifying it
     // through an amp model is pure hiss. Mute live input there — the demo
     // riff (audition) is the emulator's sound source. Real devices keep the
