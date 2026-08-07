@@ -31,9 +31,9 @@ void PlayScreen::setTuner (juce::String note, float cents, bool active) {
 }
 
 void PlayScreen::setLevels (float in, float out) {
+    // Levels now live in the global bottom meter strip; nothing to paint here.
     inLevel_  = juce::jlimit (0.0f, 1.0f, in);
     outLevel_ = juce::jlimit (0.0f, 1.0f, out);
-    repaint (metersRow_);
 }
 
 void PlayScreen::resized() { layout(); }
@@ -139,12 +139,9 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.fillRoundedRectangle (progressRect_.toFloat().withWidth (progressRect_.getWidth() * prog), 1.0f);
     }
 
-    // --- Meters + tuner row --------------------------------------------
+    // --- Tuner row (levels live in the global bottom meter) -------------
     {
-        const int gap = 10;
-        const int pw = (metersRow_.getWidth() - gap) / 2;
-        juce::Rectangle<int> tuner { metersRow_.getX(), metersRow_.getY(), pw, metersRow_.getHeight() };
-        juce::Rectangle<int> meters { metersRow_.getX() + pw + gap, metersRow_.getY(), pw, metersRow_.getHeight() };
+        juce::Rectangle<int> tuner = metersRow_;
 
         auto panel = [&] (juce::Rectangle<int> rr) {
             g.setColour (col::inkA (0.03f));
@@ -157,7 +154,7 @@ void PlayScreen::paint (juce::Graphics& g) {
         // lights lime when in tune (within ±7 cents); off-pitch lights the
         // bar nearest the deviation in accent orange.
         panel (tuner);
-        auto ti = tuner.reduced (14, 0);
+        auto ti = tuner.reduced (18, 0);
         text (tunerActive_ ? tunerNote_ : juce::String::fromUTF8 ("\xE2\x80\x93"),
               displayFont (tunerActive_ && tunerNote_.length() > 2 ? 20.0f : 26.0f),
               tunerActive_ ? col::ink : col::inkA (0.35f),
@@ -186,37 +183,7 @@ void PlayScreen::paint (juce::Graphics& g) {
             }
         }
 
-        // Meters panel: IN + OUT rows, dB-scaled (-60..0 dBFS) with numeric
-        // readout — the bar shows the ACTUAL level headed to the output.
-        panel (meters);
-        auto mi = meters.reduced (14, 10);
-        auto meterRow = [&] (juce::Rectangle<int> rr, const juce::String& label,
-                             float peak, bool peakOrange) {
-            const float db = peak > 0.001f ? 20.0f * std::log10 (peak) : -60.0f;
-            const float frac = juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f);
-            text (label, uiFontTracked (10.0f, true), col::inkA (0.4f),
-                  rr.removeFromLeft (30), juce::Justification::centredLeft);
-            const juce::String dbText = db <= -59.5f
-                ? juce::String::fromUTF8 ("\xE2\x88\x92\xE2\x88\x9E")   // −∞
-                : juce::String ((int) std::round (db));
-            text (dbText, uiFont (10.0f, true),
-                  db > -1.0f ? col::accent : col::inkA (0.5f),
-                  rr.removeFromRight (30), juce::Justification::centredRight);
-            juce::Rectangle<float> bar = rr.withSizeKeepingCentre (rr.getWidth(), 5).toFloat();
-            g.setColour (col::inkA (0.10f));
-            g.fillRoundedRectangle (bar, 2.5f);
-            const float w = juce::jmax (frac > 0.0f ? 5.0f : 0.0f, bar.getWidth() * frac);
-            juce::ColourGradient mg (col::meterGreen, bar.getX(), 0,
-                                     peakOrange ? col::accent : col::meterLime, bar.getX() + w, 0, false);
-            if (peakOrange) mg.addColour (0.7, col::meterLime);
-            g.setGradientFill (mg);
-            juce::Path p; p.addRoundedRectangle (bar.withWidth (w), 2.5f);
-            g.fillPath (p);
-        };
-        meterRow (mi.removeFromTop (mi.getHeight() / 2).reduced (0, 3), "IN", inLevel_, false);
-        meterRow (mi.reduced (0, 3), "OUT", outLevel_, true);
     }
-
 }
 
 void PlayScreen::mouseDown (const juce::MouseEvent& e) {
