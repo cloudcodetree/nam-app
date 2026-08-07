@@ -31,6 +31,8 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_->onNext     = [this] { stepCollection (+1); };
     play_->onTuner    = [this] { toggleTuner(); };
     tuner_->onBack    = [this] { if (tunerOpen_) toggleTuner(); };
+    addChildComponent (tunerScrim_);
+    tunerScrim_.onTap = [this] { if (tunerOpen_) toggleTuner(); };
     devices_->onBack  = [this] { show (Screen::Play); };
     edit_->onDone    = [this] { show (Screen::Play); };
     browse_->onBack  = [this] { show (Screen::Play); };
@@ -359,10 +361,14 @@ void AppShell::toggleTuner() {
         tuner_->setAlpha (1.0f);
         tuner_->setBounds (panel);
         tuner_->setVisible (true);
+        tunerScrim_.setBounds (contentBounds());
+        tunerScrim_.setVisible (true);
+        tunerScrim_.toFront (false);
         tuner_->toFront (false);
         animator.animateComponent (tuner_.get(), expanded, 1.0f, 220, false, 1.0, 0.0);
     } else {
         tunerOpen_ = false;
+        tunerScrim_.setVisible (false);
         animator.animateComponent (tuner_.get(), panel, 0.0f, 180, false, 1.0, 0.0);
         juce::Timer::callAfterDelay (200,
             [this, safe = juce::Component::SafePointer<TunerScreen> (tuner_.get())] {
@@ -379,6 +385,7 @@ void AppShell::show (Screen s) {
         juce::Desktop::getInstance().getAnimator().cancelAnimation (tuner_.get(), false);
         tuner_->setVisible (false);
         tuner_->setAlpha (1.0f);
+        tunerScrim_.setVisible (false);
         tunerOpen_ = false;
     }
 
@@ -505,6 +512,7 @@ void AppShell::resized() {
         const int h = juce::jmin (TunerScreen::kPanelHeight,
                                   panel.getY() - play_->getY() - 16);
         tuner_->setBounds ({ panel.getX(), panel.getY() - 8 - h, panel.getWidth(), h });
+        tunerScrim_.setBounds (contentBounds());
     }
 }
 

@@ -109,6 +109,13 @@ private:
     std::unique_ptr<LiveScreen>    live_;
     std::unique_ptr<AudioSettingsScreen> devices_;
     std::unique_ptr<TunerScreen>   tuner_;    // overlay above Play, not a screen
+    // Invisible click-catcher under the tuner card: any tap outside the card
+    // collapses it (nav taps stay live — the scrim covers content only).
+    struct ClickAway : juce::Component {
+        std::function<void()> onTap;
+        void mouseDown (const juce::MouseEvent&) override { if (onTap) onTap(); }
+    };
+    ClickAway tunerScrim_;
     bool tunerOpen_ = false;
     int  tunerMiss_ = 0;                      // consecutive no-pitch feeds (panel hold)
     juce::Component* current_ = nullptr;

@@ -267,4 +267,6 @@ void TunerScreen::mouseDown (const juce::MouseEvent& e) {
             repaint();
             return;
         }
+    // Panel mode: any other tap on the card collapses it.
+    if (panelMode_ && onBack) onBack();
 }
