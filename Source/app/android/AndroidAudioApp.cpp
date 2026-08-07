@@ -55,8 +55,12 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.listKept = [this] {
         // The deck as browse rows. Entries without a TONE3000 id (sideloaded
         // files) can't drive the TONE3000 row actions, so they stay out.
+        auto entries = library_.all(nam::LibraryType::Model);
+        // Deck order = heart order (import time), oldest first.
+        std::stable_sort(entries.begin(), entries.end(),
+                         [](const auto& a, const auto& b) { return a.addedAt < b.addedAt; });
         std::vector<nam::ToneInfo> out;
-        for (const auto& e : library_.all(nam::LibraryType::Model)) {
+        for (const auto& e : entries) {
             const auto toneId = toneIdFromEntry(e);
             if (toneId.empty()) continue;
             nam::ToneInfo t;
