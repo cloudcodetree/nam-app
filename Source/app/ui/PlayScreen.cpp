@@ -186,8 +186,20 @@ void PlayScreen::paint (juce::Graphics& g) {
     }
 }
 
+void PlayScreen::mouseUp (const juce::MouseEvent& e) {
+    // Swipe across the hero area steps through the collection.
+    if (! hero_.contains (pressPos_)) return;
+    const int dx = e.getPosition().x - pressPos_.x;
+    const int dy = e.getPosition().y - pressPos_.y;
+    if (std::abs (dx) > 60 && std::abs (dx) > std::abs (dy) * 2) {
+        if (dx < 0) { if (onNext) onNext(); }
+        else        { if (onPrev) onPrev(); }
+    }
+}
+
 void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     const auto p = e.getPosition();
+    pressPos_ = p;
     if (prevRect_.contains (p)) { if (onPrev) onPrev(); return; }
     if (nextRect_.contains (p)) { if (onNext) onNext(); return; }
     if (libRect_.contains (p)) { if (onLibrary) onLibrary(); return; }

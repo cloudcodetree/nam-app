@@ -28,6 +28,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void mouseDown (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
 
 private:
     juce::String name_ { "Bundled Tone" }, family_ { "NAM PLAYER" }, author_;
@@ -38,6 +39,7 @@ private:
     juce::String tunerNote_;
     float tunerCents_ = 0.0f;
     bool  tunerActive_ = false;
+    juce::Point<int> pressPos_;
 
     // Hit / layout rects, computed in resized(). (Nav lives in AppShell.)
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_,
