@@ -24,6 +24,8 @@ public:
 
     void setLevels (float in, float out);     // Play + Audio settings meters
     void setTunerPitch (float hz);            // 0 = no pitch detected
+    void setLatencyMs (double ms);            // round-trip; shown in the chrome
+    void showEntryAsNowPlaying (const nam::LibraryEntry& e);   // reflect a loaded tone
 
     // Android system back: pop to Play if on a sub-screen. Returns true if it
     // handled the press (caller should NOT exit the app); false if already on
@@ -84,7 +86,6 @@ private:
     void stopAudition();
     void refreshCachedFlags();
     void stepCollection (int delta);          // Play ‹ › through the Library
-    void showEntryAsNowPlaying (const nam::LibraryEntry& e);
     juce::Rectangle<int> contentBounds() const;   // above the global chrome
 
     dsp::ToneEngine& engine_;
@@ -107,6 +108,7 @@ private:
     std::array<juce::Rectangle<int>, 4> navRects_;
     int   activeTab_ = 0;                     // 0 Play · 1 Edit · 2 Radio · 3 Live (-1 none)
     float meterInPeak_ = 0.0f;
+    double latencyMs_ = 0.0;
     GetModelsFn getModels_;
     LoadModelFn loadModel_;
     GetDevicesFn   getDevices_;

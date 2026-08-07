@@ -345,6 +345,12 @@ void AppShell::setLevels (float in, float out) {
     }
 }
 
+void AppShell::setLatencyMs (double ms) {
+    if (std::abs (ms - latencyMs_) < 0.05) return;
+    latencyMs_ = ms;
+    repaint (meterBar_);
+}
+
 void AppShell::setTunerPitch (float hz) {
     if (play_ == nullptr) return;
     if (tuner_ != nullptr) tuner_->setPitch (hz);
@@ -386,9 +392,18 @@ void AppShell::paint (juce::Graphics& g) {
     g.fillRect (meterBar_.getUnion (navBar_));
 
     // Slim input meter (dB-scaled -60..0): grows symmetrically outward from
-    // the centre with level.
+    // the centre with level. A tiny latency readout sits at the right end.
     {
-        auto bar = meterBar_.reduced (20, 4).toFloat();
+        auto strip = meterBar_;
+        const auto latRect = strip.removeFromRight (66);
+        if (latencyMs_ > 0.0) {
+            g.setFont (nam::ui::uiFont (9.0f, true));
+            g.setColour (latencyMs_ <= 15.0 ? nam::ui::col::inkA (0.45f)
+                                            : nam::ui::col::accentAlt);
+            g.drawText (juce::String (latencyMs_, 1) + " ms",
+                        latRect.reduced (8, 0), juce::Justification::centredRight, false);
+        }
+        auto bar = strip.reduced (20, 4).toFloat();
         g.setColour (nam::ui::col::inkA (0.08f));
         g.fillRoundedRectangle (bar, 2.0f);
         const float db = meterInPeak_ > 0.001f ? 20.0f * std::log10 (meterInPeak_) : -60.0f;

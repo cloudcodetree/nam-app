@@ -143,10 +143,41 @@ void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRa
     }
     setCab(cab_);   // re-apply selection at the (possibly new) sample rate
 
-    if (auto m = nam::NamModel::load(copyBundledModelToFile(),
-                                     (int) sampleRate, samplesPerBlockExpected)) {
+    // Boot into the tone the player last used — the bundled model is a
+    // quiet low-gain capture and makes a poor first impression; a real
+    // library tone is what they expect to hear.
+    {
+        const auto entries = library_.all(nam::LibraryType::Model);
+        const nam::LibraryEntry* recent = nullptr;
+        for (const auto& e : entries)
+            if (recent == nullptr || e.lastUsedAt > recent->lastUsedAt) recent = &e;
+        if (recent != nullptr) {
+            const std::string p = library_.subdir(nam::LibraryType::Model) + "/" + recent->fileName;
+            if (auto m = nam::NamModel::load(p, (int) sampleRate, samplesPerBlockExpected)) {
+                juce::Logger::writeToLog("prepare: last-used model '" + juce::String(recent->displayName) + "' ok");
+                engine_.setModel(std::move(m));
+                modelLoaded_ = true;
+                const auto entry = *recent;
+                juce::MessageManager::callAsync([this, entry] {
+                    if (shell_ != nullptr) shell_->showEntryAsNowPlaying(entry);
+                });
+                return;
+            }
+        }
+    }
+
+    const auto bundledPath = copyBundledModelToFile();
+    if (auto m = nam::NamModel::load(bundledPath, (int) sampleRate, samplesPerBlockExpected)) {
+        juce::Logger::writeToLog("prepare: bundled model ok (sr=" + juce::String(sampleRate)
+                                 + ", block=" + juce::String(samplesPerBlockExpected)
+                                 + ", normAdj=" + juce::String(m->recommendedOutputDbAdjustment(), 1) + " dB)");
         engine_.setModel(std::move(m));
         modelLoaded_ = true;
+    } else {
+        juce::Logger::writeToLog("prepare: bundled model FAILED (path=" + juce::String(bundledPath)
+                                 + ", exists=" + juce::String(juce::File(juce::String(bundledPath)).existsAsFile() ? "yes" : "no")
+                                 + ", sr=" + juce::String(sampleRate)
+                                 + ", block=" + juce::String(samplesPerBlockExpected) + ")");
     }
 }
 
@@ -233,9 +264,17 @@ void AndroidAudioApp::timerCallback() {
                           engine_.outputPeak());
 
     // Tuner analysis at ~10 Hz: copy the latest window out of the ring and
-    // run pitch detection on the message thread.
+    // run pitch detection on the message thread. Piggyback the latency
+    // readout on the same cadence.
     if (shell_ != nullptr && ++tunerTick_ >= 3) {
         tunerTick_ = 0;
+        if (auto* dev = deviceManager.getCurrentAudioDevice()) {
+            const double sr = dev->getCurrentSampleRate();
+            if (sr > 0)
+                shell_->setLatencyMs ((dev->getInputLatencyInSamples()
+                                       + dev->getOutputLatencyInSamples()
+                                       + dev->getCurrentBufferSizeSamples()) * 1000.0 / sr);
+        }
         constexpr int kWin = 2048;
         static thread_local std::array<float, (size_t) kWin> win;
         const int w = tunerWrite_.load(std::memory_order_acquire);
