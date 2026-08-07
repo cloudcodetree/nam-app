@@ -7,6 +7,9 @@
 struct AudioSettingsState {
     juce::StringArray inputs, outputs;
     juce::String currentInput, currentOutput;
+    // Where "System Default" output actually lands right now (e.g. the USB
+    // interface) — shown as the row subtitle so default routing is honest.
+    juce::String outputRouteHint;
     juce::StringArray rates, buffers;        // chip labels, e.g. "48k" / "192"
     juce::String currentRate, currentBuffer;
     double latencyMs = 0.0;                  // round-trip estimate

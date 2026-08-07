@@ -25,7 +25,6 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         addChildComponent (*c);
 
     play_->onLibrary  = [this] { show (Screen::Library); };
-    play_->onSettings = [this] { show (Screen::Devices); };
     play_->onPrev     = [this] { stepCollection (-1); };
     play_->onNext     = [this] { stepCollection (+1); };
     play_->onTuner    = [this] { show (Screen::Tuner); };
@@ -49,10 +48,14 @@ void AppShell::setBrowseServices (BrowseServices services) {
     browse_->onKeep = [this] (int idx) {
         if (! svc_.keep || idx < 0 || idx >= (int) browseResults_.size()) return;
         const auto tone = browseResults_[(size_t) idx];
-        browse_->setStatus ("Downloading \"" + juce::String (tone.title) + "\"" + kEllipsis);
-        svc_.keep (tone, [this, idx] (bool ok, juce::String msg) {
-            if (ok) browse_->setKept (idx);
-            browse_->setStatus (ok ? (kHeart + " Kept: " + msg) : ("Download failed: " + msg));
+        const bool wasKept = svc_.isKept && svc_.isKept (tone.id);
+        browse_->setStatus ((wasKept ? "Removing \"" : "Adding \"")
+                            + juce::String (tone.title) + "\"" + kEllipsis);
+        svc_.keep (tone, [this, wasKept] (bool ok, juce::String msg) {
+            browse_->setStatus (! ok ? ("Deck update failed: " + msg)
+                                : wasKept ? ("Removed from deck: " + msg)
+                                          : (juce::String::fromUTF8 ("\xE2\x99\xA5") + " In deck: " + msg));
+            refreshCachedFlags();
         });
     };
 
@@ -183,6 +186,12 @@ void AppShell::refreshCachedFlags() {
             dl[i] = svc_.isDownloaded (browseResults_[i].id);
         browse_->setDownloadedFlags (std::move (dl));
     }
+    if (svc_.isKept) {
+        std::vector<bool> kept (browseResults_.size(), false);
+        for (size_t i = 0; i < browseResults_.size(); ++i)
+            kept[i] = svc_.isKept (browseResults_[i].id);
+        browse_->setKeptFlags (std::move (kept));
+    }
 }
 
 void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) {
@@ -218,6 +227,12 @@ void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {
     }
     play_->setNowPlaying (juce::String (e.displayName), family, {});
     play_->setPosition (idx, count);
+}
+
+void AppShell::setNowPlayingInfo (juce::String name, juce::String family) {
+    collectionIndex_ = -1;
+    play_->setNowPlaying (std::move (name), std::move (family), {});
+    play_->setPosition (-1, 0);
 }
 
 void AppShell::stepCollection (int delta) {
@@ -324,6 +339,7 @@ void AppShell::show (Screen s) {
         case Screen::Edit:    activeTab_ = 1; break;
         case Screen::Browse:  activeTab_ = 2; break;
         case Screen::Live:    activeTab_ = 3; break;
+        case Screen::Devices: activeTab_ = 4; break;
         default:              activeTab_ = -1; break;
     }
     repaint (navBar_);
@@ -375,8 +391,8 @@ void AppShell::resized() {
     auto b = getLocalBounds();
     meterBar_ = b.removeFromBottom (12);   // very bottom, under the nav
     navBar_   = b.removeFromBottom (juce::jmax (64, getHeight() / 13));
-    const int nw = navBar_.getWidth() / 4;
-    for (int i = 0; i < 4; ++i)
+    const int nw = navBar_.getWidth() / 5;
+    for (int i = 0; i < 5; ++i)
         navRects_[(size_t) i] = { navBar_.getX() + i * nw, navBar_.getY(), nw, navBar_.getHeight() };
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
@@ -392,18 +408,19 @@ void AppShell::paint (juce::Graphics& g) {
     g.fillRect (meterBar_.getUnion (navBar_));
 
     // Slim input meter (dB-scaled -60..0): grows symmetrically outward from
-    // the centre with level. A tiny latency readout sits at the right end.
+    // the centre. The latency readout sits centred ON the strip and masks
+    // the bar (the fill is clipped out under the digits).
     {
-        auto strip = meterBar_;
-        const auto latRect = strip.removeFromRight (66);
-        if (latencyMs_ > 0.0) {
-            g.setFont (nam::ui::uiFont (9.0f, true));
-            g.setColour (latencyMs_ <= 15.0 ? nam::ui::col::inkA (0.45f)
-                                            : nam::ui::col::accentAlt);
-            g.drawText (juce::String (latencyMs_, 1) + " ms",
-                        latRect.reduced (8, 0), juce::Justification::centredRight, false);
-        }
-        auto bar = strip.reduced (20, 4).toFloat();
+        const juce::String latText = latencyMs_ > 0.0
+            ? juce::String (latencyMs_, 1) + " ms" : juce::String();
+        const auto latFont = nam::ui::uiFont (9.0f, true);
+        const int tw = latText.isNotEmpty()
+            ? (int) std::ceil (juce::GlyphArrangement::getStringWidth (latFont, latText)) : 0;
+        const auto latRect = meterBar_.withSizeKeepingCentre (tw + 16, meterBar_.getHeight());
+
+        auto bar = meterBar_.reduced (20, 4).toFloat();
+        g.saveState();
+        if (tw > 0) g.excludeClipRegion (latRect);
         g.setColour (nam::ui::col::inkA (0.08f));
         g.fillRoundedRectangle (bar, 2.0f);
         const float db = meterInPeak_ > 0.001f ? 20.0f * std::log10 (meterInPeak_) : -60.0f;
@@ -418,12 +435,25 @@ void AppShell::paint (juce::Graphics& g) {
             juce::Path p; p.addRoundedRectangle (fill, 2.0f);
             g.fillPath (p);
         }
+        g.restoreState();
+
+        if (tw > 0) {
+            g.setFont (latFont);
+            // Green when tight, shifting continuously to red as round-trip
+            // latency degrades (fully red by ~50 ms — clearly unplayable).
+            const float bad = juce::jlimit (0.0f, 1.0f,
+                                            ((float) latencyMs_ - 20.0f) / 30.0f);
+            g.setColour (nam::ui::col::meterLime.interpolatedWith (
+                             juce::Colour (0xffff3b30), bad));
+            g.drawText (latText, latRect, juce::Justification::centred, false);
+        }
     }
 
     // Persistent nav
-    static const char* labels[] = { "PLAY", "EDIT", "TONES", "LIVE" };
-    static const char* glyphsUtf8[] = { "\xE2\x96\xB6", "\xE2\x9C\x8E", "\xE2\x97\x89", "\xE2\x89\xA1" };
-    for (int i = 0; i < 4; ++i) {
+    static const char* labels[] = { "PLAY", "EDIT", "TONES", "LIVE", "SETUP" };
+    static const char* glyphsUtf8[] = { "\xE2\x96\xB6", "\xE2\x9C\x8E", "\xE2\x97\x89",
+                                        "\xE2\x89\xA1", "\xE2\x9A\x99" };
+    for (int i = 0; i < 5; ++i) {
         const bool active = (i == activeTab_);
         const auto c = active ? nam::ui::col::accent : nam::ui::col::inkA (0.45f);
         auto cell = navRects_[(size_t) i];
@@ -439,13 +469,14 @@ void AppShell::paint (juce::Graphics& g) {
 
 void AppShell::mouseDown (const juce::MouseEvent& e) {
     const auto p = e.getPosition();
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < 5; ++i)
         if (navRects_[(size_t) i].contains (p)) {
             switch (i) {
-                case 1: show (Screen::Edit);   break;
-                case 2: show (Screen::Browse); break;
-                case 3: show (Screen::Live);   break;
-                default: show (Screen::Play);  break;
+                case 1: show (Screen::Edit);    break;
+                case 2: show (Screen::Browse);  break;
+                case 3: show (Screen::Live);    break;
+                case 4: show (Screen::Devices); break;
+                default: show (Screen::Play);   break;
             }
             return;
         }

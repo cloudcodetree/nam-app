@@ -111,9 +111,9 @@ void BrowseScreen::setPlaying (int packIdx, int modelIdx) {
     repaint();
 }
 
-void BrowseScreen::setKept (int packIdx) {
-    if (packIdx >= 0 && packIdx < (int) kept_.size()) kept_[(size_t) packIdx] = true;
-    repaint();
+void BrowseScreen::setKeptFlags (std::vector<bool> kept) {
+    kept_ = std::move (kept);
+    repaint (listArea_);
 }
 
 void BrowseScreen::setStatus (juce::String s) { status_ = std::move (s); repaint (statusRect_); }
@@ -188,14 +188,14 @@ void BrowseScreen::relayout() {
         int h = rowH;
         row.header  = { listArea_.getX(), y, listArea_.getWidth(), rowH };
         row.playBtn = { row.header.getX() + 10, y + rowH / 2 - 18, 36, 36 };
-        row.badge   = { row.header.getRight() - 58, y + rowH / 2 - 11, 46, 22 };
+        row.badge   = { row.header.getRight() - 54, y + rowH / 2 - 11, 42, 22 };
+        row.starBtn = { row.badge.getX() - 50, y + rowH / 2 - 22, 44, 44 };
         if (open) {
             int iy = y + rowH + 4;
             row.diBtn  = { listArea_.getX() + 12, iy, listArea_.getWidth() - 24, 40 };  iy += 48;
             row.varBtn = { listArea_.getX() + 12, iy, listArea_.getWidth() - 24, 40 };  iy += 48;
             row.cabBtn = { listArea_.getX() + 12, iy, listArea_.getWidth() - 24, 40 };  iy += 48;
-            row.keepBtn = { listArea_.getX() + 12, iy + 2, listArea_.getWidth() - 24, 42 };
-            iy += 2 + 42 + 12;
+            iy += 8;
             h = iy - y;
         }
         row.frame = { listArea_.getX(), y, listArea_.getWidth(), h };
@@ -334,7 +334,9 @@ void BrowseScreen::paint (juce::Graphics& g) {
                                                      juce::PathStrokeType::rounded));
         }
 
-        auto head = S (row.header).withTrimmedLeft (64).withTrimmedRight (64);
+        // Right trim clears the heart + badge column so long titles ellipsize
+        // instead of running under the heart.
+        auto head = S (row.header).withTrimmedLeft (64).withTrimmedRight (112);
         text (juce::String (t.title), uiFont (14.0f, true), col::ink,
               head.removeFromTop (row.header.getHeight() / 2 + 4), juce::Justification::bottomLeft);
         juce::String meta = juce::String (t.gear.empty() ? juce::String ("TONE3000") : juce::String (t.gear));
@@ -347,6 +349,32 @@ void BrowseScreen::paint (juce::Graphics& g) {
         const bool isIr = (t.format == "ir");
         text (isIr ? "IR" : t.a2Count > 0 ? "A2" : "A1", uiFontTracked (9.0f, true),
               isIr ? col::meterLime : col::accentAlt, badge, juce::Justification::centred);
+
+        // Heart: quick add/remove from the tone deck (persisted library state).
+        // Drawn as a path — Android renders the filled U+2665 glyph via the
+        // colour-emoji fallback font (huge, red, uncolourable), so text is out.
+        {
+            const bool kept = i < kept_.size() && kept_[i];
+            const auto hb = S (row.starBtn).toFloat().withSizeKeepingCentre (24.0f, 24.0f);
+            juce::Path heart;
+            heart.startNewSubPath (0.50f, 0.32f);
+            heart.cubicTo (0.50f, 0.20f, 0.38f, 0.12f, 0.27f, 0.12f);
+            heart.cubicTo (0.11f, 0.12f, 0.04f, 0.26f, 0.04f, 0.38f);
+            heart.cubicTo (0.04f, 0.58f, 0.26f, 0.74f, 0.50f, 0.92f);
+            heart.cubicTo (0.74f, 0.74f, 0.96f, 0.58f, 0.96f, 0.38f);
+            heart.cubicTo (0.96f, 0.26f, 0.89f, 0.12f, 0.73f, 0.12f);
+            heart.cubicTo (0.62f, 0.12f, 0.50f, 0.20f, 0.50f, 0.32f);
+            heart.closeSubPath();
+            heart.applyTransform (juce::AffineTransform::scale (hb.getWidth(), hb.getHeight())
+                                      .translated (hb.getX(), hb.getY()));
+            if (kept) {
+                g.setColour (col::accent);
+                g.fillPath (heart);
+            } else {
+                g.setColour (col::inkA (0.35f));
+                g.strokePath (heart, juce::PathStrokeType (1.6f));
+            }
+        }
 
         if (! open) continue;
 
@@ -380,19 +408,6 @@ void BrowseScreen::paint (juce::Graphics& g) {
         dropdownBtn (row.cabBtn, "Cab: " + juce::String (nam::demo::kCabs[cab_].display),
                      menu_ == Menu::Cab);
 
-        // ♥ KEEP = favorites (uses the already-downloaded model)
-        auto keep = S (row.keepBtn);
-        if (kept_[i]) {
-            g.setColour (col::accentA (0.15f));
-            g.fillRoundedRectangle (keep.toFloat(), 11.0f);
-            text (kCheck + " IN LIBRARY", uiFontTracked (11.0f, true), col::accentAlt,
-                  keep, juce::Justification::centred);
-        } else {
-            g.setColour (col::accent);
-            g.fillRoundedRectangle (keep.toFloat(), 11.0f);
-            text (kHeart + " KEEP", uiFontTracked (12.0f, true), col::inkOnAccent,
-                  keep, juce::Justification::centred);
-        }
     }
     g.restoreState();
 
@@ -578,8 +593,8 @@ void BrowseScreen::mouseUp (const juce::MouseEvent& e) {
                 return;
             }
             if (row.cabBtn.contains (cp)) { menu_ = Menu::Cab; menuScroll_ = 0; repaint(); return; }
-            if (row.keepBtn.contains (cp)) { if (onKeep) onKeep ((int) i); return; }
         }
+        if (row.starBtn.contains (cp)) { if (onKeep) onKeep ((int) i); return; }
         if (row.header.contains (cp)) {
             expanded_ = open ? -1 : (int) i;
             menu_ = Menu::None;

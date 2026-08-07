@@ -43,7 +43,10 @@ AndroidAudioApp::AndroidAudioApp() {
         doSearch(std::move(q), std::move(done));
     };
     browse.keep = [this](nam::ToneInfo t, AppShell::DoneFn done) {
-        doDownload(std::move(t), std::move(done));
+        doToggleKeep(std::move(t), std::move(done));
+    };
+    browse.isKept = [this](std::string toneId) {
+        return ! libraryIdForTone(toneId).empty();
     };
     browse.downloadOnly = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doDownloadOnly(std::move(t), std::move(done));
@@ -103,6 +106,12 @@ AndroidAudioApp::AndroidAudioApp() {
 
     setSize(900, 500);
     startTimerHz(30);
+
+    // First run with an empty deck: fetch the most popular A2 tone as the
+    // default in the background (bundled model covers the gap offline).
+    if (library_.all(nam::LibraryType::Model).empty()
+        && ! defaultToneFile().existsAsFile())
+        juce::MessageManager::callAsync([this] { fetchPopularDefault(); });
 }
 
 AndroidAudioApp::~AndroidAudioApp() {
@@ -163,6 +172,28 @@ void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRa
                 });
                 return;
             }
+        }
+    }
+
+    // Empty deck: use the cached popular default (fetched from TONE3000 on a
+    // previous run), else the bundled file as an offline fallback while the
+    // popular default downloads.
+    const auto defFile = defaultToneFile();
+    if (defFile.existsAsFile()) {
+        if (auto m = nam::NamModel::load(defFile.getFullPathName().toStdString(),
+                                         (int) sampleRate, samplesPerBlockExpected)) {
+            juce::String name ("Popular Tone");
+            if (defaultToneNameFile().existsAsFile())
+                name = defaultToneNameFile().loadFileAsString().trim();
+            juce::Logger::writeToLog("prepare: popular default '" + name + "' ok");
+            engine_.setModel(std::move(m));
+            modelLoaded_ = true;
+            juce::MessageManager::callAsync([this, name] {
+                if (shell_ != nullptr)
+                    shell_->setNowPlayingInfo(name, "TONE3000 " + juce::String::fromUTF8("\xC2\xB7")
+                                                    + " MOST KEPT");
+            });
+            return;
         }
     }
 
@@ -430,6 +461,21 @@ AudioSettingsState AndroidAudioApp::audioSettingsState() {
     s.outputs = outputDeviceNames();
     s.currentInput  = currentInputDevice();
     s.currentOutput = currentOutputDevice();
+
+    // "System Default" output follows the USB interface when one is plugged
+    // in (Android routing policy — verified via audio patches). Surface that
+    // so the checkmark on "System Default" doesn't read as "phone speaker".
+    // We intentionally never select the USB output explicitly: doing so kicks
+    // the stream off the AAudio FAST path and triples the burst size.
+    if (s.currentOutput.containsIgnoreCase("default")) {
+        for (const auto& name : s.outputs) {
+            if (name.containsIgnoreCase("usb")) {
+                s.outputRouteHint = name.replace("USB-Audio - ", "")
+                                        .replace(" USB headset", "").trim();
+                break;
+            }
+        }
+    }
 
     auto* dev = deviceManager.getCurrentAudioDevice();
     if (dev != nullptr) {
@@ -1072,6 +1118,84 @@ void AndroidAudioApp::doListModels(const std::string& toneId,
         if (! ok) { done(false, {}, "connect first"); return; }
         t3kSession_->listToneModels(toneId, std::move(done));
     });
+}
+
+juce::File AndroidAudioApp::defaultToneFile() {
+    return juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getChildFile("default_tone.nam");
+}
+
+juce::File AndroidAudioApp::defaultToneNameFile() {
+    return juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getChildFile("default_tone.name");
+}
+
+void AndroidAudioApp::fetchPopularDefault() {
+    if (defaultFetchKicked_) return;
+    defaultFetchKicked_ = true;
+
+    withValidToken([this](bool ok) {
+        if (! ok) return;   // offline / never connected: bundled stays
+        t3kSession_->search("", 1,
+            [this](bool sOk, std::vector<nam::ToneInfo> tones, juce::String) {
+                if (! sOk) return;
+                const nam::ToneInfo* best = nullptr;
+                for (const auto& t : tones)
+                    if (t.format == "nam" && t.a2Count > 0
+                        && (best == nullptr || t.downloads > best->downloads))
+                        best = &t;
+                if (best == nullptr) return;
+                const auto tone = *best;
+                doDownloadOnly(tone, [this, tone](bool dlOk, juce::String) {
+                    if (! dlOk) return;
+                    const auto keep = modelCacheFile("keep_" + tone.id);
+                    if (! keep.existsAsFile()) return;
+                    keep.copyFileTo(defaultToneFile());
+                    defaultToneNameFile().replaceWithText(juce::String(tone.title));
+                    juce::Logger::writeToLog("popular default fetched: " + juce::String(tone.title));
+                    // Deck still empty and we're sitting on the bundled tone?
+                    // Swap in the popular default right away.
+                    if (library_.all(nam::LibraryType::Model).empty()) {
+                        if (auto m = nam::NamModel::load(
+                                defaultToneFile().getFullPathName().toStdString(),
+                                (int) sampleRate_, blockSize_)) {
+                            engine_.setModel(std::move(m));
+                            modelLoaded_ = true;
+                            if (shell_ != nullptr)
+                                shell_->setNowPlayingInfo(juce::String(tone.title),
+                                    "TONE3000 " + juce::String::fromUTF8("\xC2\xB7") + " MOST KEPT");
+                        }
+                    }
+                });
+            });
+    });
+}
+
+std::string AndroidAudioApp::libraryIdForTone(const std::string& toneId) const {
+    // Kept entries were imported from keep_<toneId>.nam / ir_<toneId>.nam,
+    // so the library id starts with that stem (possibly " (2)" suffixed).
+    for (const char* prefix : { "keep_", "ir_" }) {
+        const std::string stem = prefix + toneId;
+        for (auto type : { nam::LibraryType::Model, nam::LibraryType::Ir })
+            for (const auto& e : library_.all(type))
+                if (e.id.rfind(stem, 0) == 0
+                    && (e.id.size() == stem.size() || e.id[stem.size()] == '.'
+                        || e.id[stem.size()] == ' '))
+                    return e.id;
+    }
+    return {};
+}
+
+void AndroidAudioApp::doToggleKeep(nam::ToneInfo tone,
+        std::function<void(bool, juce::String)> done) {
+    const auto id = libraryIdForTone(tone.id);
+    if (! id.empty()) {
+        library_.remove(id);
+        library_.save();
+        done(true, juce::String(tone.title));
+        return;
+    }
+    doDownload(std::move(tone), std::move(done));
 }
 
 // Keep = favorite: imports the already-downloaded file into the Library

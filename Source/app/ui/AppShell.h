@@ -26,6 +26,7 @@ public:
     void setTunerPitch (float hz);            // 0 = no pitch detected
     void setLatencyMs (double ms);            // round-trip; shown in the chrome
     void showEntryAsNowPlaying (const nam::LibraryEntry& e);   // reflect a loaded tone
+    void setNowPlayingInfo (juce::String name, juce::String family);   // non-library tone
 
     // Android system back: pop to Play if on a sub-screen. Returns true if it
     // handled the press (caller should NOT exit the app); false if already on
@@ -54,6 +55,7 @@ public:
         std::function<void()>      stopDemo;
         std::function<bool (std::string)> isAuditionCached;   // toneId, current riff
         std::function<bool (std::string)> isDownloaded;       // best-quality on disk
+        std::function<bool (std::string)> isKept;             // in the tone deck
     };
     void setBrowseServices (BrowseServices services);
 
@@ -105,8 +107,8 @@ private:
 
     // Global bottom chrome: slim input meter strip + persistent nav bar.
     juce::Rectangle<int> navBar_, meterBar_;
-    std::array<juce::Rectangle<int>, 4> navRects_;
-    int   activeTab_ = 0;                     // 0 Play · 1 Edit · 2 Radio · 3 Live (-1 none)
+    std::array<juce::Rectangle<int>, 5> navRects_;
+    int   activeTab_ = 0;   // 0 Play · 1 Edit · 2 Tones · 3 Live · 4 Setup (-1 none)
     float meterInPeak_ = 0.0f;
     double latencyMs_ = 0.0;
     GetModelsFn getModels_;

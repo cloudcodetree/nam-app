@@ -60,6 +60,15 @@ private:
                   std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
     void doDownload(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
     void doDownloadOnly(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
+    // Star toggle: in the deck -> remove from the Library; not in -> keep it.
+    void doToggleKeep(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
+    // Empty deck: fetch TONE3000's most-downloaded A2 tone as the default.
+    void fetchPopularDefault();
+    static juce::File defaultToneFile();
+    static juce::File defaultToneNameFile();
+    bool defaultFetchKicked_ = false;
+    // Library id of the entry imported for this tone ("" if not kept).
+    std::string libraryIdForTone(const std::string& toneId) const;
     void auditionFromFile(juce::File file, bool deleteAfter, const std::string& cacheKey,
                           juce::String displayName,
                           std::function<void(bool, juce::String)> done,

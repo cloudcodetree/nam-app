@@ -29,7 +29,7 @@ public:
     void setModels (int packIdx, juce::StringArray names);
     void setDefaultModel (int packIdx, int modelIdx, juce::String name);  // what "Auto" resolves to
     void setPlaying (int packIdx, int modelIdx);          // -1,-1 = stopped
-    void setKept (int packIdx);
+    void setKeptFlags (std::vector<bool> kept);           // starred = in the deck
     void setStatus (juce::String s);
     void setLoading (int packIdx, float progress);        // -1 = not loading
     void setLoadingProgress (float progress);
@@ -85,8 +85,8 @@ private:
     struct Chip { juce::String label; juce::Rectangle<int> rect; };
     std::vector<Chip> filterChips_;
     struct Row {
-        juce::Rectangle<int> frame, header, playBtn, badge;
-        juce::Rectangle<int> diBtn, varBtn, cabBtn, keepBtn;
+        juce::Rectangle<int> frame, header, playBtn, starBtn, badge;
+        juce::Rectangle<int> diBtn, varBtn, cabBtn;
     };
     std::vector<Row> rows_;
     juce::Rectangle<int> listArea_;

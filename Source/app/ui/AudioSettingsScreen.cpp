@@ -200,7 +200,12 @@ void AudioSettingsScreen::paint (juce::Graphics& g) {
                   tx.removeFromRight (20), juce::Justification::centred);
         text (name, uiFont (14.0f, true), selected ? col::ink : col::inkA (0.8f),
               tx.removeFromTop (tx.getHeight() / 2 + 4), juce::Justification::bottomLeft);
-        text (deviceMeta (name, input), uiFont (11.0f, false), col::inkA (0.45f),
+        const bool routed = ! input && name.containsIgnoreCase ("default")
+                            && st_.outputRouteHint.isNotEmpty();
+        text (routed ? "system routing " + juce::String::fromUTF8 ("\xE2\x86\x92") + " "
+                           + st_.outputRouteHint
+                     : deviceMeta (name, input),
+              uiFont (11.0f, false), routed ? col::meterLime.withAlpha (0.7f) : col::inkA (0.45f),
               tx, juce::Justification::topLeft);
     };
     auto chip = [&] (juce::Rectangle<int> rr, const juce::String& label, bool on) {

@@ -44,9 +44,8 @@ void PlayScreen::layout() {
     metersRow_ = r.removeFromBottom (juce::jmax (78, r.getHeight() / 9)).reduced (20, 6);
     hero_    = r.reduced (26, 4);
 
-    // Top bar: LIBRARY pill (left). I/O pill + CAB badge at right.
+    // Top bar: LIBRARY pill (left). CAB badge at right.
     libRect_ = { topBar_.getX() + 20, topBar_.getCentreY() - 16, 92, 32 };
-    ioRect_  = { topBar_.getRight() - 20 - 96 - 8 - 56, topBar_.getCentreY() - 16, 56, 32 };
 
     // Hero vertical stack: art (square) / text / transport, centred.
     const int artSize = juce::jmin (hero_.getWidth(), (int) (hero_.getHeight() * 0.48f));
@@ -62,9 +61,8 @@ void PlayScreen::layout() {
     progressRect_ = { prevRect_.getRight() + 14, transportRect_.getCentreY() - 1,
                       nextRect_.getX() - 14 - (prevRect_.getRight() + 14), 2 };
 
-    // The tuner panel (left half of the meters row) opens the strobe tuner.
-    tunerRect_ = { metersRow_.getX(), metersRow_.getY(),
-                   (metersRow_.getWidth() - 10) / 2, metersRow_.getHeight() };
+    // The tuner panel (full meters row) opens the strobe tuner.
+    tunerRect_ = metersRow_;
 }
 
 void PlayScreen::paint (juce::Graphics& g) {
@@ -78,9 +76,6 @@ void PlayScreen::paint (juce::Graphics& g) {
     // --- Top bar --------------------------------------------------------
     drawPill (g, libRect_.toFloat(), juce::Colours::transparentBlack, col::inkA (0.22f));
     text ("LIBRARY", uiFontTracked (12.0f, true), col::ink, libRect_, juce::Justification::centred);
-
-    drawPill (g, ioRect_.toFloat(), juce::Colours::transparentBlack, col::inkA (0.22f));
-    text ("I/O", uiFontTracked (12.0f, true), col::ink, ioRect_, juce::Justification::centred);
 
     juce::Rectangle<int> cab { topBar_.getRight() - 20 - 96, topBar_.getCentreY() - 16, 96, 32 };
     drawPill (g, cab.toFloat(), col::accentA (0.08f), col::accentA (0.5f));
@@ -203,6 +198,5 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     if (prevRect_.contains (p)) { if (onPrev) onPrev(); return; }
     if (nextRect_.contains (p)) { if (onNext) onNext(); return; }
     if (libRect_.contains (p)) { if (onLibrary) onLibrary(); return; }
-    if (ioRect_.contains (p))  { if (onSettings) onSettings(); return; }
     if (tunerRect_.contains (p)) { if (onTuner) onTuner(); return; }
 }
