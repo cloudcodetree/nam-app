@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <array>
 #include <functional>
 #include <memory>
 #include <vector>
@@ -72,6 +73,8 @@ public:
                                 SelectDeviceFn selectBuffer = {});
 
     void resized() override;
+    void paint (juce::Graphics&) override;
+    void mouseDown (const juce::MouseEvent&) override;
 
 private:
     enum class Screen { Play, Edit, Library, Browse, Live, Devices, Tuner };
@@ -82,6 +85,7 @@ private:
     void refreshCachedFlags();
     void stepCollection (int delta);          // Play ‹ › through the Library
     void showEntryAsNowPlaying (const nam::LibraryEntry& e);
+    juce::Rectangle<int> contentBounds() const;   // above the global chrome
 
     dsp::ToneEngine& engine_;
     std::unique_ptr<PlayScreen>    play_;
@@ -97,6 +101,12 @@ private:
     int  auditioningPack_ = -1, auditioningModel_ = -1;
     bool browseLoadedOnce_ = false;
     int  collectionIndex_ = -1;               // Play screen position in the Library
+
+    // Global bottom chrome: slim input meter strip + persistent nav bar.
+    juce::Rectangle<int> navBar_, meterBar_;
+    std::array<juce::Rectangle<int>, 4> navRects_;
+    int   activeTab_ = 0;                     // 0 Play · 1 Edit · 2 Radio · 3 Live (-1 none)
+    float meterInPeak_ = 0.0f;
     GetModelsFn getModels_;
     LoadModelFn loadModel_;
     GetDevicesFn   getDevices_;

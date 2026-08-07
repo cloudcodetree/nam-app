@@ -41,7 +41,6 @@ void PlayScreen::resized() { layout(); }
 void PlayScreen::layout() {
     auto r = getLocalBounds();
     topBar_  = r.removeFromTop (juce::jmax (56, r.getHeight() / 14));
-    navBar_  = r.removeFromBottom (juce::jmax (72, r.getHeight() / 11));
     metersRow_ = r.removeFromBottom (juce::jmax (78, r.getHeight() / 9)).reduced (20, 6);
     hero_    = r.reduced (26, 4);
 
@@ -62,10 +61,6 @@ void PlayScreen::layout() {
     nextRect_ = { transportRect_.getRight() - 52, transportRect_.getY(), 52, 52 };
     progressRect_ = { prevRect_.getRight() + 14, transportRect_.getCentreY() - 1,
                       nextRect_.getX() - 14 - (prevRect_.getRight() + 14), 2 };
-
-    const int nw = navBar_.getWidth() / 4;
-    for (int i = 0; i < 4; ++i)
-        navRects_[(size_t) i] = { navBar_.getX() + i * nw, navBar_.getY(), nw, navBar_.getHeight() };
 
     // The tuner panel (left half of the meters row) opens the strobe tuner.
     tunerRect_ = { metersRow_.getX(), metersRow_.getY(),
@@ -222,25 +217,6 @@ void PlayScreen::paint (juce::Graphics& g) {
         meterRow (mi.reduced (0, 3), "OUT", outLevel_, true);
     }
 
-    // --- Bottom nav -----------------------------------------------------
-    {
-        const char* labels[] = { "PLAY", "EDIT", "RADIO", "LIVE" };
-        const juce::String glyphs[] = {
-            juce::String::fromUTF8 ("\xE2\x96\xB6"),   // ▶
-            juce::String::fromUTF8 ("\xE2\x9C\x8E"),   // ✎
-            juce::String::fromUTF8 ("\xE2\x97\x89"),   // ◉
-            juce::String::fromUTF8 ("\xE2\x89\xA1") }; // ≡
-        for (int i = 0; i < 4; ++i) {
-            const bool active = (i == 0);
-            const auto c = active ? col::accent : col::inkA (0.45f);
-            auto cell = navRects_[(size_t) i];
-            auto icon = cell.removeFromTop (cell.getHeight() * 6 / 10);
-            text (glyphs[i], uiFont (17.0f, false), c, icon.withTrimmedTop (10),
-                  juce::Justification::centredBottom);
-            text (labels[i], uiFontTracked (10.0f, true), c, cell,
-                  juce::Justification::centredTop);
-        }
-    }
 }
 
 void PlayScreen::mouseDown (const juce::MouseEvent& e) {
@@ -250,6 +226,4 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     if (libRect_.contains (p)) { if (onLibrary) onLibrary(); return; }
     if (ioRect_.contains (p))  { if (onSettings) onSettings(); return; }
     if (tunerRect_.contains (p)) { if (onTuner) onTuner(); return; }
-    for (int i = 0; i < 4; ++i)
-        if (navRects_[(size_t) i].contains (p)) { if (onNav) onNav (i); return; }
 }

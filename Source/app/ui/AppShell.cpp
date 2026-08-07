@@ -1,4 +1,5 @@
 #include "app/ui/AppShell.h"
+#include "app/ui/NamLookAndFeel.h"
 
 #include <cmath>
 
@@ -23,12 +24,6 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
                                 (juce::Component*) tuner_.get() })
         addChildComponent (*c);
 
-    play_->onNav = [this] (int tab) {
-        switch (tab) { case 1: show (Screen::Edit);   break;
-                       case 2: show (Screen::Browse); break;
-                       case 3: show (Screen::Live);   break;
-                       default: show (Screen::Play);  break; }
-    };
     play_->onLibrary  = [this] { show (Screen::Library); };
     play_->onSettings = [this] { show (Screen::Devices); };
     play_->onPrev     = [this] { stepCollection (-1); };
@@ -323,10 +318,20 @@ void AppShell::show (Screen s) {
         case Screen::Tuner:   target = tuner_.get();   break;
         case Screen::Play:    default: target = play_.get(); break;
     }
+    // Persistent chrome: which nav tab is lit for this screen.
+    switch (s) {
+        case Screen::Play:    activeTab_ = 0; break;
+        case Screen::Edit:    activeTab_ = 1; break;
+        case Screen::Browse:  activeTab_ = 2; break;
+        case Screen::Live:    activeTab_ = 3; break;
+        default:              activeTab_ = -1; break;
+    }
+    repaint (navBar_);
+
     if (current_ == target) return;
     if (current_ != nullptr) current_->setVisible (false);
     current_ = target;
-    current_->setBounds (getLocalBounds());
+    current_->setBounds (contentBounds());
     current_->setVisible (true);
     current_->toFront (false);
 }
@@ -334,6 +339,10 @@ void AppShell::show (Screen s) {
 void AppShell::setLevels (float in, float out) {
     if (play_ != nullptr)    play_->setLevels (in, out);
     if (devices_ != nullptr) devices_->setLevels (in, out);
+    if (std::abs (in - meterInPeak_) > 0.005f) {
+        meterInPeak_ = in;
+        repaint (meterBar_);
+    }
 }
 
 void AppShell::setTunerPitch (float hz) {
@@ -350,11 +359,77 @@ void AppShell::setTunerPitch (float hz) {
     play_->setTuner (juce::String (names[nameIdx]) + juce::String (octave), cents, true);
 }
 
+juce::Rectangle<int> AppShell::contentBounds() const {
+    auto b = getLocalBounds();
+    b.removeFromBottom (navBar_.getHeight() + meterBar_.getHeight());
+    return b;
+}
+
 void AppShell::resized() {
     auto b = getLocalBounds();
+    navBar_   = b.removeFromBottom (juce::jmax (64, getHeight() / 13));
+    meterBar_ = b.removeFromBottom (12);
+    const int nw = navBar_.getWidth() / 4;
+    for (int i = 0; i < 4; ++i)
+        navRects_[(size_t) i] = { navBar_.getX() + i * nw, navBar_.getY(), nw, navBar_.getHeight() };
+
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) browse_.get(), (juce::Component*) library_.get(),
                                 (juce::Component*) live_.get(), (juce::Component*) devices_.get(),
                                 (juce::Component*) tuner_.get() })
         if (c != nullptr) c->setBounds (b);
+}
+
+void AppShell::paint (juce::Graphics& g) {
+    // Global bottom chrome only — screens paint everything above it.
+    g.setColour (nam::ui::col::bg);
+    g.fillRect (meterBar_.getUnion (navBar_));
+
+    // Slim input meter (dB-scaled -60..0), full-width.
+    {
+        auto bar = meterBar_.reduced (20, 4).toFloat();
+        g.setColour (nam::ui::col::inkA (0.08f));
+        g.fillRoundedRectangle (bar, 2.0f);
+        const float db = meterInPeak_ > 0.001f ? 20.0f * std::log10 (meterInPeak_) : -60.0f;
+        const float frac = juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f);
+        if (frac > 0.0f) {
+            const float w = juce::jmax (3.0f, bar.getWidth() * frac);
+            juce::ColourGradient mg (nam::ui::col::meterGreen, bar.getX(), 0,
+                                     nam::ui::col::meterLime, bar.getX() + w, 0, false);
+            g.setGradientFill (mg);
+            juce::Path p; p.addRoundedRectangle (bar.withWidth (w), 2.0f);
+            g.fillPath (p);
+        }
+    }
+
+    // Persistent nav
+    static const char* labels[] = { "PLAY", "EDIT", "RADIO", "LIVE" };
+    static const char* glyphsUtf8[] = { "\xE2\x96\xB6", "\xE2\x9C\x8E", "\xE2\x97\x89", "\xE2\x89\xA1" };
+    for (int i = 0; i < 4; ++i) {
+        const bool active = (i == activeTab_);
+        const auto c = active ? nam::ui::col::accent : nam::ui::col::inkA (0.45f);
+        auto cell = navRects_[(size_t) i];
+        auto icon = cell.removeFromTop (cell.getHeight() * 6 / 10);
+        g.setFont (nam::ui::uiFont (16.0f, false));
+        g.setColour (c);
+        g.drawText (juce::String::fromUTF8 (glyphsUtf8[i]), icon.withTrimmedTop (8),
+                    juce::Justification::centredBottom, false);
+        g.setFont (nam::ui::uiFontTracked (10.0f, true));
+        g.drawText (labels[i], cell, juce::Justification::centredTop, false);
+    }
+}
+
+void AppShell::mouseDown (const juce::MouseEvent& e) {
+    const auto p = e.getPosition();
+    for (int i = 0; i < 4; ++i)
+        if (navRects_[(size_t) i].contains (p)) {
+            switch (i) {
+                case 1: show (Screen::Edit);   break;
+                case 2: show (Screen::Browse); break;
+                case 3: show (Screen::Live);   break;
+                default: show (Screen::Play);  break;
+            }
+            return;
+        }
+    if (meterBar_.contains (p)) show (Screen::Devices);
 }

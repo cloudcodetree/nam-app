@@ -20,7 +20,6 @@ public:
     void setTuner (juce::String note, float cents, bool active);
     void setPosition (int index, int count);   // place in the collection (-1 = not in it)
 
-    std::function<void (int)> onNav;      // 0=Play 1=Edit 2=Radio 3=Live
     std::function<void()>     onLibrary;
     std::function<void()>     onSettings; // I/O pill -> audio device picker
     std::function<void()>     onPrev, onNext;   // step through the collection
@@ -40,11 +39,10 @@ private:
     float tunerCents_ = 0.0f;
     bool  tunerActive_ = false;
 
-    // Hit / layout rects, computed in resized().
+    // Hit / layout rects, computed in resized(). (Nav lives in AppShell.)
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_,
-                         metersRow_, navBar_;
+                         metersRow_;
     juce::Rectangle<int> libRect_, ioRect_, prevRect_, nextRect_, progressRect_, tunerRect_;
-    std::array<juce::Rectangle<int>, 4> navRects_;
 
     void layout();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlayScreen)
