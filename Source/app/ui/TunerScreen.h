@@ -1,10 +1,12 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <array>
 #include <functional>
 
-// Full-screen strobe tuner: big detected note + cents, and three strobe
-// bands (1x / 2x / 4x rates). Band drift speed and direction follow the
-// deviation — stationary bands = in tune, drift right = sharp, left = flat.
+// Full-screen tuner with selectable displays:
+//   STROBE — three bands (1x/2x/4x); drift speed/direction = deviation
+//   NEEDLE — analog dial, needle sweeps -50..+50 cents
+//   BARS   — pedal-style LED segments
 // The owner feeds raw pitch (Hz) from the detector; this screen derives
 // note/cents and smooths them for display.
 class TunerScreen : public juce::Component, private juce::Timer {
@@ -22,6 +24,13 @@ public:
 
 private:
     void timerCallback() override;
+    void paintStrobe (juce::Graphics&, bool inTune);
+    void paintNeedle (juce::Graphics&, bool inTune);
+    void paintBars   (juce::Graphics&, bool inTune);
+
+    enum class Mode { Strobe, Needle, Bars };
+    Mode mode_ = Mode::Strobe;
+    std::array<juce::Rectangle<int>, 3> modeRects_;
 
     float hz_ = 0.0f;
     float cents_ = 0.0f;        // smoothed deviation
@@ -30,7 +39,7 @@ private:
     int  inactiveTicks_ = 0;
     double phase_ = 0.0;        // strobe scroll phase (px)
 
-    juce::Rectangle<int> backRect_, noteRect_, centsRect_, hzRect_, bandsRect_;
+    juce::Rectangle<int> backRect_, modeRow_, noteRect_, centsRect_, hzRect_, bandsRect_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TunerScreen)
 };

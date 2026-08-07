@@ -44,7 +44,8 @@ void TunerScreen::timerCallback() {
     if (active_) {
         // Drift speed proportional to deviation (px/frame at 60 fps).
         phase_ += (double) cents_ * 0.10;
-        repaint (bandsRect_.getUnion (noteRect_).getUnion (centsRect_).getUnion (hzRect_));
+        repaint (bandsRect_.expanded (12).getUnion (noteRect_)
+                     .getUnion (centsRect_).getUnion (hzRect_));
     } else if (inactiveTicks_ == 46) {
         repaint();
     }
@@ -56,10 +57,20 @@ void TunerScreen::resized() {
     backRect_ = { top.getX() + 20, top.getCentreY() - 16, 84, 32 };
 
     r.reduce (26, 0);
-    noteRect_  = r.removeFromTop (r.getHeight() / 3).withTrimmedTop (20);
+    modeRow_ = r.removeFromTop (40);
+    {
+        const int w = juce::jmin (110, (modeRow_.getWidth() - 16) / 3);
+        const int total = w * 3 + 16;
+        int x = modeRow_.getCentreX() - total / 2;
+        for (auto& mr : modeRects_) {
+            mr = { x, modeRow_.getY() + 4, w, 32 };
+            x += w + 8;
+        }
+    }
+    noteRect_  = r.removeFromTop (r.getHeight() / 3).withTrimmedTop (8);
     centsRect_ = r.removeFromTop (44);
     hzRect_    = r.removeFromTop (26);
-    r.removeFromTop (18);
+    r.removeFromTop (14);
     bandsRect_ = r.withTrimmedBottom (r.getHeight() / 4);
 }
 
@@ -92,6 +103,26 @@ void TunerScreen::paint (juce::Graphics& g) {
               centsRect_, juce::Justification::centred);
     }
 
+    // Mode pills
+    static const char* kModeNames[] = { "STROBE", "NEEDLE", "BARS" };
+    for (int m = 0; m < 3; ++m) {
+        const bool on = ((int) mode_ == m);
+        drawPill (g, modeRects_[(size_t) m].toFloat(),
+                  on ? col::accentA (0.12f) : juce::Colours::transparentBlack,
+                  on ? col::accentA (0.6f) : col::inkA (0.18f));
+        text (kModeNames[m], uiFontTracked (10.0f, true),
+              on ? col::accentAlt : col::inkA (0.6f),
+              modeRects_[(size_t) m], juce::Justification::centred);
+    }
+
+    switch (mode_) {
+        case Mode::Strobe: paintStrobe (g, inTune); break;
+        case Mode::Needle: paintNeedle (g, inTune); break;
+        case Mode::Bars:   paintBars (g, inTune);   break;
+    }
+}
+
+void TunerScreen::paintStrobe (juce::Graphics& g, bool inTune) {
     // Strobe bands: 1x / 2x / 4x. Alternating segments scrolled by phase;
     // apparent motion stops when in tune.
     const int nBands = 3;
@@ -130,8 +161,86 @@ void TunerScreen::paint (juce::Graphics& g) {
                 bandsRect_.getHeight() + 12);
 }
 
-void TunerScreen::mouseDown (const juce::MouseEvent& e) {
-    if (backRect_.expanded (10).contains (e.getPosition())) {
-        if (onBack) onBack();
+void TunerScreen::paintNeedle (juce::Graphics& g, bool inTune) {
+    auto text = [&] (const juce::String& s, juce::Font f, juce::Colour c,
+                     juce::Rectangle<int> rr, juce::Justification j) {
+        g.setFont (f); g.setColour (c); g.drawText (s, rr, j, false);
+    };
+
+    // Dial geometry: pivot at bottom-centre, needle sweeps ±45°.
+    const float cx = (float) bandsRect_.getCentreX();
+    const float cy = (float) bandsRect_.getBottom() - 12.0f;
+    const float radius = juce::jmin ((float) bandsRect_.getWidth() * 0.46f,
+                                     (float) bandsRect_.getHeight() - 30.0f);
+    const float maxAngle = juce::MathConstants<float>::pi * 0.25f;
+
+    // Scale arc + ticks every 10 cents (bigger at 0 and ±50).
+    for (int c = -50; c <= 50; c += 10) {
+        const float a = ((float) c / 50.0f) * maxAngle;
+        const float sinA = std::sin (a), cosA = std::cos (a);
+        const float r1 = radius * (c == 0 ? 0.82f : 0.88f);
+        const float r2 = radius * 0.98f;
+        g.setColour (c == 0 ? col::inkA (0.6f) : col::inkA (0.25f));
+        g.drawLine (cx + sinA * r1, cy - cosA * r1, cx + sinA * r2, cy - cosA * r2,
+                    c == 0 ? 2.5f : 1.5f);
     }
+    text (juce::String::fromUTF8 ("\xE2\x99\xAD"), uiFont (18.0f, false), col::inkA (0.4f),
+          { bandsRect_.getX() + 8, bandsRect_.getY() + 8, 30, 30 }, juce::Justification::centred);
+    text (juce::String::fromUTF8 ("\xE2\x99\xAF"), uiFont (18.0f, false), col::inkA (0.4f),
+          { bandsRect_.getRight() - 38, bandsRect_.getY() + 8, 30, 30 }, juce::Justification::centred);
+
+    // Needle
+    const float clamped = juce::jlimit (-50.0f, 50.0f, active_ ? cents_ : 0.0f);
+    const float na = (clamped / 50.0f) * maxAngle;
+    const float nx = cx + std::sin (na) * radius * 0.92f;
+    const float ny = cy - std::cos (na) * radius * 0.92f;
+    g.setColour (! active_ ? col::inkA (0.2f) : inTune ? col::meterLime : col::accent);
+    g.drawLine (cx, cy, nx, ny, 3.0f);
+    g.fillEllipse (cx - 7.0f, cy - 7.0f, 14.0f, 14.0f);
+}
+
+void TunerScreen::paintBars (juce::Graphics& g, bool inTune) {
+    // Pedal-style LEDs: 11 segments over -50..+50 cents, centre = in tune.
+    const int n = 11;
+    const int gap = 8;
+    const int segW = (bandsRect_.getWidth() - (n - 1) * gap) / n;
+    const int mid = n / 2;
+    int lit = -1;
+    if (active_)
+        lit = inTune ? mid
+                     : juce::jlimit (0, n - 1,
+                           (int) std::floor ((juce::jlimit (-49.0f, 49.0f, cents_) + 50.0f)
+                                             / (100.0f / (float) n)));
+    const int baseH = bandsRect_.getHeight() / 3;
+    for (int i = 0; i < n; ++i) {
+        const int grow = (i == mid) ? baseH / 2 : baseH / 5 * std::abs (i - mid) / mid;
+        const int h = baseH + (i == mid ? baseH / 2 : grow);
+        juce::Rectangle<int> seg (bandsRect_.getX() + i * (segW + gap),
+                                  bandsRect_.getCentreY() - h / 2, segW, h);
+        const bool on = (i == lit);
+        juce::Colour c;
+        if (! on) c = col::inkA (0.10f);
+        else if (i == mid) c = col::meterLime;
+        else c = col::accent.withAlpha (0.9f);
+        g.setColour (c);
+        g.fillRoundedRectangle (seg.toFloat(), 6.0f);
+        if (on) {   // glow
+            g.setColour (c.withAlpha (0.25f));
+            g.fillRoundedRectangle (seg.toFloat().expanded (5.0f), 9.0f);
+        }
+    }
+}
+
+void TunerScreen::mouseDown (const juce::MouseEvent& e) {
+    const auto p = e.getPosition();
+    if (backRect_.expanded (10).contains (p)) {
+        if (onBack) onBack();
+        return;
+    }
+    for (int m = 0; m < 3; ++m)
+        if (modeRects_[(size_t) m].contains (p)) {
+            mode_ = (Mode) m;
+            repaint();
+            return;
+        }
 }
