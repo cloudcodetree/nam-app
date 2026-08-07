@@ -352,27 +352,22 @@ void AndroidAudioApp::preferUsbInput() {
     if (type == nullptr) return;
     type->scanForDevices();
 
-    juce::String usbIn, usbOut;
+    juce::String usbIn;
     for (const auto& n : type->getDeviceNames(true))
         if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbIn = n; break; }
-    for (const auto& n : type->getDeviceNames(false))
-        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbOut = n; break; }
     if (usbIn.isEmpty()) return;
 
-    // Claim BOTH sides explicitly: Android routes default output to USB
-    // anyway, but the settings screen should truthfully show the iRig.
+    // Input must be claimed explicitly (the default is the built-in mic),
+    // but output stays on System Default: Android routes it to the USB
+    // device anyway AND keeps the low-latency FAST path — an explicit
+    // output device lands on the primary mixer (960-frame buffers, ~3x
+    // the latency; measured on the S25).
     auto setup = deviceManager.getAudioDeviceSetup();
-    const bool inOk  = setup.inputDeviceName == usbIn;
-    const bool outOk = usbOut.isEmpty() || setup.outputDeviceName == usbOut;
-    if (inOk && outOk) return;
+    if (setup.inputDeviceName == usbIn) return;
     setup.inputDeviceName = usbIn;
     setup.useDefaultInputChannels = true;
-    if (! usbOut.isEmpty()) {
-        setup.outputDeviceName = usbOut;
-        setup.useDefaultOutputChannels = true;
-    }
     const auto err = applyDeviceSetup(setup);
-    juce::Logger::writeToLog("preferUsbInput(in=" + usbIn + ", out=" + usbOut + ") -> "
+    juce::Logger::writeToLog("preferUsbInput(" + usbIn + ") -> "
                              + (err.isEmpty() ? "ok" : err));
 }
 
