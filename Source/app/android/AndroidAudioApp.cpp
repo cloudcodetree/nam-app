@@ -367,9 +367,9 @@ void AndroidAudioApp::timerCallback() {
 
     // Slow hot-plug poll (~every 3 s): Android doesn't notify JUCE when a USB
     // interface appears, so rescan until one is adopted or the user picks.
-    if (! userChoseInput_ && ++rescanTick_ >= 90) {
+    if (++rescanTick_ >= 90) {
         rescanTick_ = 0;
-        preferUsbInput();
+        preferUsbInput();   // per-side manual picks respected internally
     }
 }
 
@@ -442,22 +442,13 @@ void AndroidAudioApp::selectInputDevice(const juce::String& name) {
 }
 
 void AndroidAudioApp::selectOutputDevice(const juce::String& name) {
-    // Picking the USB interface explicitly opens the LEGACY output path
-    // (192-frame bursts, audibly choppy — measured on the S25), while
-    // "System Default" routes to the same USB device on the MMAP FAST path.
-    // So a USB pick applies the default instead; the settings row's
-    // "system routing -> <device>" subtitle shows where sound actually goes.
-    juce::String effective = name;
-    if (name.containsIgnoreCase("usb") || name.containsIgnoreCase("irig"))
-        for (const auto& n : outputDeviceNames())
-            if (n.containsIgnoreCase("default")) { effective = n; break; }
-
+    userChoseOutput_ = true;   // manual pick wins over USB auto-claim
     auto setup = deviceManager.getAudioDeviceSetup();
-    if (setup.outputDeviceName == effective) return;
-    setup.outputDeviceName = effective;
+    if (setup.outputDeviceName == name) return;
+    setup.outputDeviceName = name;
     setup.useDefaultOutputChannels = true;
     const auto err = applyDeviceSetup(setup);
-    juce::Logger::writeToLog("selectOutputDevice(" + name + " -> " + effective + ") -> "
+    juce::Logger::writeToLog("selectOutputDevice(" + name + ") -> "
                              + (err.isEmpty() ? "ok" : err));
 }
 
@@ -486,22 +477,34 @@ void AndroidAudioApp::preferUsbInput() {
     if (type == nullptr) return;
     type->scanForDevices();
 
-    juce::String usbIn;
+    juce::String usbIn, usbOut;
     for (const auto& n : type->getDeviceNames(true))
         if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbIn = n; break; }
-    if (usbIn.isEmpty()) return;
+    for (const auto& n : type->getDeviceNames(false))
+        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbOut = n; break; }
+    if (usbIn.isEmpty() && usbOut.isEmpty()) return;
 
-    // Input must be claimed explicitly (the default is the built-in mic),
-    // but output stays on System Default: Android routes it to the USB
-    // device anyway AND keeps the low-latency FAST path — an explicit
-    // output device lands on the primary mixer (960-frame buffers, ~3x
-    // the latency; measured on the S25).
+    // Claim BOTH sides of the guitar interface explicitly. "System Default"
+    // output does reach the USB device on the faster MMAP path (96-frame
+    // bursts vs Legacy's 192) — but default routing follows the most recent
+    // device, so a Bluetooth connect (headphones, glasses) silently steals
+    // the rig mid-song. An explicit device can't be stolen; the ~2-4 ms
+    // Legacy cost is the price of immunity. Manual picks still win.
     auto setup = deviceManager.getAudioDeviceSetup();
-    if (setup.inputDeviceName == usbIn) return;
-    setup.inputDeviceName = usbIn;
-    setup.useDefaultInputChannels = true;
+    bool changed = false;
+    if (usbIn.isNotEmpty() && ! userChoseInput_ && setup.inputDeviceName != usbIn) {
+        setup.inputDeviceName = usbIn;
+        setup.useDefaultInputChannels = true;
+        changed = true;
+    }
+    if (usbOut.isNotEmpty() && ! userChoseOutput_ && setup.outputDeviceName != usbOut) {
+        setup.outputDeviceName = usbOut;
+        setup.useDefaultOutputChannels = true;
+        changed = true;
+    }
+    if (! changed) return;
     const auto err = applyDeviceSetup(setup);
-    juce::Logger::writeToLog("preferUsbInput(" + usbIn + ") -> "
+    juce::Logger::writeToLog("preferUsb(in=" + usbIn + " out=" + usbOut + ") -> "
                              + (err.isEmpty() ? "ok" : err));
 }
 
@@ -593,7 +596,7 @@ void AndroidAudioApp::changeListenerCallback(juce::ChangeBroadcaster*) {
     // Device setup changed (stream restart etc.) — re-check USB routing unless
     // we caused the change ourselves or the user made an explicit choice.
     if (applyingDeviceChange_) return;
-    if (! userChoseInput_) preferUsbInput();
+    preferUsbInput();   // guards per-side manual picks internally
     clampBufferForLowLatency();
 }
 

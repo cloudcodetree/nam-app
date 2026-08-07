@@ -172,6 +172,7 @@ private:
 
     bool applyingDeviceChange_ = false;  // re-entrancy guard for setAudioDeviceSetup
     bool userChoseInput_ = false;        // manual pick disables USB auto-select
+    bool userChoseOutput_ = false;       // manual pick disables USB output auto-claim
     bool userChoseBuffer_ = false;       // manual pick disables the low-latency clamp
     int  rescanTick_ = 0;                // slow hot-plug poll (timer runs at 30 Hz)
     int  engineDeadTicks_ = 0;           // watchdog: device stopped this many ticks
