@@ -82,6 +82,22 @@ bool pickBestModel(const std::vector<ModelInfo>& models, ModelInfo& out);
 // `format=nam` is appended only when `namOnly` is true.
 std::string buildSearchUrl(const std::string& query, int page, int pageSize, bool namOnly);
 
+// Structured search matching TONE3000's real /tones/search parameters
+// (tone-3000/api SearchTonesParams): multi-values join with "_"; empty
+// fields are omitted from the URL.
+struct SearchParams {
+    std::string query;
+    int page = 1;
+    int pageSize = 25;
+    std::string sort;                   // trending|newest|oldest|best-match|downloads-all-time
+    std::vector<std::string> gears;     // amp-cab|amp|cab|pedal|outboard|space|experimental
+    std::string format;                 // nam|ir ("" = all)
+    std::vector<std::string> tags;      // exact tag names, OR'd
+    std::vector<std::string> makes;     // exact make/model names, OR'd
+    int architecture = 0;               // 0 = any, 1 = A1, 2 = A2
+};
+std::string buildSearchUrl(const SearchParams& p);
+
 // Full /api/v1/tones/trending URL.
 std::string buildTrendingUrl();
 

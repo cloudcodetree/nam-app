@@ -304,12 +304,11 @@ private:
 // may be in flight at the same time.
 class Tone3000Session::SearchThread : public juce::Thread {
 public:
-    SearchThread(std::string accessToken, std::string query, int page,
+    SearchThread(std::string accessToken, nam::SearchParams params,
                  std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done)
         : juce::Thread("Tone3000Search"),
           accessToken_(std::move(accessToken)),
-          query_(std::move(query)),
-          page_(page),
+          params_(std::move(params)),
           done_(std::move(done)) {}
 
     void run() override {
@@ -332,20 +331,7 @@ private:
             return false;
         }
 
-        // "#ir "/"#all " prefixes (from the Play filters' Gear Type) widen
-        // the search beyond nam-only; the caller scopes "#ir" client-side.
-        std::string q = query_;
-        bool namOnly = true;
-        for (const char* prefix : { "#ir", "#all" }) {
-            const size_t plen = std::string(prefix).size();
-            if (q.rfind(prefix, 0) == 0) {
-                namOnly = false;
-                q = q.size() > plen + 1 ? q.substr(plen + 1) : std::string();
-                break;
-            }
-        }
-        const juce::URL searchUrl{
-            juce::String(nam::buildSearchUrl(q, page_, /*pageSize*/ 25, namOnly))};
+        const juce::URL searchUrl{ juce::String(nam::buildSearchUrl(params_)) };
         juce::MemoryBlock bytes;
         juce::String getError;
         if (!authenticatedGet(*this, accessToken_, searchUrl, true, bytes, getError)) {
@@ -367,8 +353,7 @@ private:
     }
 
     std::string accessToken_;
-    std::string query_;
-    int page_;
+    nam::SearchParams params_;
     std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done_;
 };
 
@@ -487,6 +472,15 @@ void Tone3000Session::downloadToneModel(const std::string& toneId, juce::File de
 
 void Tone3000Session::search(const std::string& query, int page,
                               std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+    nam::SearchParams p;
+    p.query = query;
+    p.page = page;
+    p.format = "nam";   // legacy string path stays nam-only
+    search(p, std::move(done));
+}
+
+void Tone3000Session::search(const nam::SearchParams& params,
+                              std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
     if (searchThread_) {
         // A prior search is still in flight (or just finished): stop it
         // before starting a new one so we never have two SearchThreads (or a
@@ -494,7 +488,7 @@ void Tone3000Session::search(const std::string& query, int page,
         searchThread_->stopThread(20000);
         searchThread_.reset();
     }
-    searchThread_ = std::make_unique<SearchThread>(accessToken_, query, page, std::move(done));
+    searchThread_ = std::make_unique<SearchThread>(accessToken_, params, std::move(done));
     searchThread_->startThread();
 }
 

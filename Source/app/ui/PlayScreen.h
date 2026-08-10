@@ -40,12 +40,19 @@ public:
     std::function<void()>     onTuner;          // tuner panel -> strobe tuner
     std::function<void (int)> onViewChange;     // 0 favorites · 1 browse
     std::function<void()>     onKeepToggle;     // heart tap / swipe-down keep
-    // Filter selection changed: gear (-1 all · 0 amps · 1 cabs) + tag/make picks.
-    std::function<void (int, juce::StringArray, juce::StringArray)> onFiltersChanged;
-    // Owner supplies the chip vocabulary for the current view (favorites =
-    // only what the deck actually contains; browse = the full sets).
-    void setAvailableFilters (bool amps, bool cabs,
-                              juce::StringArray tags, juce::StringArray makes);
+    // Format strip (browse): -1 all · 0 amps (nam) · 1 cabs (ir).
+    std::function<void (int)> onFormatChange;
+
+    // Generic filter groups (owner defines them per view; radio groups keep
+    // exactly one selection). The flyout renders them with separators.
+    struct FilterGroup {
+        juce::String title;
+        juce::StringArray options;
+        juce::StringArray selected;
+        bool radio = false;
+    };
+    void setFilterGroups (std::vector<FilterGroup> groups);
+    std::function<void (const std::vector<FilterGroup>&)> onFilterGroupsChanged;
     std::function<void (int)> onSelectCab;      // PAIR pick (into setCabChoices)
     std::function<void (int)> onSelectDemoTrack;
     std::function<void()>     onToggleDemo;     // play/stop demo of current card
@@ -77,10 +84,9 @@ private:
     int   demoSel_ = 0;
     float burst_ = 0.0f;             // heart-pop overlay (1 -> 0)
     bool  flyOpen_ = false;          // filters flyout
-    int   gearSel_ = -1;             // -1 all · 0 amps · 1 cabs
-    juce::StringArray selTags_, selMakes_;
-    bool  availAmps_ = true, availCabs_ = true;
-    juce::StringArray availTags_, availMakes_;
+    int   gearSel_ = -1;             // format strip: -1 all · 0 amps · 1 cabs
+    std::vector<FilterGroup> filterGroups_;
+    int  activeFilterCount() const;
     // Card flip: 0 = artwork front, 1 = settings back.
     bool  flipped_ = false;
     float flip_ = 0.0f;
@@ -110,9 +116,15 @@ private:
                          flyRect_,       // filters flyout panel
                          pairRowRect_, demoRowRect_, demoPlayRect_;
     std::vector<std::pair<juce::Rectangle<int>, juce::String>> flyChips_;
+    std::vector<int> flyChipGroup_;                                          // chip -> group index
     std::vector<std::pair<juce::Rectangle<int>, juce::String>> flyLabels_;   // group headers
+    // Flyout scrolling (content can exceed the panel height).
+    float flyScroll_ = 0.0f, flyPressScroll_ = 0.0f;
+    int   flyContentH_ = 0;
+    bool  flyPressed_ = false, flyMoved_ = false;
+    juce::Point<int> flyPressPos_;
     std::array<juce::Rectangle<int>, 3> gearRects_;   // ALL / AMPS / CABS (browse)
-    std::array<juce::Rectangle<int>, 12> dotRects_;   // pagination hits (capped)
+    std::array<juce::Rectangle<int>, 25> dotRects_;   // pagination hits (one page)
 
     void layout();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlayScreen)

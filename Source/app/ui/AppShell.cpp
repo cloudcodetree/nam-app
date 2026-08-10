@@ -10,10 +10,26 @@ const juce::String kEllipsis = juce::String::fromUTF8 ("\xE2\x80\xA6"); // …
 const juce::String kHeart    = juce::String::fromUTF8 ("\xE2\x99\xA5"); // ♥
 const juce::String kDotSep   = juce::String::fromUTF8 ("\xC2\xB7");     // ·
 
-// Filter chip vocabulary. Browse offers all of it; favorites offers only
+// Filter vocabulary mirroring tone3000.com/search (captured 2026-08-10).
+// Browse offers all of it via the real API params; favorites offers only
 // what the kept deck actually contains (matched against display names).
-const char* kTagVocab[]  = { "clean", "blues", "vintage", "metal", "high gain" };
-const char* kMakeVocab[] = { "Marshall", "Fender", "Vox", "Mesa", "Orange", "EVH" };
+struct GearDef { const char* display; const char* api; };
+const GearDef kGearVocab[] = {
+    { "Amp + Cab", "amp-cab" }, { "Amp Head", "amp" }, { "Cabinet", "cab" },
+    { "Pedal", "pedal" }, { "Outboard", "outboard" }, { "Spaces", "space" },
+    { "Experimental", "experimental" },
+};
+const char* kTagVocab[] = { "nam", "metal", "high-gain", "rock", "crunch",
+                            "distortion", "clean", "guitar", "ir", "overdrive" };
+const char* kMakeVocab[] = { "Shure SM57", "Marshall JCM800", "Celestion",
+                             "EVH 5150", "Mesa Boogie Dual Rectifier",
+                             "Peavey 5150", "Laney", "VOX AC30", "Synergy",
+                             "Ibanez TS9 Tube Screamer" };
+struct SortDef { const char* display; const char* api; };
+const SortDef kSortVocab[] = {
+    { "Trending", "trending" }, { "Newest", "newest" }, { "Oldest", "oldest" },
+    { "Best Match", "best-match" }, { "Most Downloads", "downloads-all-time" },
+};
 }
 
 AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
@@ -51,30 +67,34 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         favGear_ = -1;
         favTags_.clear();
         favMakes_.clear();
-        pushFilterAvailability();
+        browseFormat_ = -1;
+        pushFilterGroups();
         if (svc_.stopDemo) svc_.stopDemo();
         play_->setDemoPlaying (false);
         if (browse) {
-            if (playDeck_.empty()) runPlayBrowse ("#all");
-            else showBrowseCard (playDeckIndex_ < 0 ? 0 : playDeckIndex_);
+            runPlayBrowse();
         } else {
             showFavCard (collectionIndex_ < 0 ? 0 : collectionIndex_, false);
         }
     };
 
-    play_->onFiltersChanged = [this] (int gear, juce::StringArray tags,
-                                      juce::StringArray makes) {
+    play_->onFormatChange = [this] (int f) {
+        if (! browseView_) return;
+        browseFormat_ = f;
+        runPlayBrowse();
+    };
+
+    play_->onFilterGroupsChanged = [this] (const std::vector<PlayScreen::FilterGroup>& groups) {
         if (browseView_) {
-            juce::String q;
-            if (gear == -1)     q << "#all ";
-            else if (gear == 1) q << "#ir ";
-            for (const auto& t : tags)  q << t << " ";
-            for (const auto& m : makes) q << m << " ";
-            runPlayBrowse (q.trim());
+            browseGroups_ = groups;
+            runPlayBrowse();
         } else {
-            favGear_ = gear;
-            favTags_ = std::move (tags);
-            favMakes_ = std::move (makes);
+            favTags_.clear();
+            favMakes_.clear();
+            for (const auto& gp : groups) {
+                if (gp.title == "TAGS")               favTags_ = gp.selected;
+                else if (gp.title == "MAKES & MODELS") favMakes_ = gp.selected;
+            }
             showFavCard (0, false);
         }
     };
@@ -97,7 +117,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
                 return;
             svc_.removeKept (deck[(size_t) collectionIndex_].id);
             updateCabChoices();
-            pushFilterAvailability();
+            pushFilterGroups();
             showFavCard (collectionIndex_, true);   // next card slides into the slot
         }
     };
@@ -396,26 +416,45 @@ std::vector<nam::LibraryEntry> AppShell::favDeck() const {
     return deck;
 }
 
-void AppShell::pushFilterAvailability() {
+void AppShell::pushFilterGroups() {
+    std::vector<PlayScreen::FilterGroup> groups;
     if (browseView_) {
-        play_->setAvailableFilters (true, true,
-                                    juce::StringArray (kTagVocab, 5),
-                                    juce::StringArray (kMakeVocab, 6));
-        return;
+        // Full tone3000.com/search vocabulary via the real API parameters.
+        PlayScreen::FilterGroup gear { "GEAR TYPE", {}, {}, false };
+        for (const auto& gd : kGearVocab) gear.options.add (gd.display);
+        PlayScreen::FilterGroup tags { "TAGS", {}, {}, false };
+        for (const char* t : kTagVocab) tags.options.add (t);
+        PlayScreen::FilterGroup makes { "MAKES & MODELS", {}, {}, false };
+        for (const char* m : kMakeVocab) makes.options.add (m);
+        PlayScreen::FilterGroup tech { "TECHNICAL", { "Any", "A2", "A1" }, { "Any" }, true };
+        PlayScreen::FilterGroup sort { "SORT", {}, { "Trending" }, true };
+        for (const auto& sd : kSortVocab) sort.options.add (sd.display);
+        groups = { gear, tags, makes, tech, sort };
+        browseGroups_ = groups;
+    } else {
+        // Favorites: only offer chips the deck can actually satisfy (the
+        // first word of a make is enough to match against display names).
+        const auto deck = favDeckAll();
+        PlayScreen::FilterGroup tags { "TAGS", {}, {}, false };
+        for (const char* t : kTagVocab)
+            for (const auto& e : deck)
+                if (juce::String (e.displayName).containsIgnoreCase (t)) {
+                    tags.options.add (t);
+                    break;
+                }
+        PlayScreen::FilterGroup makes { "MAKES & MODELS", {}, {}, false };
+        for (const char* m : kMakeVocab) {
+            const auto word = juce::String (m).upToFirstOccurrenceOf (" ", false, false);
+            for (const auto& e : deck)
+                if (juce::String (e.displayName).containsIgnoreCase (word)) {
+                    makes.options.add (word);
+                    break;
+                }
+        }
+        makes.options.removeDuplicates (true);
+        groups = { tags, makes };
     }
-    // Favorites: only offer chips the deck can actually satisfy.
-    const auto deck = favDeckAll();
-    bool amps = false, cabs = false;
-    juce::StringArray tags, makes;
-    for (const char* t : kTagVocab)
-        for (const auto& e : deck)
-            if (juce::String (e.displayName).containsIgnoreCase (t)) { tags.add (t); break; }
-    for (const char* m : kMakeVocab)
-        for (const auto& e : deck)
-            if (juce::String (e.displayName).containsIgnoreCase (m)) { makes.add (m); break; }
-    for (const auto& e : deck)
-        (e.type == nam::LibraryType::Ir ? cabs : amps) = true;
-    play_->setAvailableFilters (amps, cabs, std::move (tags), std::move (makes));
+    play_->setFilterGroups (std::move (groups));
 }
 
 void AppShell::showFavCard (int index, bool loadIntoEngine) {
@@ -473,15 +512,30 @@ void AppShell::showBrowseCard (int index) {
     play_->setPosition (index, n);
 }
 
-void AppShell::runPlayBrowse (juce::String q) {
-    if (! svc_.search) return;
-    const bool irOnly = q.startsWith ("#ir");
-    svc_.search (q, [this, irOnly] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
+void AppShell::runPlayBrowse() {
+    if (! svc_.searchEx) return;
+    // Build real /tones/search params from the strip + flyout state.
+    nam::SearchParams p;
+    p.format = browseFormat_ == 0 ? "nam" : browseFormat_ == 1 ? "ir" : "";
+    p.sort = "trending";
+    for (const auto& gp : browseGroups_) {
+        if (gp.title == "GEAR TYPE") {
+            for (const auto& sel : gp.selected)
+                for (const auto& gd : kGearVocab)
+                    if (sel == gd.display) p.gears.push_back (gd.api);
+        } else if (gp.title == "TAGS") {
+            for (const auto& sel : gp.selected) p.tags.push_back (sel.toStdString());
+        } else if (gp.title == "MAKES & MODELS") {
+            for (const auto& sel : gp.selected) p.makes.push_back (sel.toStdString());
+        } else if (gp.title == "TECHNICAL" && ! gp.selected.isEmpty()) {
+            p.architecture = gp.selected[0] == "A2" ? 2 : gp.selected[0] == "A1" ? 1 : 0;
+        } else if (gp.title == "SORT" && ! gp.selected.isEmpty()) {
+            for (const auto& sd : kSortVocab)
+                if (gp.selected[0] == sd.display) p.sort = sd.api;
+        }
+    }
+    svc_.searchEx (p, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
         if (! ok) return;
-        if (irOnly)   // "#ir" widens the search to everything; scope to cabs
-            tones.erase (std::remove_if (tones.begin(), tones.end(),
-                                         [] (const auto& t) { return t.format != "ir"; }),
-                         tones.end());
         playDeck_ = std::move (tones);
         playDeckIndex_ = playDeck_.empty() ? -1 : 0;
         if (browseView_) showBrowseCard (0);

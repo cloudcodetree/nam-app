@@ -67,32 +67,35 @@ void PlayScreen::setDeckView (int v) {
     if (view_ == v) return;
     view_ = v;
     flyOpen_ = false;
-    gearSel_ = -1;       // fresh filter state per view
-    selTags_.clear();
-    selMakes_.clear();
+    gearSel_ = -1;       // fresh filter state per view (owner re-sends groups)
     layout();
     startTimerHz (60);   // slide the toggle thumb
     repaint();
 }
 
 void PlayScreen::notifyFilters() {
-    if (onFiltersChanged) onFiltersChanged (gearSel_, selTags_, selMakes_);
+    if (onFilterGroupsChanged) onFilterGroupsChanged (filterGroups_);
 }
 
-void PlayScreen::setAvailableFilters (bool amps, bool cabs,
-                                      juce::StringArray tags, juce::StringArray makes) {
-    availAmps_ = amps;
-    availCabs_ = cabs;
-    availTags_ = std::move (tags);
-    availMakes_ = std::move (makes);
-    // Drop selections that are no longer available.
-    for (int i = selTags_.size(); --i >= 0;)
-        if (! availTags_.contains (selTags_[i])) selTags_.remove (i);
-    for (int i = selMakes_.size(); --i >= 0;)
-        if (! availMakes_.contains (selMakes_[i])) selMakes_.remove (i);
-    if ((gearSel_ == 0 && ! availAmps_) || (gearSel_ == 1 && ! availCabs_)) gearSel_ = -1;
+void PlayScreen::setFilterGroups (std::vector<FilterGroup> groups) {
+    filterGroups_ = std::move (groups);
     layout();
     repaint();
+}
+
+int PlayScreen::activeFilterCount() const {
+    int n = 0;
+    for (const auto& gp : filterGroups_) {
+        if (gp.radio) {
+            // Radio groups count only when off their default (first option).
+            if (! gp.selected.isEmpty() && ! gp.options.isEmpty()
+                && gp.selected[0] != gp.options[0])
+                ++n;
+        } else {
+            n += gp.selected.size();
+        }
+    }
+    return n;
 }
 
 void PlayScreen::setTuner (juce::String note, float cents, bool active) {
@@ -124,14 +127,16 @@ void PlayScreen::layout() {
     gearRect_    = { topBar_.getRight() - 58,  topBar_.getCentreY() - 21, 42, 42 };
     liveTopRect_ = editTopRect_ = {};   // gear only (Hi-Fi design)
 
-    // Filters strip above the card. Browse: [ALL][AMPS][CABS] gear pills to
-    // the left of a Filters pill. Favorites: Filters pill alone, shown only
-    // when the deck offers any chips. Pills hug their content.
+    // Filters strip above the card. Browse: [ALL][AMPS][CABS] format pills
+    // to the left of a Filters pill. Favorites: Filters pill alone, shown
+    // only when the deck offers any chips. Pills hug their content.
     gearRects_.fill ({});
-    const bool anyFilterChips = ! availTags_.isEmpty() || ! availMakes_.isEmpty();
+    bool anyFilterChips = false;
+    for (const auto& gp : filterGroups_)
+        if (! gp.options.isEmpty()) { anyFilterChips = true; break; }
     if (view_ == 1 || anyFilterChips) {
         auto fs = hero_.removeFromTop (46);
-        const int n = selTags_.size() + selMakes_.size();
+        const int n = activeFilterCount();
         const juce::String label = n > 0
             ? "Filters " + juce::String::fromUTF8 ("\xC2\xB7") + " " + juce::String (n)
             : juce::String ("Filters");
@@ -164,6 +169,7 @@ void PlayScreen::layout() {
     // labelled sections with separators. Groups only appear when they have
     // something to offer (favorites view derives chips from the deck).
     flyChips_.clear();
+    flyChipGroup_.clear();
     flyLabels_.clear();
     if (flyOpen_ && ! filterBtnRect_.isEmpty()) {
         const int anchorY = filterBtnRect_.getBottom();
@@ -171,31 +177,36 @@ void PlayScreen::layout() {
         const int x0 = hero_.getX() + 34;
         int x = x0, y = anchorY + 12;
         bool first = true;
-        auto label = [&] (const char* name) {
+        const auto chipFont = uiFont (11.0f, true);
+        for (size_t gi = 0; gi < filterGroups_.size(); ++gi) {
+            const auto& gp = filterGroups_[gi];
+            if (gp.options.isEmpty()) continue;
             if (! first) y += chipH + 14;
             first = false;
-            flyLabels_.push_back ({ { x0, y, hero_.getWidth() - 68, 14 }, name });
+            flyLabels_.push_back ({ { x0, y, hero_.getWidth() - 68, 14 }, gp.title });
             y += 20;
             x = x0;
-        };
-        auto place = [&] (const juce::String& chip) {
-            const int w = juce::jmax (56, chip.length() * 8 + 24);
-            if (x + w > getWidth() - 34) { x = x0; y += chipH + gap; }
-            flyChips_.push_back ({ { x, y, w, chipH }, chip });
-            x += w + gap;
-        };
-        if (! availTags_.isEmpty()) {
-            label ("TAGS");
-            for (const auto& t : availTags_)  place (t);
+            for (const auto& chip : gp.options) {
+                const int tw = (int) std::ceil (
+                    juce::GlyphArrangement::getStringWidth (chipFont, chip));
+                const int w = juce::jmax (52, tw + 26);
+                if (x + w > getWidth() - 34) { x = x0; y += chipH + gap; }
+                flyChips_.push_back ({ { x, y, w, chipH }, chip });
+                flyChipGroup_.push_back ((int) gi);
+                x += w + gap;
+            }
         }
-        if (! availMakes_.isEmpty()) {
-            label ("MAKES & MODELS");
-            for (const auto& m : availMakes_) place (m);
-        }
-        flyRect_ = { hero_.getX() + 24, anchorY + 6,
-                     hero_.getWidth() - 48, (y + chipH + 14) - (anchorY + 6) };
+        const int contentBottom = y + chipH + 14;
+        flyContentH_ = contentBottom - (anchorY + 6);
+        // Cap the panel above the tuner row; content scrolls inside.
+        const int maxBottom = metersRow_.getY() - 10;
+        flyRect_ = { hero_.getX() + 24, anchorY + 6, hero_.getWidth() - 48,
+                     juce::jmin (flyContentH_, maxBottom - (anchorY + 6)) };
+        flyScroll_ = juce::jlimit (0.0f, (float) juce::jmax (0, flyContentH_ - flyRect_.getHeight()),
+                                   flyScroll_);
     } else {
         flyRect_ = {};
+        flyScroll_ = 0.0f;
     }
 
     // Full-bleed tone card; below it: pagination dots, then the view toggle
@@ -221,10 +232,13 @@ void PlayScreen::layout() {
     prevRect_ = { hero_.getX() + 2,        artRect_.getCentreY() - 34, 26, 68 };
     nextRect_ = { hero_.getRight() - 28,   artRect_.getCentreY() - 34, 26, 68 };
 
-    // Pagination dot hit rects (capped; beyond that a bar is drawn instead).
+    // Pagination dot hit rects. Dots shrink as the deck grows so a full
+    // results page (25) still fits; beyond that a bar is drawn instead.
     {
         const int n = juce::jlimit (0, (int) dotRects_.size(), count_);
-        const int active = 22, idle = 8, gap = 8;
+        const int idle = n > 12 ? 5 : 8;
+        const int gap  = n > 12 ? 4 : 8;
+        const int active = n > 12 ? 16 : 22;
         int total = 0;
         for (int k = 0; k < n; ++k) total += (k == index_ ? active : idle) + (k ? gap : 0);
         int x = dotsRect_.getCentreX() - total / 2;
@@ -356,7 +370,7 @@ void PlayScreen::paint (juce::Graphics& g) {
             }
         }
         if (! filterBtnRect_.isEmpty()) {
-            const int n = selTags_.size() + selMakes_.size();
+            const int n = activeFilterCount();
             const bool hot = flyOpen_ || n > 0;
             drawPill (g, filterBtnRect_.toFloat(),
                       flyOpen_ ? col::accentA (0.12f) : col::bg.withAlpha (0.4f),
@@ -519,12 +533,18 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.drawRoundedRectangle (face.toFloat(), 14.0f, 1.0f);
     }
 
-    // Filters flyout floats over the card (browse view).
+    // Filters flyout floats over the card; content scrolls when it exceeds
+    // the panel height.
     if (! flyRect_.isEmpty()) {
         g.setColour (juce::Colour (0xf214101f));
         g.fillRoundedRectangle (flyRect_.toFloat(), 14.0f);
         g.setColour (col::inkA (0.18f));
         g.drawRoundedRectangle (flyRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
+        g.saveState();
+        juce::Path clip;
+        clip.addRoundedRectangle (flyRect_.toFloat().reduced (1.0f), 13.0f);
+        g.reduceClipRegion (clip);
+        g.addTransform (juce::AffineTransform::translation (0.0f, -flyScroll_));
         for (size_t li = 0; li < flyLabels_.size(); ++li) {
             const auto& [rr, name] = flyLabels_[li];
             if (li > 0) {   // separator hairline above each later group
@@ -534,15 +554,26 @@ void PlayScreen::paint (juce::Graphics& g) {
             text (name, uiFontTracked (9.0f, true), col::inkA (0.4f),
                   rr, juce::Justification::centredLeft);
         }
-        for (const auto& [rr, label] : flyChips_) {
-            const bool on = label == "ALL"  ? gearSel_ == -1
-                          : label == "AMPS" ? gearSel_ == 0
-                          : label == "CABS" ? gearSel_ == 1
-                          : selTags_.contains (label) || selMakes_.contains (label);
+        for (size_t ci = 0; ci < flyChips_.size(); ++ci) {
+            const auto& [rr, label] = flyChips_[ci];
+            const auto& gp = filterGroups_[(size_t) flyChipGroup_[ci]];
+            const bool on = gp.selected.contains (label);
             drawPill (g, rr.toFloat(), on ? col::accent : juce::Colours::transparentBlack,
                       on ? col::accent : col::inkA (0.2f));
             text (label, uiFont (11.0f, true), on ? col::inkOnAccent : col::inkA (0.7f),
                   rr, juce::Justification::centred);
+        }
+        g.restoreState();
+        // Scroll affordance: thin track on the right when content overflows.
+        if (flyContentH_ > flyRect_.getHeight()) {
+            const float frac = (float) flyRect_.getHeight() / (float) flyContentH_;
+            const float thumbH = juce::jmax (24.0f, flyRect_.getHeight() * frac);
+            const float travel = (float) flyRect_.getHeight() - thumbH - 8.0f;
+            const float pos = flyScroll_ / (float) (flyContentH_ - flyRect_.getHeight());
+            g.setColour (col::inkA (0.25f));
+            g.fillRoundedRectangle ((float) flyRect_.getRight() - 7.0f,
+                                    (float) flyRect_.getY() + 4.0f + travel * pos,
+                                    3.0f, thumbH, 1.5f);
         }
     }
 
@@ -629,6 +660,32 @@ void PlayScreen::paint (juce::Graphics& g) {
 }
 
 void PlayScreen::mouseUp (const juce::MouseEvent& e) {
+    if (flyPressed_) {
+        // Tap (no scroll drag) selects the chip under the finger.
+        if (! flyMoved_) {
+            const juce::Point<int> cp { e.getPosition().x,
+                                        e.getPosition().y + (int) flyScroll_ };
+            for (size_t ci = 0; ci < flyChips_.size(); ++ci) {
+                const auto& [rr, label] = flyChips_[ci];
+                if (! rr.contains (cp)) continue;
+                auto& gp = filterGroups_[(size_t) flyChipGroup_[ci]];
+                if (gp.radio) {
+                    gp.selected.clearQuick();
+                    gp.selected.add (label);
+                } else if (gp.selected.contains (label)) {
+                    gp.selected.removeString (label);
+                } else {
+                    gp.selected.add (label);
+                }
+                layout();   // pill width tracks the active-filter count
+                repaint();
+                notifyFilters();
+                break;
+            }
+        }
+        flyPressed_ = flyMoved_ = false;
+        return;
+    }
     if (dragParam_ >= 0) { dragParam_ = -1; return; }
     const int dx = e.getPosition().x - pressPos_.x;
     const int dy = e.getPosition().y - pressPos_.y;
@@ -678,6 +735,17 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
 }
 
 void PlayScreen::mouseDrag (const juce::MouseEvent& e) {
+    if (flyPressed_) {
+        const int dy = e.getPosition().y - flyPressPos_.y;
+        if (std::abs (dy) > 8) flyMoved_ = true;
+        if (flyMoved_) {
+            flyScroll_ = juce::jlimit (0.0f,
+                (float) juce::jmax (0, flyContentH_ - flyRect_.getHeight()),
+                flyPressScroll_ - (float) dy);
+            repaint (flyRect_.expanded (2));
+        }
+        return;
+    }
     if (dragParam_ >= 0) applyParamFromX (dragParam_, e.getPosition().x);
 }
 
@@ -685,24 +753,13 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     const auto p = e.getPosition();
     pressPos_ = p;
 
-    // Filters flyout consumes taps while open.
+    // Filters flyout consumes presses while open (tap selects, drag scrolls).
     if (! flyRect_.isEmpty()) {
         if (flyRect_.contains (p)) {
-            for (const auto& [rr, label] : flyChips_)
-                if (rr.contains (p)) {
-                    if (label == "ALL")       gearSel_ = -1;
-                    else if (label == "AMPS") gearSel_ = 0;
-                    else if (label == "CABS") gearSel_ = 1;
-                    else {
-                        auto& list = availTags_.contains (label) ? selTags_ : selMakes_;
-                        if (list.contains (label)) list.removeString (label);
-                        else                       list.add (label);
-                    }
-                    layout();   // pill width tracks the active-filter count
-                    repaint();
-                    notifyFilters();
-                    return;
-                }
+            flyPressed_ = true;
+            flyMoved_ = false;
+            flyPressPos_ = p;
+            flyPressScroll_ = flyScroll_;
             return;
         }
         flyOpen_ = false;
@@ -719,7 +776,7 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
         if (! gearRects_[(size_t) i].isEmpty() && gearRects_[(size_t) i].contains (p)) {
             gearSel_ = i - 1;
             repaint();
-            notifyFilters();
+            if (onFormatChange) onFormatChange (gearSel_);
             return;
         }
     if (! filterBtnRect_.isEmpty() && filterBtnRect_.contains (p)) {
@@ -772,7 +829,7 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     if (tunerRect_.contains (p)) { if (onTuner) onTuner(); return; }
     if (dotsRect_.contains (p) && count_ <= (int) dotRects_.size())
         for (int k = 0; k < count_; ++k)
-            if (dotRects_[(size_t) k].expanded (4, 7).contains (p)) {
+            if (dotRects_[(size_t) k].expanded (2, 7).contains (p)) {
                 if (onSelectIndex) onSelectIndex (k);
                 return;
             }

@@ -209,6 +209,30 @@ std::string buildSearchUrl(const std::string& query, int page, int pageSize, boo
     return url;
 }
 
+std::string buildSearchUrl(const SearchParams& p) {
+    std::string url = std::string(kBaseUrl) + "/tones/search?";
+    if (!p.query.empty())
+        url += "query=" + urlEncode(p.query) + "&";
+    url += "page=" + std::to_string(p.page);
+    url += "&page_size=" + std::to_string(p.pageSize);
+    auto joined = [](const std::vector<std::string>& v) {
+        std::string s;
+        for (const auto& x : v) {
+            if (!s.empty()) s += "_";
+            s += x;
+        }
+        return s;
+    };
+    if (!p.sort.empty())   url += "&sort=" + urlEncode(p.sort);
+    if (!p.gears.empty())  url += "&gears=" + urlEncode(joined(p.gears));
+    if (!p.format.empty()) url += "&format=" + urlEncode(p.format);
+    if (!p.tags.empty())   url += "&tags=" + urlEncode(joined(p.tags));
+    if (!p.makes.empty())  url += "&makes=" + urlEncode(joined(p.makes));
+    if (p.architecture > 0)
+        url += "&architecture=" + std::to_string(p.architecture);
+    return url;
+}
+
 std::string buildTrendingUrl() {
     return std::string(kBaseUrl) + "/tones/trending";
 }

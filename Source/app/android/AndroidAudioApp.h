@@ -61,6 +61,8 @@ private:
     // TONE3000: connect (refresh, else browser) -> search / download+import.
     void doSearch(juce::String query,
                   std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
+    void doSearchEx(nam::SearchParams params,
+                    std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
     void doDownload(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
     void doDownloadOnly(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
     // Star toggle: in the deck -> remove from the Library; not in -> keep it.

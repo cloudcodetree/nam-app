@@ -71,6 +71,9 @@ public:
         std::function<void (std::string)> removeKept;
         // The hearted deck as browse rows (favorites filter; works offline).
         std::function<std::vector<nam::ToneInfo>()> listKept;
+        // Structured search matching TONE3000's real /tones/search params.
+        std::function<void (nam::SearchParams,
+            std::function<void (bool, std::vector<nam::ToneInfo>, juce::String)>)> searchEx;
         // Cached/fetch-on-miss artwork for a browse card ({} until fetched).
         std::function<juce::Image (nam::ToneInfo)> artworkForTone;
     };
@@ -93,7 +96,7 @@ public:
         getIrs_ = std::move (getIrs);
         loadIr_ = std::move (loadIr);
         updateCabChoices();
-        pushFilterAvailability();
+        pushFilterGroups();
     }
 
     // Audio settings service: enumerate devices/rates/buffers, apply picks.
@@ -117,6 +120,7 @@ private:
     void refreshDevices();
     void runBrowseSearch (juce::String query);
     void pushBrowseResults();                 // apply sort + sync the screen
+    void runPlayBrowse();                     // structured search from filter state
     void stopAudition();
     void refreshCachedFlags();
     void stepCollection (int delta);          // Play ‹ › through the Library
@@ -176,12 +180,13 @@ private:
     int  playDeckIndex_ = -1;
     std::vector<nam::LibraryEntry> favDeckAll() const;   // models + kept IRs
     std::vector<nam::LibraryEntry> favDeck() const;      // ... filtered
-    void pushFilterAvailability();
+    void pushFilterGroups();
     int  favGear_ = -1;                      // -1 all · 0 amps · 1 cabs
     juce::StringArray favTags_, favMakes_;
+    int  browseFormat_ = -1;                 // -1 all · 0 nam · 1 ir
+    std::vector<PlayScreen::FilterGroup> browseGroups_;
     void showFavCard (int index, bool loadIntoEngine);
     void showBrowseCard (int index);
-    void runPlayBrowse (juce::String query);
     void updateCabChoices();
     int  cabBuiltinCount_ = 0;                // names beyond this are kept IRs
     GetDevicesFn   getDevices_;

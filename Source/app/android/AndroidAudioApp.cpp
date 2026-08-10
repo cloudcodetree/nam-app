@@ -43,6 +43,10 @@ AndroidAudioApp::AndroidAudioApp() {
             std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
         doSearch(std::move(q), std::move(done));
     };
+    browse.searchEx = [this](nam::SearchParams p,
+            std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+        doSearchEx(std::move(p), std::move(done));
+    };
     browse.keep = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doToggleKeep(std::move(t), std::move(done));
     };
@@ -730,6 +734,33 @@ void AndroidAudioApp::doSearch(juce::String query,
 
     // No valid token: try a silent refresh, else the browser Connect flow
     // (loopback OAuth — the on-device browser redirects back to 127.0.0.1).
+    t3kAuth_.tryRefresh([this, run, done](bool refreshed) {
+        if (refreshed) { run(); return; }
+        t3kAuth_.beginConnectFlow([run, done](nam::Tone3000Auth::Result r) {
+            if (! r.ok) { done(false, {}, juce::String(r.error)); return; }
+            run();
+        });
+    });
+}
+
+void AndroidAudioApp::doSearchEx(nam::SearchParams params,
+        std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+    if (! t3kAuth_.isConfigured()) { done(false, {}, "not configured (.env key missing)"); return; }
+
+    auto withBackfill = [this, done](bool ok, std::vector<nam::ToneInfo> tones,
+                                     juce::String err) {
+        if (ok)
+            for (const auto& t : tones)
+                if (! libraryIdForTone(t.id).empty()) fetchArtwork(t);
+        done(ok, std::move(tones), std::move(err));
+    };
+
+    auto run = [this, params, withBackfill] {
+        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+        t3kSession_->search(params, withBackfill);
+    };
+
+    if (t3kAuth_.hasValidToken()) { run(); return; }
     t3kAuth_.tryRefresh([this, run, done](bool refreshed) {
         if (refreshed) { run(); return; }
         t3kAuth_.beginConnectFlow([run, done](nam::Tone3000Auth::Result r) {

@@ -55,6 +55,8 @@ public:
     // prior one first (its `done` is dropped, never invoked). Independent of
     // downloadToneModel(): a search and a download may be in flight at the
     // same time.
+    void search(const nam::SearchParams& params,
+                std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
     void search(const std::string& query, int page,
                 std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
 
