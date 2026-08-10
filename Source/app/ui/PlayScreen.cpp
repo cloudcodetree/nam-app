@@ -118,12 +118,12 @@ void PlayScreen::layout() {
     {
         const int w = 118, h = viewRow_.getHeight();
         const bool browse = view_ == 1;
-        const int total = w * 2 + 6 + (browse ? 96 + 10 : 0);
+        const int total = w * 2 + 6 + (browse ? h + 10 : 0);
         int x = viewRow_.getCentreX() - total / 2;
         favViewRect_    = { x + 3, viewRow_.getY() + 3, w, h - 6 };
         browseViewRect_ = { x + 3 + w, viewRow_.getY() + 3, w, h - 6 };
         x += w * 2 + 6 + 10;
-        filterBtnRect_  = browse ? juce::Rectangle<int> { x, viewRow_.getY(), 96, h }
+        filterBtnRect_  = browse ? juce::Rectangle<int> { x, viewRow_.getY(), h, h }
                                  : juce::Rectangle<int> {};
     }
 
@@ -287,13 +287,23 @@ void PlayScreen::paint (juce::Graphics& g) {
         if (! filterBtnRect_.isEmpty()) {
             const int n = selTags_.size() + selMakes_.size() + (gearSel_ == 1 ? 1 : 0);
             const bool hot = flyOpen_ || n > 0;
-            drawPill (g, filterBtnRect_.toFloat(),
-                      flyOpen_ ? col::accentA (0.12f) : juce::Colours::transparentBlack,
-                      hot ? col::accentA (0.6f) : col::inkA (0.18f));
-            text (n > 0 ? "Filters " + juce::String::fromUTF8 ("\xC2\xB7") + " " + juce::String (n)
-                        : "Filters",
-                  uiFont (11.0f, true), hot ? col::accentAlt : col::inkA (0.6f),
-                  filterBtnRect_, juce::Justification::centred);
+            g.setColour (flyOpen_ ? col::accentA (0.12f) : col::bg.withAlpha (0.4f));
+            g.fillEllipse (filterBtnRect_.toFloat());
+            g.setColour (hot ? col::accentA (0.6f) : col::inkA (0.18f));
+            g.drawEllipse (filterBtnRect_.toFloat().reduced (0.5f), 1.0f);
+            // Funnel-style filter icon: three centred bars, narrowing down.
+            g.setColour (hot ? col::accentAlt : col::inkA (0.6f));
+            const float cx = (float) filterBtnRect_.getCentreX();
+            const float cy = (float) filterBtnRect_.getCentreY();
+            const float widths[] = { 18.0f, 12.0f, 6.0f };
+            for (int i = 0; i < 3; ++i)
+                g.fillRoundedRectangle (cx - widths[i] * 0.5f, cy - 6.0f + (float) i * 5.0f,
+                                        widths[i], 2.5f, 1.25f);
+            if (n > 0) {   // active-filter badge
+                g.setColour (col::accent);
+                g.fillEllipse ((float) filterBtnRect_.getRight() - 12.0f,
+                               (float) filterBtnRect_.getY() + 2.0f, 9.0f, 9.0f);
+            }
         }
     }
 
