@@ -33,6 +33,8 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     tuner_->onBack    = [this] { if (tunerOpen_) toggleTuner(); };
     addChildComponent (tunerScrim_);
     tunerScrim_.onTap = [this] { if (tunerOpen_) toggleTuner(); };
+    addChildComponent (ioScrim_);
+    ioScrim_.onTapAt = [this] (juce::Point<int> p) { handleIoPanelTap (p); };
     devices_->onBack  = [this] { show (Screen::Play); };
     edit_->onDone    = [this] { show (Screen::Play); };
     browse_->onBack  = [this] { show (Screen::Play); };
@@ -394,6 +396,8 @@ void AppShell::toggleTuner() {
 }
 
 void AppShell::show (Screen s) {
+    closeIoPanel();
+
     // The tuner overlay belongs to Play: navigating anywhere closes it.
     if (tunerOpen_ && s != Screen::Play) {
         juce::Desktop::getInstance().getAnimator().cancelAnimation (tuner_.get(), false);
@@ -467,16 +471,25 @@ void AppShell::show (Screen s) {
 void AppShell::setLevels (float in, float out) {
     if (play_ != nullptr)    play_->setLevels (in, out);
     if (devices_ != nullptr) devices_->setLevels (in, out);
-    if (std::abs (in - meterInPeak_) > 0.005f) {
+    if (std::abs (in - meterInPeak_) > 0.005f || std::abs (out - meterOutPeak_) > 0.005f) {
         meterInPeak_ = in;
-        repaint (meterBar_);
+        meterOutPeak_ = out;
+        repaint (orbRect_.expanded (4));
     }
 }
 
 void AppShell::setLatencyMs (double ms) {
     if (std::abs (ms - latencyMs_) < 0.05) return;
     latencyMs_ = ms;
-    repaint (meterBar_);
+    repaint (orbRect_);
+}
+
+void AppShell::setIoMuted (bool inMuted, bool outMuted) {
+    if (inMuted == inMuted_ && outMuted == outMuted_) return;
+    inMuted_ = inMuted;
+    outMuted_ = outMuted;
+    repaint (orbRect_.expanded (4));
+    if (ioPanelOpen_) repaint (ioPanelRect_);
 }
 
 void AppShell::setTunerPitch (float hz) {
@@ -503,17 +516,30 @@ void AppShell::setTunerPitch (float hz) {
 
 juce::Rectangle<int> AppShell::contentBounds() const {
     auto b = getLocalBounds();
-    b.removeFromBottom (navBar_.getHeight() + meterBar_.getHeight());
+    b.removeFromBottom (navBar_.getHeight());
     return b;
 }
 
 void AppShell::resized() {
     auto b = getLocalBounds();
-    meterBar_ = b.removeFromBottom (12);   // very bottom, under the nav
-    navBar_   = b.removeFromBottom (juce::jmax (64, getHeight() / 13));
-    const int nw = navBar_.getWidth() / 5;
-    for (int i = 0; i < 5; ++i)
-        navRects_[(size_t) i] = { navBar_.getX() + i * nw, navBar_.getY(), nw, navBar_.getHeight() };
+    navBar_ = b.removeFromBottom (juce::jmax (68, getHeight() / 12));
+    // Five tabs with a centre slot for the status orb: [P][E] (orb) [T][L][S].
+    const int orbW = juce::jmin (76, navBar_.getWidth() / 6);
+    const int nw = (navBar_.getWidth() - orbW) / 5;
+    for (int i = 0; i < 5; ++i) {
+        const int x = navBar_.getX() + i * nw + (i >= 2 ? orbW : 0);
+        navRects_[(size_t) i] = { x, navBar_.getY(), nw, navBar_.getHeight() };
+    }
+    const int orbD = juce::jmin (orbW - 8, navBar_.getHeight() - 8);
+    orbRect_ = { navBar_.getX() + 2 * nw + (orbW - orbD) / 2,
+                 navBar_.getCentreY() - orbD / 2, orbD, orbD };
+
+    // I/O mute panel floats above the nav, centred on the orb.
+    const int pw = juce::jmin (380, getWidth() - 48);
+    ioPanelRect_ = { getWidth() / 2 - pw / 2, navBar_.getY() - 128 - 10, pw, 128 };
+    auto rows = ioPanelRect_.reduced (14, 12);
+    ioInRow_  = rows.removeFromTop (52);
+    ioOutRow_ = rows.removeFromBottom (52);
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) browse_.get(), (juce::Component*) library_.get(),
@@ -533,49 +559,7 @@ void AppShell::resized() {
 void AppShell::paint (juce::Graphics& g) {
     // Global bottom chrome only — screens paint everything above it.
     g.setColour (nam::ui::col::bg);
-    g.fillRect (meterBar_.getUnion (navBar_));
-
-    // Slim input meter (dB-scaled -60..0): grows symmetrically outward from
-    // the centre. The latency readout sits centred ON the strip and masks
-    // the bar (the fill is clipped out under the digits).
-    {
-        const juce::String latText = latencyMs_ > 0.0
-            ? juce::String (latencyMs_, 1) + " ms" : juce::String();
-        const auto latFont = nam::ui::uiFont (9.0f, true);
-        const int tw = latText.isNotEmpty()
-            ? (int) std::ceil (juce::GlyphArrangement::getStringWidth (latFont, latText)) : 0;
-        const auto latRect = meterBar_.withSizeKeepingCentre (tw + 16, meterBar_.getHeight());
-
-        auto bar = meterBar_.reduced (20, 4).toFloat();
-        g.saveState();
-        if (tw > 0) g.excludeClipRegion (latRect);
-        g.setColour (nam::ui::col::inkA (0.08f));
-        g.fillRoundedRectangle (bar, 2.0f);
-        const float db = meterInPeak_ > 0.001f ? 20.0f * std::log10 (meterInPeak_) : -60.0f;
-        const float frac = juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f);
-        if (frac > 0.0f) {
-            const float w = juce::jmax (3.0f, bar.getWidth() * frac);
-            auto fill = bar.withSizeKeepingCentre (w, bar.getHeight());
-            juce::ColourGradient mg (nam::ui::col::meterLime, fill.getX(), 0,
-                                     nam::ui::col::meterLime, fill.getRight(), 0, false);
-            mg.addColour (0.5, nam::ui::col::meterGreen);
-            g.setGradientFill (mg);
-            juce::Path p; p.addRoundedRectangle (fill, 2.0f);
-            g.fillPath (p);
-        }
-        g.restoreState();
-
-        if (tw > 0) {
-            g.setFont (latFont);
-            // Green when tight, shifting continuously to red as round-trip
-            // latency degrades (fully red by ~50 ms — clearly unplayable).
-            const float bad = juce::jlimit (0.0f, 1.0f,
-                                            ((float) latencyMs_ - 20.0f) / 30.0f);
-            g.setColour (nam::ui::col::meterLime.interpolatedWith (
-                             juce::Colour (0xffff3b30), bad));
-            g.drawText (latText, latRect, juce::Justification::centred, false);
-        }
-    }
+    g.fillRect (navBar_);
 
     // Persistent nav
     static const char* labels[] = { "PLAY", "EDIT", "TONES", "LIVE", "SETUP" };
@@ -593,10 +577,146 @@ void AppShell::paint (juce::Graphics& g) {
         g.setFont (nam::ui::uiFontTracked (10.0f, true));
         g.drawText (labels[i], cell, juce::Justification::centredTop, false);
     }
+
+    // Status orb: input level = left arc, output level = right arc, both
+    // filling upward from 6 o'clock. Centre shows the round-trip latency
+    // (green -> red as it degrades). A muted side's track turns red.
+    {
+        const auto ob = orbRect_.toFloat().reduced (3.0f);
+        const auto cx = ob.getCentreX(), cy = ob.getCentreY();
+        const float r = ob.getWidth() * 0.5f;
+        constexpr float pi = juce::MathConstants<float>::pi;
+
+        auto levelFrac = [] (float peak) {
+            const float db = peak > 0.001f ? 20.0f * std::log10 (peak) : -60.0f;
+            return juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f);
+        };
+        auto arc = [&] (float fromRad, float toRad, juce::Colour c, float thickness) {
+            juce::Path p;
+            p.addCentredArc (cx, cy, r, r, 0.0f, fromRad, toRad, true);
+            g.setColour (c);
+            g.strokePath (p, juce::PathStrokeType (thickness,
+                              juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        };
+
+        // Tracks (6 o'clock up each side). Red = that side is muted.
+        arc (pi, 2.0f * pi, inMuted_ ? juce::Colour (0x55ff3b30) : nam::ui::col::inkA (0.10f), 3.0f);
+        arc (pi, 0.0f,      outMuted_ ? juce::Colour (0x55ff3b30) : nam::ui::col::inkA (0.10f), 3.0f);
+
+        // Levels.
+        if (! inMuted_) {
+            const float f = levelFrac (meterInPeak_);
+            if (f > 0.01f)
+                arc (pi, pi + f * pi, nam::ui::col::meterLime, 3.5f);
+        }
+        if (! outMuted_) {
+            const float f = levelFrac (meterOutPeak_);
+            if (f > 0.01f)
+                arc (pi, pi - f * pi, nam::ui::col::meterGreen, 3.5f);
+        }
+
+        // Centre: latency, or MUTE when the output is silenced.
+        const float bad = juce::jlimit (0.0f, 1.0f, ((float) latencyMs_ - 20.0f) / 30.0f);
+        g.setFont (nam::ui::uiFont (outMuted_ ? 9.0f : 10.0f, true));
+        g.setColour (outMuted_ ? juce::Colour (0xffff3b30)
+                               : nam::ui::col::meterLime.interpolatedWith (
+                                     juce::Colour (0xffff3b30), bad));
+        g.drawText (outMuted_ ? juce::String ("MUTE")
+                              : latencyMs_ > 0.0 ? juce::String ((int) std::round (latencyMs_))
+                                                 : juce::String ("--"),
+                    orbRect_, juce::Justification::centred, false);
+    }
+
+}
+
+void AppShell::paintOverChildren (juce::Graphics& g) {
+    // I/O mute panel (over the current screen, anchored to the orb).
+    if (ioPanelOpen_) {
+        g.setColour (nam::ui::col::bg);
+        g.fillRoundedRectangle (ioPanelRect_.toFloat(), 14.0f);
+        g.setColour (nam::ui::col::inkA (0.03f));
+        g.fillRoundedRectangle (ioPanelRect_.toFloat(), 14.0f);
+        g.setColour (nam::ui::col::inkA (0.16f));
+        g.drawRoundedRectangle (ioPanelRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
+
+        auto shortName = [] (juce::String n) {
+            return n.replace ("USB-Audio - ", "").replace (" USB headset", "")
+                    .replace ("System Default (Input)", "System Default")
+                    .replace ("System Default (Output)", "System Default").trim();
+        };
+        juce::String inName ("--"), outName ("--");
+        if (getDevices_) {
+            const auto st = getDevices_();
+            inName = shortName (st.currentInput);
+            outName = shortName (st.currentOutput);
+        }
+
+        auto row = [&] (juce::Rectangle<int> rr, const juce::String& label,
+                        const juce::String& device, bool muted) {
+            g.setColour (nam::ui::col::inkA (muted ? 0.02f : 0.04f));
+            g.fillRoundedRectangle (rr.toFloat(), 10.0f);
+            auto inner = rr.reduced (14, 6);
+            auto toggle = inner.removeFromRight (74);
+            g.setFont (nam::ui::uiFontTracked (10.0f, true));
+            g.setColour (nam::ui::col::inkA (0.45f));
+            g.drawText (label, inner.removeFromTop (inner.getHeight() / 2),
+                        juce::Justification::bottomLeft, false);
+            g.setFont (nam::ui::uiFont (13.0f, true));
+            g.setColour (muted ? nam::ui::col::inkA (0.4f) : nam::ui::col::ink);
+            g.drawText (device, inner, juce::Justification::topLeft, false);
+            nam::ui::drawPill (g, toggle.toFloat(),
+                               muted ? juce::Colour (0x33ff3b30) : nam::ui::col::accentA (0.10f),
+                               muted ? juce::Colour (0xaaff3b30) : nam::ui::col::accentA (0.55f));
+            g.setFont (nam::ui::uiFontTracked (10.0f, true));
+            g.setColour (muted ? juce::Colour (0xffff3b30) : nam::ui::col::accentAlt);
+            g.drawText (muted ? "MUTED" : "LIVE", toggle, juce::Justification::centred, false);
+        };
+        row (ioInRow_,  "INPUT",  inName,  inMuted_);
+        row (ioOutRow_, "OUTPUT", outName, outMuted_);
+    }
+}
+
+void AppShell::closeIoPanel() {
+    if (! ioPanelOpen_) return;
+    ioPanelOpen_ = false;
+    ioScrim_.setVisible (false);
+    repaint();
+}
+
+void AppShell::handleIoPanelTap (juce::Point<int> p) {
+    // Row taps toggle their side; anything else closes the panel.
+    if (ioInRow_.contains (p)) {
+        inMuted_ = ! inMuted_;
+        if (muteInput_) muteInput_ (inMuted_);
+        repaint (ioPanelRect_); repaint (orbRect_.expanded (4));
+        return;
+    }
+    if (ioOutRow_.contains (p)) {
+        outMuted_ = ! outMuted_;
+        if (muteOutput_) muteOutput_ (outMuted_);
+        repaint (ioPanelRect_); repaint (orbRect_.expanded (4));
+        return;
+    }
+    closeIoPanel();
 }
 
 void AppShell::mouseDown (const juce::MouseEvent& e) {
     const auto p = e.getPosition();
+
+    if (ioPanelOpen_) {   // taps on the nav while the panel is up just close it
+        closeIoPanel();
+        return;
+    }
+
+    if (orbRect_.expanded (6).contains (p)) {
+        ioPanelOpen_ = true;
+        ioScrim_.setBounds (contentBounds());
+        ioScrim_.setVisible (true);
+        ioScrim_.toFront (false);
+        repaint();
+        return;
+    }
+
     for (int i = 0; i < 5; ++i)
         if (navRects_[(size_t) i].contains (p)) {
             switch (i) {
@@ -608,5 +728,4 @@ void AppShell::mouseDown (const juce::MouseEvent& e) {
             }
             return;
         }
-    if (meterBar_.contains (p)) show (Screen::Devices);
 }

@@ -116,6 +116,9 @@ AndroidAudioApp::AndroidAudioApp() {
     shell_->setLibraryService(
         [this] { return library_.all(nam::LibraryType::Model); },
         [this](nam::LibraryEntry e) { loadModelEntry(e); });
+    shell_->setMuteService(
+        [this](bool m) { inputMutedUser_.store(m, std::memory_order_relaxed); },
+        [this](bool m) { outputMutedUser_.store(m, std::memory_order_relaxed); });
     shell_->setArtworkService([](const nam::LibraryEntry& e) {
         const auto id = toneIdFromEntry(e);
         return id.empty() ? juce::Image()
@@ -298,9 +301,9 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         demoPos_.store(pos, std::memory_order_relaxed);
         bypassEngine = true;   // slot is already model-processed
     } else if (liveMuted_.load(std::memory_order_relaxed)
-               || feedbackGuard_.load(std::memory_order_relaxed)) {
-        // No demo playing and live input muted (emulator / no-interface
-        // feedback guard): true silence.
+               || inputMutedUser_.load(std::memory_order_relaxed)) {
+        // No demo playing and live input muted (emulator or the status-orb
+        // input toggle): true silence.
         // Also bypass the engine — amp models synthesise their own noise
         // floor (hiss/hum) even on silent input, and inference costs CPU.
         for (int i = 0; i < n && i < cap; ++i) mono_[(size_t) i] = 0.0f;
@@ -317,18 +320,29 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     if (! bypassEngine)
         engine_.render(mono_.data(), mono_.data(), std::min(n, cap));
 
+    // Output mute: the user toggle (status orb) or the feedback guard (no
+    // interface -> mic through amp into speaker howls). Muting OUTPUT keeps
+    // the input meter/tuner alive so signal is still visible.
+    const bool outMuted = outputMutedUser_.load(std::memory_order_relaxed)
+                       || feedbackGuard_.load(std::memory_order_relaxed);
     for (int ch = 0; ch < buf->getNumChannels(); ++ch) {
         float* out = buf->getWritePointer(ch, info.startSample);
-        for (int i = 0; i < n && i < cap; ++i) out[i] = mono_[(size_t) i];
+        for (int i = 0; i < n && i < cap; ++i)
+            out[i] = outMuted ? 0.0f : mono_[(size_t) i];
     }
 }
 
 void AndroidAudioApp::releaseResources() {}
 
 void AndroidAudioApp::timerCallback() {
-    if (shell_ != nullptr)
+    if (shell_ != nullptr) {
         shell_->setLevels(inPeak_.load(std::memory_order_relaxed),
                           engine_.outputPeak());
+        // Orb reflects the effective mute state (guard counts as out-muted).
+        shell_->setIoMuted(inputMutedUser_.load(std::memory_order_relaxed),
+                           outputMutedUser_.load(std::memory_order_relaxed)
+                               || feedbackGuard_.load(std::memory_order_relaxed));
+    }
 
     // Tuner analysis at ~10 Hz: copy the latest window out of the ring and
     // run pitch detection on the message thread. Piggyback the latency

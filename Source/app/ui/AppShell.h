@@ -25,6 +25,14 @@ public:
     void setLevels (float in, float out);     // Play + Audio settings meters
     void setTunerPitch (float hz);            // 0 = no pitch detected
     void setLatencyMs (double ms);            // round-trip; shown in the chrome
+    void setIoMuted (bool inMuted, bool outMuted);   // reflected on the status orb
+
+    // Status orb mute toggles -> host (true = mute that side).
+    using MuteFn = std::function<void (bool)>;
+    void setMuteService (MuteFn muteInput, MuteFn muteOutput) {
+        muteInput_ = std::move (muteInput);
+        muteOutput_ = std::move (muteOutput);
+    }
     void showEntryAsNowPlaying (const nam::LibraryEntry& e);   // reflect a loaded tone
     void setNowPlayingInfo (juce::String name, juce::String family);   // non-library tone
 
@@ -87,6 +95,7 @@ public:
 
     void resized() override;
     void paint (juce::Graphics&) override;
+    void paintOverChildren (juce::Graphics&) override;   // I/O mute panel
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
@@ -113,9 +122,16 @@ private:
     // collapses it (nav taps stay live — the scrim covers content only).
     struct ClickAway : juce::Component {
         std::function<void()> onTap;
-        void mouseDown (const juce::MouseEvent&) override { if (onTap) onTap(); }
+        std::function<void (juce::Point<int>)> onTapAt;   // parent coords
+        void mouseDown (const juce::MouseEvent& e) override {
+            if (onTapAt && getParentComponent() != nullptr)
+                onTapAt (e.getEventRelativeTo (getParentComponent()).getPosition());
+            if (onTap) onTap();
+        }
     };
-    ClickAway tunerScrim_;
+    ClickAway tunerScrim_, ioScrim_;
+    void closeIoPanel();
+    void handleIoPanelTap (juce::Point<int> p);
     bool tunerOpen_ = false;
     int  tunerMiss_ = 0;                      // consecutive no-pitch feeds (panel hold)
     juce::Component* current_ = nullptr;
@@ -126,11 +142,17 @@ private:
     bool browseLoadedOnce_ = false;
     int  collectionIndex_ = -1;               // Play screen position in the Library
 
-    // Global bottom chrome: slim input meter strip + persistent nav bar.
-    juce::Rectangle<int> navBar_, meterBar_;
+    // Global bottom chrome: persistent nav bar with a central status orb —
+    // circular meter (input arc left / output arc right), latency readout in
+    // the centre, tap opens the I/O mute panel.
+    juce::Rectangle<int> navBar_, orbRect_;
+    juce::Rectangle<int> ioPanelRect_, ioInRow_, ioOutRow_;
+    bool  ioPanelOpen_ = false;
     std::array<juce::Rectangle<int>, 5> navRects_;
     int   activeTab_ = 0;   // 0 Play · 1 Edit · 2 Tones · 3 Live · 4 Setup (-1 none)
-    float meterInPeak_ = 0.0f;
+    float meterInPeak_ = 0.0f, meterOutPeak_ = 0.0f;
+    bool  inMuted_ = false, outMuted_ = false;
+    MuteFn muteInput_, muteOutput_;
     double latencyMs_ = 0.0;
     GetModelsFn getModels_;
     LoadModelFn loadModel_;
