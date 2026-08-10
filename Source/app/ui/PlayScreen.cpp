@@ -325,10 +325,11 @@ void PlayScreen::layout() {
             for (int i = 0; i < kNumToneParams; ++i)
                 paramRows_[(size_t) i] = rows.removeFromTop (rowH).reduced (0, 6);
         }
-        pairRowRect_ = bottom.removeFromTop (46).reduced (0, 4);
+        // Demo audio first, pairing beneath it.
         auto demo = bottom.removeFromTop (46).reduced (0, 4);
         demoPlayRect_ = demo.removeFromRight (44);
         demoRowRect_ = demo.withTrimmedRight (8);
+        pairRowRect_ = bottom.removeFromTop (46).reduced (0, 4);
     }
 }
 
