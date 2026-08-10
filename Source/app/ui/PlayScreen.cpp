@@ -112,33 +112,52 @@ void PlayScreen::layout() {
     gearRect_    = { topBar_.getRight() - 58,  topBar_.getCentreY() - 21, 42, 42 };
     liveTopRect_ = editTopRect_ = {};   // gear only (Hi-Fi design)
 
-    // Filters strip above the card (browse view only, per the design).
+    // Filters strip above the card (browse view only, per the design). The
+    // pill hugs its icon + label (count included when filters are active).
     if (view_ == 1) {
         auto fs = hero_.removeFromTop (46);
-        filterBtnRect_ = { fs.getCentreX() - 62, fs.getY() + 3, 124, 38 };
+        const int n = selTags_.size() + selMakes_.size() + (gearSel_ == 1 ? 1 : 0);
+        const juce::String label = n > 0
+            ? "Filters " + juce::String::fromUTF8 ("\xC2\xB7") + " " + juce::String (n)
+            : juce::String ("Filters");
+        const int tw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
+                           uiFont (12.0f, true), label));
+        const int w = 14 + 16 + 10 + tw + 16;   // pad · icon · gap · label · pad
+        filterBtnRect_ = { fs.getCentreX() - w / 2, fs.getY() + 3, w, 38 };
     } else {
         filterBtnRect_ = {};
     }
 
-    // Filters flyout (browse view): chips anchored under the filter button.
+    // Filters flyout (browse view): chips anchored under the filter button,
+    // grouped under labelled sections with separators between them.
     flyChips_.clear();
+    flyLabels_.clear();
     if (flyOpen_ && view_ == 1) {
         const int anchorY = filterBtnRect_.getBottom();
         const int chipH = 30, gap = 6;
-        int x = hero_.getX() + 34, y = anchorY + 14;
-        auto place = [&] (const juce::String& label) {
-            const int w = juce::jmax (56, label.length() * 8 + 24);
-            if (x + w > getWidth() - 34) { x = hero_.getX() + 34; y += chipH + gap; }
-            flyChips_.push_back ({ { x, y, w, chipH }, label });
+        const int x0 = hero_.getX() + 34;
+        int x = x0, y = anchorY + 12;
+        auto label = [&] (const char* name) {
+            flyLabels_.push_back ({ { x0, y, hero_.getWidth() - 68, 14 }, name });
+            y += 20;
+            x = x0;
+        };
+        auto place = [&] (const juce::String& chip) {
+            const int w = juce::jmax (56, chip.length() * 8 + 24);
+            if (x + w > getWidth() - 34) { x = x0; y += chipH + gap; }
+            flyChips_.push_back ({ { x, y, w, chipH }, chip });
             x += w + gap;
         };
+        label ("GEAR TYPE");
         place ("AMPS"); place ("CABS");
-        x = hero_.getX() + 34; y += chipH + gap + 6;
+        y += chipH + 14;
+        label ("TAGS");
         for (const char* t : kTagChips)  place (t);
-        x = hero_.getX() + 34; y += chipH + gap + 6;
+        y += chipH + 14;
+        label ("MAKES & MODELS");
         for (const char* m : kMakeChips) place (m);
         flyRect_ = { hero_.getX() + 24, anchorY + 6,
-                     hero_.getWidth() - 48, (y + chipH + 12) - (anchorY + 6) };
+                     hero_.getWidth() - 48, (y + chipH + 14) - (anchorY + 6) };
     } else {
         flyRect_ = {};
     }
@@ -295,7 +314,7 @@ void PlayScreen::paint (juce::Graphics& g) {
                       hot ? col::accentA (0.6f) : col::inkA (0.18f));
             // Funnel icon (three narrowing bars) + label.
             g.setColour (hot ? col::accentAlt : col::inkA (0.6f));
-            const float cx = (float) filterBtnRect_.getX() + 26.0f;
+            const float cx = (float) filterBtnRect_.getX() + 22.0f;
             const float cy = (float) filterBtnRect_.getCentreY();
             const float widths[] = { 16.0f, 11.0f, 6.0f };
             for (int i = 0; i < 3; ++i)
@@ -304,7 +323,7 @@ void PlayScreen::paint (juce::Graphics& g) {
             text (n > 0 ? "Filters " + juce::String::fromUTF8 ("\xC2\xB7") + " " + juce::String (n)
                         : "Filters",
                   uiFont (12.0f, true), hot ? col::accentAlt : col::inkA (0.7f),
-                  filterBtnRect_.withTrimmedLeft (42), juce::Justification::centredLeft);
+                  filterBtnRect_.withTrimmedLeft (40), juce::Justification::centredLeft);
         }
     }
 
@@ -457,6 +476,15 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.fillRoundedRectangle (flyRect_.toFloat(), 14.0f);
         g.setColour (col::inkA (0.18f));
         g.drawRoundedRectangle (flyRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
+        for (size_t li = 0; li < flyLabels_.size(); ++li) {
+            const auto& [rr, name] = flyLabels_[li];
+            if (li > 0) {   // separator hairline above each later group
+                g.setColour (col::inkA (0.10f));
+                g.fillRect (rr.getX() - 6, rr.getY() - 9, rr.getWidth() + 12, 1);
+            }
+            text (name, uiFontTracked (9.0f, true), col::inkA (0.4f),
+                  rr, juce::Justification::centredLeft);
+        }
         for (const auto& [rr, label] : flyChips_) {
             const bool isGear = (label == "AMPS" || label == "CABS");
             const bool on = isGear ? ((label == "CABS") == (gearSel_ == 1))
@@ -620,6 +648,7 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
                         if (list.contains (label)) list.removeString (label);
                         else                       list.add (label);
                     }
+                    layout();   // pill width tracks the active-filter count
                     repaint();
                     composeBrowseQuery();
                     return;

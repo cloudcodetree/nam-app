@@ -103,6 +103,7 @@ private:
                          flyRect_,       // filters flyout panel
                          pairRowRect_, demoRowRect_, demoPlayRect_;
     std::vector<std::pair<juce::Rectangle<int>, juce::String>> flyChips_;
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> flyLabels_;   // group headers
     std::array<juce::Rectangle<int>, 12> dotRects_;   // pagination hits (capped)
 
     void layout();
