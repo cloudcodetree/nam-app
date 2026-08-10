@@ -297,8 +297,10 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         }
         demoPos_.store(pos, std::memory_order_relaxed);
         bypassEngine = true;   // slot is already model-processed
-    } else if (liveMuted_.load(std::memory_order_relaxed)) {
-        // No demo playing and live input muted (emulator): true silence.
+    } else if (liveMuted_.load(std::memory_order_relaxed)
+               || feedbackGuard_.load(std::memory_order_relaxed)) {
+        // No demo playing and live input muted (emulator / no-interface
+        // feedback guard): true silence.
         // Also bypass the engine — amp models synthesise their own noise
         // floor (hiss/hum) even on silent input, and inference costs CPU.
         for (int i = 0; i < n && i < cap; ++i) mono_[(size_t) i] = 0.0f;
@@ -431,6 +433,7 @@ juce::String AndroidAudioApp::applyDeviceSetup(juce::AudioDeviceManager::AudioDe
 
 void AndroidAudioApp::selectInputDevice(const juce::String& name) {
     userChoseInput_ = true;   // manual pick wins over USB auto-select
+    updateFeedbackGuard();
     auto setup = deviceManager.getAudioDeviceSetup();
     if (setup.inputDeviceName == name) return;
     setup.inputDeviceName = name;
@@ -443,6 +446,7 @@ void AndroidAudioApp::selectInputDevice(const juce::String& name) {
 
 void AndroidAudioApp::selectOutputDevice(const juce::String& name) {
     userChoseOutput_ = true;   // manual pick wins over USB auto-claim
+    updateFeedbackGuard();
     auto setup = deviceManager.getAudioDeviceSetup();
     if (setup.outputDeviceName == name) return;
     setup.outputDeviceName = name;
@@ -472,6 +476,25 @@ void AndroidAudioApp::rescanAudioDevices() {
                              + " out=" + currentOutputDevice());
 }
 
+void AndroidAudioApp::updateFeedbackGuard() {
+    // Danger = live guitar path running phone mic -> speaker. True whenever
+    // no USB interface is available and the user hasn't deliberately picked
+    // devices (a manual pick means they know their monitoring chain).
+    bool usbPresent = false;
+    if (auto* type = deviceManager.getCurrentDeviceTypeObject())
+        for (const auto& n : type->getDeviceNames(true))
+            if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) {
+                usbPresent = true;
+                break;
+            }
+    const bool guard = ! usbPresent && ! userChoseInput_ && ! userChoseOutput_
+                       && ! alwaysMuteLive_;   // emulator has its own mute
+    if (feedbackGuard_.exchange(guard, std::memory_order_relaxed) != guard)
+        juce::Logger::writeToLog(juce::String("feedback guard ")
+                                 + (guard ? "ON (no interface: live path muted)"
+                                          : "off (interface present or manual pick)"));
+}
+
 void AndroidAudioApp::preferUsbInput() {
     auto* type = deviceManager.getCurrentDeviceTypeObject();
     if (type == nullptr) return;
@@ -482,6 +505,7 @@ void AndroidAudioApp::preferUsbInput() {
         if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbIn = n; break; }
     for (const auto& n : type->getDeviceNames(false))
         if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbOut = n; break; }
+    updateFeedbackGuard();   // every path that (re)checks devices refreshes it
     if (usbIn.isEmpty() && usbOut.isEmpty()) return;
 
     // Claim BOTH sides of the guitar interface explicitly. "System Default"

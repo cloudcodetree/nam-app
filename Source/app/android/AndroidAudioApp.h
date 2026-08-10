@@ -162,6 +162,11 @@ private:
     std::atomic<bool>   demoOn_ { false };
     std::atomic<bool>   liveMuted_ { false };
     bool alwaysMuteLive_ = false;   // emulator: synthetic mic, never unmute
+    // Feedback guard: with no USB interface the live path is phone mic ->
+    // amp sim -> speaker = howl. Muted automatically; manual device picks
+    // in SETUP override (mic jamming into headphones is legitimate).
+    std::atomic<bool> feedbackGuard_ { false };
+    void updateFeedbackGuard();
 
     // Tuner: the audio thread mirrors the RAW live input into a ring; the
     // UI timer analyzes the latest window (guitar only — demos don't tune).
