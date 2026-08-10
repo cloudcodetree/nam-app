@@ -9,6 +9,11 @@ namespace {
 const juce::String kEllipsis = juce::String::fromUTF8 ("\xE2\x80\xA6"); // …
 const juce::String kHeart    = juce::String::fromUTF8 ("\xE2\x99\xA5"); // ♥
 const juce::String kDotSep   = juce::String::fromUTF8 ("\xC2\xB7");     // ·
+
+// Filter chip vocabulary. Browse offers all of it; favorites offers only
+// what the kept deck actually contains (matched against display names).
+const char* kTagVocab[]  = { "clean", "blues", "vintage", "metal", "high gain" };
+const char* kMakeVocab[] = { "Marshall", "Fender", "Vox", "Mesa", "Orange", "EVH" };
 }
 
 AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
@@ -43,17 +48,36 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         if (browse == browseView_) return;
         browseView_ = browse;
         play_->setDeckView (v);
+        favGear_ = -1;
+        favTags_.clear();
+        favMakes_.clear();
+        pushFilterAvailability();
         if (svc_.stopDemo) svc_.stopDemo();
         play_->setDemoPlaying (false);
         if (browse) {
-            if (playDeck_.empty()) runPlayBrowse ({});
+            if (playDeck_.empty()) runPlayBrowse ("#all");
             else showBrowseCard (playDeckIndex_ < 0 ? 0 : playDeckIndex_);
         } else {
             showFavCard (collectionIndex_ < 0 ? 0 : collectionIndex_, false);
         }
     };
 
-    play_->onBrowseQuery = [this] (juce::String q) { runPlayBrowse (std::move (q)); };
+    play_->onFiltersChanged = [this] (int gear, juce::StringArray tags,
+                                      juce::StringArray makes) {
+        if (browseView_) {
+            juce::String q;
+            if (gear == -1)     q << "#all ";
+            else if (gear == 1) q << "#ir ";
+            for (const auto& t : tags)  q << t << " ";
+            for (const auto& m : makes) q << m << " ";
+            runPlayBrowse (q.trim());
+        } else {
+            favGear_ = gear;
+            favTags_ = std::move (tags);
+            favMakes_ = std::move (makes);
+            showFavCard (0, false);
+        }
+    };
 
     play_->onKeepToggle = [this] {
         if (browseView_) {
@@ -73,6 +97,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
                 return;
             svc_.removeKept (deck[(size_t) collectionIndex_].id);
             updateCabChoices();
+            pushFilterAvailability();
             showFavCard (collectionIndex_, true);   // next card slides into the slot
         }
     };
@@ -105,12 +130,13 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
             if (collectionIndex_ < 0 || collectionIndex_ >= (int) deck.size()) return;
             const auto& e = deck[(size_t) collectionIndex_];
             if (e.type == nam::LibraryType::Ir) { if (loadIr_) loadIr_ (e); return; }
-            int mi = 0;   // model position -> listKept index (same addedAt order)
-            for (int k = 0; k < collectionIndex_; ++k)
-                if (deck[(size_t) k].type == nam::LibraryType::Model) ++mi;
+            // Find the kept-tone info for this entry by display name (deck
+            // may be filtered, so index mapping is unreliable).
             const auto kept = svc_.listKept ? svc_.listKept() : std::vector<nam::ToneInfo>{};
-            if (mi >= (int) kept.size()) return;
-            tone = kept[(size_t) mi];
+            bool found = false;
+            for (const auto& k : kept)
+                if (k.title == e.displayName) { tone = k; found = true; break; }
+            if (! found) return;
         }
         if (! svc_.audition) return;
         svc_.audition (tone, [this] (bool ok, juce::String) {
@@ -336,7 +362,7 @@ void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) 
     };
 }
 
-std::vector<nam::LibraryEntry> AppShell::favDeck() const {
+std::vector<nam::LibraryEntry> AppShell::favDeckAll() const {
     // Combined favorites deck: models + kept IRs, in the order they were
     // hearted (stable sort keeps store order for ties).
     std::vector<nam::LibraryEntry> deck;
@@ -345,6 +371,51 @@ std::vector<nam::LibraryEntry> AppShell::favDeck() const {
     std::stable_sort (deck.begin(), deck.end(),
                       [] (const auto& a, const auto& b) { return a.addedAt < b.addedAt; });
     return deck;
+}
+
+std::vector<nam::LibraryEntry> AppShell::favDeck() const {
+    // Apply the favorites filters: gear by entry type; tags/makes by
+    // display-name match (OR within a group, AND across groups).
+    auto deck = favDeckAll();
+    auto matches = [this] (const nam::LibraryEntry& e) {
+        if (favGear_ == 0 && e.type != nam::LibraryType::Model) return false;
+        if (favGear_ == 1 && e.type != nam::LibraryType::Ir) return false;
+        const auto name = juce::String (e.displayName).toLowerCase();
+        auto anyHit = [&name] (const juce::StringArray& terms) {
+            for (const auto& t : terms)
+                if (name.contains (t.toLowerCase())) return true;
+            return false;
+        };
+        if (! favTags_.isEmpty() && ! anyHit (favTags_)) return false;
+        if (! favMakes_.isEmpty() && ! anyHit (favMakes_)) return false;
+        return true;
+    };
+    deck.erase (std::remove_if (deck.begin(), deck.end(),
+                                [&] (const auto& e) { return ! matches (e); }),
+                deck.end());
+    return deck;
+}
+
+void AppShell::pushFilterAvailability() {
+    if (browseView_) {
+        play_->setAvailableFilters (true, true,
+                                    juce::StringArray (kTagVocab, 5),
+                                    juce::StringArray (kMakeVocab, 6));
+        return;
+    }
+    // Favorites: only offer chips the deck can actually satisfy.
+    const auto deck = favDeckAll();
+    bool amps = false, cabs = false;
+    juce::StringArray tags, makes;
+    for (const char* t : kTagVocab)
+        for (const auto& e : deck)
+            if (juce::String (e.displayName).containsIgnoreCase (t)) { tags.add (t); break; }
+    for (const char* m : kMakeVocab)
+        for (const auto& e : deck)
+            if (juce::String (e.displayName).containsIgnoreCase (m)) { makes.add (m); break; }
+    for (const auto& e : deck)
+        (e.type == nam::LibraryType::Ir ? cabs : amps) = true;
+    play_->setAvailableFilters (amps, cabs, std::move (tags), std::move (makes));
 }
 
 void AppShell::showFavCard (int index, bool loadIntoEngine) {
@@ -404,8 +475,13 @@ void AppShell::showBrowseCard (int index) {
 
 void AppShell::runPlayBrowse (juce::String q) {
     if (! svc_.search) return;
-    svc_.search (q, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
+    const bool irOnly = q.startsWith ("#ir");
+    svc_.search (q, [this, irOnly] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
         if (! ok) return;
+        if (irOnly)   // "#ir" widens the search to everything; scope to cabs
+            tones.erase (std::remove_if (tones.begin(), tones.end(),
+                                         [] (const auto& t) { return t.format != "ir"; }),
+                         tones.end());
         playDeck_ = std::move (tones);
         playDeckIndex_ = playDeck_.empty() ? -1 : 0;
         if (browseView_) showBrowseCard (0);

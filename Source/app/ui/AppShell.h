@@ -93,6 +93,7 @@ public:
         getIrs_ = std::move (getIrs);
         loadIr_ = std::move (loadIr);
         updateCabChoices();
+        pushFilterAvailability();
     }
 
     // Audio settings service: enumerate devices/rates/buffers, apply picks.
@@ -173,7 +174,11 @@ private:
     bool browseView_ = false;
     std::vector<nam::ToneInfo> playDeck_;     // browse view items
     int  playDeckIndex_ = -1;
-    std::vector<nam::LibraryEntry> favDeck() const;   // models + kept IRs
+    std::vector<nam::LibraryEntry> favDeckAll() const;   // models + kept IRs
+    std::vector<nam::LibraryEntry> favDeck() const;      // ... filtered
+    void pushFilterAvailability();
+    int  favGear_ = -1;                      // -1 all · 0 amps · 1 cabs
+    juce::StringArray favTags_, favMakes_;
     void showFavCard (int index, bool loadIntoEngine);
     void showBrowseCard (int index);
     void runPlayBrowse (juce::String query);

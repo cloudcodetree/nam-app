@@ -332,13 +332,17 @@ private:
             return false;
         }
 
-        // "#ir " prefix (from the Play filters' Gear Type = Cabs) widens the
-        // search to include IR packs; everything else stays nam-only.
+        // "#ir "/"#all " prefixes (from the Play filters' Gear Type) widen
+        // the search beyond nam-only; the caller scopes "#ir" client-side.
         std::string q = query_;
         bool namOnly = true;
-        if (q.rfind("#ir", 0) == 0) {
-            namOnly = false;
-            q = q.size() > 4 ? q.substr(4) : std::string();
+        for (const char* prefix : { "#ir", "#all" }) {
+            const size_t plen = std::string(prefix).size();
+            if (q.rfind(prefix, 0) == 0) {
+                namOnly = false;
+                q = q.size() > plen + 1 ? q.substr(plen + 1) : std::string();
+                break;
+            }
         }
         const juce::URL searchUrl{
             juce::String(nam::buildSearchUrl(q, page_, /*pageSize*/ 25, namOnly))};

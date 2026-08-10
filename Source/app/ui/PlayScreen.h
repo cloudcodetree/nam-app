@@ -40,7 +40,12 @@ public:
     std::function<void()>     onTuner;          // tuner panel -> strobe tuner
     std::function<void (int)> onViewChange;     // 0 favorites · 1 browse
     std::function<void()>     onKeepToggle;     // heart tap / swipe-down keep
-    std::function<void (juce::String)> onBrowseQuery;   // composed filter query
+    // Filter selection changed: gear (-1 all · 0 amps · 1 cabs) + tag/make picks.
+    std::function<void (int, juce::StringArray, juce::StringArray)> onFiltersChanged;
+    // Owner supplies the chip vocabulary for the current view (favorites =
+    // only what the deck actually contains; browse = the full sets).
+    void setAvailableFilters (bool amps, bool cabs,
+                              juce::StringArray tags, juce::StringArray makes);
     std::function<void (int)> onSelectCab;      // PAIR pick (into setCabChoices)
     std::function<void (int)> onSelectDemoTrack;
     std::function<void()>     onToggleDemo;     // play/stop demo of current card
@@ -59,7 +64,7 @@ private:
     void timerCallback() override;
     void toggleFlip();
     void applyParamFromX (int idx, int x);
-    void composeBrowseQuery();
+    void notifyFilters();
 
     juce::String name_ { "Bundled Tone" }, family_ { "NAM PLAYER" }, author_;
     juce::Image  art_;
@@ -71,9 +76,11 @@ private:
     int   cabSel_ = 0;
     int   demoSel_ = 0;
     float burst_ = 0.0f;             // heart-pop overlay (1 -> 0)
-    bool  flyOpen_ = false;          // filters flyout (browse view)
-    int   gearSel_ = 0;              // 0 amps · 1 cabs
+    bool  flyOpen_ = false;          // filters flyout
+    int   gearSel_ = -1;             // -1 all · 0 amps · 1 cabs
     juce::StringArray selTags_, selMakes_;
+    bool  availAmps_ = true, availCabs_ = true;
+    juce::StringArray availTags_, availMakes_;
     // Card flip: 0 = artwork front, 1 = settings back.
     bool  flipped_ = false;
     float flip_ = 0.0f;
@@ -104,6 +111,7 @@ private:
                          pairRowRect_, demoRowRect_, demoPlayRect_;
     std::vector<std::pair<juce::Rectangle<int>, juce::String>> flyChips_;
     std::vector<std::pair<juce::Rectangle<int>, juce::String>> flyLabels_;   // group headers
+    std::array<juce::Rectangle<int>, 3> gearRects_;   // ALL / AMPS / CABS (browse)
     std::array<juce::Rectangle<int>, 12> dotRects_;   // pagination hits (capped)
 
     void layout();
