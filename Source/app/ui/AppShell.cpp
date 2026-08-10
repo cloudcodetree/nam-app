@@ -169,7 +169,9 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     addChildComponent (tunerScrim_);
     tunerScrim_.onTap = [this] { if (tunerOpen_) toggleTuner(); };
     addChildComponent (ioScrim_);
-    ioScrim_.onTapAt = [this] (juce::Point<int> p) { handleIoPanelTap (p); };
+    ioScrim_.onTapAt  = [this] (juce::Point<int> p) { handleIoPanelTap (p); };
+    ioScrim_.onDragAt = [this] (juce::Point<int> p) { handleIoDragAt (p); };
+    ioScrim_.onUpAt   = [this] (juce::Point<int> p) { handleIoUpAt (p); };
     devices_->onBack  = [this] { show (Screen::Play); };
     edit_->onDone    = [this] { show (Screen::Play); };
     browse_->onBack  = [this] { show (Screen::Play); };
@@ -186,8 +188,6 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
             case 2: engine_.setMidDb  ((v - 0.5f) * 12.5f); break;
             case 3: engine_.setHighDb ((v - 0.5f) * 12.5f); break;
             case 4: engine_.setGateThresholdDb (-70.0f + v * 50.0f); break;
-            case 5: engine_.setDelayMix (v);   engine_.setDelayEnabled (v > 0.001f); break;
-            case 6: engine_.setReverbMix (v);  engine_.setReverbEnabled (v > 0.001f); break;
             default: break;
         }
     };
@@ -489,6 +489,7 @@ void AppShell::showFavCard (int index, bool loadIntoEngine) {
     play_->setNowPlaying (juce::String (e.displayName), family, {});
     play_->setArtwork (artwork_ ? artwork_ (e) : juce::Image());
     play_->setKept (true);
+    play_->setCabCard (isIr);
     play_->setPosition (index, n);
 }
 
@@ -511,6 +512,7 @@ void AppShell::showBrowseCard (int index) {
                           {});
     play_->setArtwork (svc_.artworkForTone ? svc_.artworkForTone (t) : juce::Image());
     play_->setKept (svc_.isKept && svc_.isKept (t.id));
+    play_->setCabCard (t.format == "ir" || t.gear == "cab");
     play_->setPosition (index, n);
 }
 
@@ -906,6 +908,61 @@ void AppShell::paint (juce::Graphics& g) {
 }
 
 void AppShell::paintOverChildren (juce::Graphics& g) {
+    // I/O device picker (replaces the panel while choosing a device).
+    if (ioPanelOpen_ && ioPicker_ != 0) {
+        auto shortName = [] (juce::String n) {
+            return n.replace ("USB-Audio - ", "").replace (" USB headset", "").trim();
+        };
+        g.setColour (juce::Colour (0xf214101f));
+        g.fillRoundedRectangle (ioPickerRect_.toFloat(), 14.0f);
+        g.setColour (nam::ui::col::inkA (0.18f));
+        g.drawRoundedRectangle (ioPickerRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
+        g.setFont (nam::ui::uiFontTracked (9.0f, true));
+        g.setColour (nam::ui::col::inkA (0.4f));
+        g.drawText (ioPicker_ == 2 ? "OUTPUT DEVICE" : "INPUT DEVICE",
+                    ioPickerRect_.getX() + 18, ioPickerRect_.getY() + 10,
+                    ioPickerRect_.getWidth() - 36, 16, juce::Justification::centredLeft, false);
+        g.saveState();
+        juce::Path clip;
+        clip.addRoundedRectangle (ioPickerRect_.toFloat().reduced (1.0f)
+                                      .withTrimmedTop (30.0f), 13.0f);
+        g.reduceClipRegion (clip);
+        constexpr int rowH = 44, titleH = 34, pad = 8;
+        for (int i = 0; i < ioPickerItems_.size(); ++i) {
+            const juce::Rectangle<int> row (ioPickerRect_.getX() + 6,
+                ioPickerRect_.getY() + titleH + pad + i * rowH - (int) ioPickerScroll_,
+                ioPickerRect_.getWidth() - 12, rowH);
+            if (row.getBottom() < ioPickerRect_.getY() || row.getY() > ioPickerRect_.getBottom())
+                continue;
+            const bool sel = ioPickerItems_[i] == ioPickerCurrent_;
+            if (sel) {
+                g.setColour (nam::ui::col::accentA (0.10f));
+                g.fillRoundedRectangle (row.toFloat(), 9.0f);
+            }
+            auto in = row.reduced (12, 0);
+            g.setFont (nam::ui::uiFont (12.0f, false));
+            g.setColour (nam::ui::col::accentAlt);
+            g.drawText (sel ? juce::String::fromUTF8 ("\xE2\x9C\x93") : juce::String(),
+                        in.removeFromLeft (18), juce::Justification::centredLeft, false);
+            g.setFont (nam::ui::uiFont (13.0f, sel));
+            g.setColour (sel ? nam::ui::col::accentAlt : nam::ui::col::inkA (0.85f));
+            g.drawText (shortName (ioPickerItems_[i]), in, juce::Justification::centredLeft, false);
+        }
+        g.restoreState();
+        if (ioPickerContentH_ > ioPickerRect_.getHeight()) {
+            const float frac = (float) ioPickerRect_.getHeight() / (float) ioPickerContentH_;
+            const float thumbH = juce::jmax (24.0f, ioPickerRect_.getHeight() * frac);
+            const float travel = (float) ioPickerRect_.getHeight() - thumbH - 8.0f;
+            const float pos = ioPickerScroll_
+                            / (float) (ioPickerContentH_ - ioPickerRect_.getHeight());
+            g.setColour (nam::ui::col::inkA (0.25f));
+            g.fillRoundedRectangle ((float) ioPickerRect_.getRight() - 7.0f,
+                                    (float) ioPickerRect_.getY() + 4.0f + travel * pos,
+                                    3.0f, thumbH, 1.5f);
+        }
+        return;
+    }
+
     // I/O mute panel (over the current screen, anchored to the orb).
     if (ioPanelOpen_) {
         g.setColour (nam::ui::col::bg);
@@ -972,25 +1029,91 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
 void AppShell::closeIoPanel() {
     if (! ioPanelOpen_) return;
     ioPanelOpen_ = false;
+    ioPicker_ = 0;
     ioScrim_.setVisible (false);
     repaint();
 }
 
+void AppShell::openIoPicker (bool output) {
+    if (! getDevices_) return;
+    const auto st = getDevices_();
+    ioPickerItems_ = output ? st.outputs : st.inputs;
+    ioPickerCurrent_ = output ? st.currentOutput : st.currentInput;
+    ioPicker_ = output ? 2 : 1;
+    ioPickerScroll_ = 0.0f;
+    constexpr int rowH = 44, titleH = 34, pad = 8;
+    ioPickerContentH_ = titleH + pad + rowH * ioPickerItems_.size() + pad;
+    const int pw = juce::jmin (380, getWidth() - 48);
+    // Height-capped (overlay rule): never more than ~55% of the content.
+    const int maxH = contentBounds().getHeight() * 55 / 100;
+    const int h = juce::jmin (ioPickerContentH_, maxH);
+    ioPickerRect_ = { getWidth() / 2 - pw / 2, navBar_.getY() - h - 10, pw, h };
+    repaint();
+}
+
 void AppShell::handleIoPanelTap (juce::Point<int> p) {
-    // Row taps toggle their side; anything else closes the panel.
+    if (ioPicker_ != 0) {
+        if (ioPickerRect_.contains (p)) {
+            ioPickerPressed_ = true;
+            ioPickerMoved_ = false;
+            ioPickerPressPos_ = p;
+            ioPickerPressScroll_ = ioPickerScroll_;
+        } else {
+            ioPicker_ = 0;   // back to the mute panel
+            repaint();
+        }
+        return;
+    }
+    // Main panel: the toggle pill mutes; the device area opens the picker.
     if (ioInRow_.contains (p)) {
-        inMuted_ = ! inMuted_;
-        if (muteInput_) muteInput_ (inMuted_);
-        repaint (ioPanelRect_); repaint (orbRect_.expanded (4));
+        if (p.x > ioInRow_.getRight() - 96) {
+            inMuted_ = ! inMuted_;
+            if (muteInput_) muteInput_ (inMuted_);
+            repaint (ioPanelRect_); repaint (orbRect_.expanded (4));
+        } else {
+            openIoPicker (false);
+        }
         return;
     }
     if (ioOutRow_.contains (p)) {
-        outMuted_ = ! outMuted_;
-        if (muteOutput_) muteOutput_ (outMuted_);
-        repaint (ioPanelRect_); repaint (orbRect_.expanded (4));
+        if (p.x > ioOutRow_.getRight() - 96) {
+            outMuted_ = ! outMuted_;
+            if (muteOutput_) muteOutput_ (outMuted_);
+            repaint (ioPanelRect_); repaint (orbRect_.expanded (4));
+        } else {
+            openIoPicker (true);
+        }
         return;
     }
     closeIoPanel();
+}
+
+void AppShell::handleIoDragAt (juce::Point<int> p) {
+    if (! ioPickerPressed_) return;
+    const int dy = p.y - ioPickerPressPos_.y;
+    if (std::abs (dy) > 8) ioPickerMoved_ = true;
+    if (ioPickerMoved_) {
+        ioPickerScroll_ = juce::jlimit (0.0f,
+            (float) juce::jmax (0, ioPickerContentH_ - ioPickerRect_.getHeight()),
+            ioPickerPressScroll_ - (float) dy);
+        repaint (ioPickerRect_.expanded (2));
+    }
+}
+
+void AppShell::handleIoUpAt (juce::Point<int> p) {
+    if (! ioPickerPressed_) return;
+    if (! ioPickerMoved_) {
+        constexpr int rowH = 44, titleH = 34, pad = 8;
+        const int i = (p.y - ioPickerRect_.getY() - titleH - pad + (int) ioPickerScroll_) / rowH;
+        if (i >= 0 && i < ioPickerItems_.size()) {
+            const auto name = ioPickerItems_[i];
+            if (ioPicker_ == 2) { if (selectOutput_) selectOutput_ (name); }
+            else                { if (selectInput_) selectInput_ (name); }
+            ioPicker_ = 0;   // back to the panel with the new device shown
+            repaint();
+        }
+    }
+    ioPickerPressed_ = ioPickerMoved_ = false;
 }
 
 void AppShell::mouseDown (const juce::MouseEvent& e) {

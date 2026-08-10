@@ -138,16 +138,37 @@ private:
     // collapses it (nav taps stay live — the scrim covers content only).
     struct ClickAway : juce::Component {
         std::function<void()> onTap;
-        std::function<void (juce::Point<int>)> onTapAt;   // parent coords
+        std::function<void (juce::Point<int>)> onTapAt, onDragAt, onUpAt;   // parent coords
+        juce::Point<int> rel (const juce::MouseEvent& e) const {
+            return e.getEventRelativeTo (getParentComponent()).getPosition();
+        }
         void mouseDown (const juce::MouseEvent& e) override {
-            if (onTapAt && getParentComponent() != nullptr)
-                onTapAt (e.getEventRelativeTo (getParentComponent()).getPosition());
+            if (onTapAt && getParentComponent() != nullptr) onTapAt (rel (e));
             if (onTap) onTap();
+        }
+        void mouseDrag (const juce::MouseEvent& e) override {
+            if (onDragAt && getParentComponent() != nullptr) onDragAt (rel (e));
+        }
+        void mouseUp (const juce::MouseEvent& e) override {
+            if (onUpAt && getParentComponent() != nullptr) onUpAt (rel (e));
         }
     };
     ClickAway tunerScrim_, ioScrim_;
     void closeIoPanel();
     void handleIoPanelTap (juce::Point<int> p);
+    // I/O device picker inside the orb panel (tap a device name to change
+    // it in place; scrollable, height-capped per the overlay rule).
+    int  ioPicker_ = 0;                    // 0 none · 1 input · 2 output
+    juce::StringArray ioPickerItems_;
+    juce::String ioPickerCurrent_;
+    juce::Rectangle<int> ioPickerRect_;
+    float ioPickerScroll_ = 0.0f, ioPickerPressScroll_ = 0.0f;
+    int  ioPickerContentH_ = 0;
+    bool ioPickerPressed_ = false, ioPickerMoved_ = false;
+    juce::Point<int> ioPickerPressPos_;
+    void openIoPicker (bool output);
+    void handleIoDragAt (juce::Point<int> p);
+    void handleIoUpAt (juce::Point<int> p);
     bool tunerOpen_ = false;
     int  tunerMiss_ = 0;                      // consecutive no-pitch feeds (panel hold)
     juce::Component* current_ = nullptr;

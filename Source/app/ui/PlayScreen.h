@@ -27,6 +27,8 @@ public:
     void setDemoPlaying (bool on);            // card-back demo transport state
     void setCabChoices (juce::StringArray names, int sel);   // PAIR dropdown
     void setDeckView (int v);                 // 0 favorites · 1 browse (reflect)
+    // Cab/IR cards: no amp sliders, no PAIR row (a cab can't pair a cab).
+    void setCabCard (bool isCab);
 
     // The tuner panel rect (local coords) — the expanding tuner overlay
     // grows upward from here and leaves it exposed as the collapse handle.
@@ -61,7 +63,7 @@ public:
     // Card-back slider moved: (param index, normalised 0..1). The owner maps
     // to engine ranges (mirrors the EDIT screen mappings).
     std::function<void (int, float)> onToneParam;
-    static constexpr int kNumToneParams = 7;    // GAIN BASS MID TREBLE GATE DLY VERB
+    static constexpr int kNumToneParams = 5;    // GAIN BASS MID TREBLE GATE
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -79,6 +81,7 @@ private:
     juce::Image  art_;
     bool  kept_ = false;
     bool  demoPlaying_ = false;
+    bool  cabCard_ = false;          // current card is a cab/IR
     int   view_ = 0;                 // 0 favorites · 1 browse
     float viewSlide_ = 0.0f;         // animated thumb position (0 fav .. 1 browse)
     juce::StringArray cabNames_;
@@ -97,7 +100,7 @@ private:
     struct ToneParam { const char* label; float v; };
     std::array<ToneParam, (size_t) kNumToneParams> params_ { {
         { "GAIN", 0.5f }, { "BASS", 0.5f }, { "MID", 0.5f }, { "TREBLE", 0.5f },
-        { "GATE", 0.2f }, { "DELAY", 0.0f }, { "REVERB", 0.0f } } };
+        { "GATE", 0.2f } } };
     std::array<juce::Rectangle<int>, (size_t) kNumToneParams> paramRows_;
     int   index_    = -1;
     int   count_    = 0;
@@ -126,6 +129,21 @@ private:
     int   flyContentH_ = 0;
     bool  flyPressed_ = false, flyMoved_ = false;
     juce::Point<int> flyPressPos_;
+
+    // In-screen dropdown overlay (gear / pair-cab / demo-track pickers) —
+    // themed like the filters flyout, anchored to its field, scrollable.
+    enum class Menu { None, Gear, Pair, Demo };
+    Menu  menu_ = Menu::None;
+    juce::Rectangle<int> menuRect_;
+    juce::StringArray menuOptions_;
+    int   menuSelected_ = 0;
+    float menuScroll_ = 0.0f, menuPressScroll_ = 0.0f;
+    int   menuContentH_ = 0;
+    bool  menuPressed_ = false, menuMoved_ = false;
+    juce::Point<int> menuPressPos_;
+    void openMenu (Menu which, juce::Rectangle<int> anchor,
+                   juce::StringArray options, int selected);
+    void closeMenu();
     juce::Rectangle<int> gearDdRect_;   // gear-type dropdown (browse strip)
     std::array<juce::Rectangle<int>, 25> dotRects_;   // pagination hits (one page)
 

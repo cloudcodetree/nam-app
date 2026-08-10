@@ -63,6 +63,13 @@ void PlayScreen::setCabChoices (juce::StringArray names, int sel) {
     repaint (artRect_);
 }
 
+void PlayScreen::setCabCard (bool isCab) {
+    if (cabCard_ == isCab) return;
+    cabCard_ = isCab;
+    layout();
+    repaint (artRect_);
+}
+
 void PlayScreen::setDeckView (int v) {
     if (view_ == v) return;
     view_ = v;
@@ -80,6 +87,41 @@ void PlayScreen::notifyFilters() {
 void PlayScreen::setFilterGroups (std::vector<FilterGroup> groups) {
     filterGroups_ = std::move (groups);
     layout();
+    repaint();
+}
+
+void PlayScreen::openMenu (Menu which, juce::Rectangle<int> anchor,
+                           juce::StringArray options, int selected) {
+    menu_ = which;
+    menuOptions_ = std::move (options);
+    menuSelected_ = selected;
+    menuScroll_ = 0.0f;
+    constexpr int rowH = 38, pad = 8;
+    menuContentH_ = rowH * menuOptions_.size() + pad * 2;
+    const int w = juce::jmax (anchor.getWidth(), 230);
+    const int x = juce::jlimit (12, juce::jmax (12, getWidth() - w - 12), anchor.getX());
+    const int maxBottom = metersRow_.getY() - 10;
+    const int below = maxBottom - (anchor.getBottom() + 6);
+    const int above = anchor.getY() - 6 - (topBar_.getBottom() + 6);
+    if (below >= juce::jmin (menuContentH_, 160) || below >= above) {
+        menuRect_ = { x, anchor.getBottom() + 6, w, juce::jmin (menuContentH_, below) };
+    } else {
+        const int h = juce::jmin (menuContentH_, above);
+        menuRect_ = { x, anchor.getY() - 6 - h, w, h };
+    }
+    // Start scrolled so the current selection is visible.
+    const int selTop = 8 + menuSelected_ * rowH;
+    if (selTop + rowH > menuRect_.getHeight())
+        menuScroll_ = (float) juce::jmin (selTop - menuRect_.getHeight() / 2,
+                                          menuContentH_ - menuRect_.getHeight());
+    menuScroll_ = juce::jmax (0.0f, menuScroll_);
+    repaint();
+}
+
+void PlayScreen::closeMenu() {
+    if (menu_ == Menu::None) return;
+    menu_ = Menu::None;
+    menuOptions_.clear();
     repaint();
 }
 
@@ -121,7 +163,10 @@ void PlayScreen::setLevels (float in, float out) {
     outLevel_ = juce::jlimit (0.0f, 1.0f, out);
 }
 
-void PlayScreen::resized() { layout(); }
+void PlayScreen::resized() {
+    closeMenu();
+    layout();
+}
 
 void PlayScreen::layout() {
     auto r = getLocalBounds();
@@ -256,19 +301,28 @@ void PlayScreen::layout() {
     backBtnRect_ = { artRect_.getRight() - 48, artRect_.getY() + 14, 34, 34 };
 
     // Card-back settings rows (drawn/hit only while flipped), then the
-    // PAIR-IR and DEMO AUDIO rows (Hi-Fi design).
+    // PAIR-IR and DEMO AUDIO rows. Cab/IR cards show only what applies:
+    // no amp sliders, no PAIR row.
     {
         auto rows = artRect_.reduced (24, 16);
         rows.removeFromTop (40);   // name + return button header
         rows.removeFromTop (22);   // QUICK SETTINGS label
-        auto bottom = rows.removeFromBottom (104);
-        const int rowH = juce::jmin (48, rows.getHeight() / kNumToneParams);
-        for (int i = 0; i < kNumToneParams; ++i)
-            paramRows_[(size_t) i] = rows.removeFromTop (rowH).reduced (0, 6);
-        pairRowRect_ = bottom.removeFromTop (46).reduced (0, 4);
-        auto demo = bottom.removeFromTop (46).reduced (0, 4);
-        demoPlayRect_ = demo.removeFromRight (44);
-        demoRowRect_ = demo.withTrimmedRight (8);
+        if (cabCard_) {
+            for (auto& pr : paramRows_) pr = {};
+            pairRowRect_ = {};
+            auto demo = rows.removeFromBottom (54).removeFromTop (46).reduced (0, 4);
+            demoPlayRect_ = demo.removeFromRight (44);
+            demoRowRect_ = demo.withTrimmedRight (8);
+        } else {
+            auto bottom = rows.removeFromBottom (104);
+            const int rowH = juce::jmin (48, rows.getHeight() / kNumToneParams);
+            for (int i = 0; i < kNumToneParams; ++i)
+                paramRows_[(size_t) i] = rows.removeFromTop (rowH).reduced (0, 6);
+            pairRowRect_ = bottom.removeFromTop (46).reduced (0, 4);
+            auto demo = bottom.removeFromTop (46).reduced (0, 4);
+            demoPlayRect_ = demo.removeFromRight (44);
+            demoRowRect_ = demo.withTrimmedRight (8);
+        }
     }
 }
 
@@ -438,9 +492,10 @@ void PlayScreen::paint (juce::Graphics& g) {
                           col::inkA (0.5f), val.removeFromRight (16), juce::Justification::centred);
                     text (value, uiFont (12.0f, true), col::ink, val, juce::Justification::centredLeft);
                 };
-                ddRow (pairRowRect_, "PAIR CAB",
-                       cabNames_.isEmpty() ? juce::String ("--")
-                                           : cabNames_[juce::jlimit (0, cabNames_.size() - 1, cabSel_)]);
+                if (! pairRowRect_.isEmpty())
+                    ddRow (pairRowRect_, "PAIR CAB",
+                           cabNames_.isEmpty() ? juce::String ("--")
+                                               : cabNames_[juce::jlimit (0, cabNames_.size() - 1, cabSel_)]);
                 ddRow (demoRowRect_, "DEMO AUDIO",
                        juce::String (nam::demo::kTracks[juce::jlimit (0, nam::demo::kNumTracks - 1,
                                                                       demoSel_)].display));
@@ -451,7 +506,7 @@ void PlayScreen::paint (juce::Graphics& g) {
                 text (juce::String::fromUTF8 (demoPlaying_ ? "\xE2\x97\xBC" : "\xE2\x96\xB6"),
                       uiFont (12.0f, false), demoPlaying_ ? col::inkOnAccent : col::inkA (0.8f),
                       demoPlayRect_, juce::Justification::centred);
-                for (int i = 0; i < kNumToneParams; ++i) {
+                for (int i = 0; ! cabCard_ && i < kNumToneParams; ++i) {
                     const auto row = paramRows_[(size_t) i];
                     const auto& pm = params_[(size_t) i];
                     text (pm.label, uiFontTracked (10.0f, true), col::inkA (0.6f),
@@ -534,50 +589,6 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.drawRoundedRectangle (face.toFloat(), 14.0f, 1.0f);
     }
 
-    // Filters flyout floats over the card; content scrolls when it exceeds
-    // the panel height.
-    if (! flyRect_.isEmpty()) {
-        g.setColour (juce::Colour (0xf214101f));
-        g.fillRoundedRectangle (flyRect_.toFloat(), 14.0f);
-        g.setColour (col::inkA (0.18f));
-        g.drawRoundedRectangle (flyRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
-        g.saveState();
-        juce::Path clip;
-        clip.addRoundedRectangle (flyRect_.toFloat().reduced (1.0f), 13.0f);
-        g.reduceClipRegion (clip);
-        g.addTransform (juce::AffineTransform::translation (0.0f, -flyScroll_));
-        for (size_t li = 0; li < flyLabels_.size(); ++li) {
-            const auto& [rr, name] = flyLabels_[li];
-            if (li > 0) {   // separator hairline above each later group
-                g.setColour (col::inkA (0.10f));
-                g.fillRect (rr.getX() - 6, rr.getY() - 9, rr.getWidth() + 12, 1);
-            }
-            text (name, uiFontTracked (9.0f, true), col::inkA (0.4f),
-                  rr, juce::Justification::centredLeft);
-        }
-        for (size_t ci = 0; ci < flyChips_.size(); ++ci) {
-            const auto& [rr, label] = flyChips_[ci];
-            const auto& gp = filterGroups_[(size_t) flyChipGroup_[ci]];
-            const bool on = gp.selected.contains (label);
-            drawPill (g, rr.toFloat(), on ? col::accent : juce::Colours::transparentBlack,
-                      on ? col::accent : col::inkA (0.2f));
-            text (label, uiFont (11.0f, true), on ? col::inkOnAccent : col::inkA (0.7f),
-                  rr, juce::Justification::centred);
-        }
-        g.restoreState();
-        // Scroll affordance: thin track on the right when content overflows.
-        if (flyContentH_ > flyRect_.getHeight()) {
-            const float frac = (float) flyRect_.getHeight() / (float) flyContentH_;
-            const float thumbH = juce::jmax (24.0f, flyRect_.getHeight() * frac);
-            const float travel = (float) flyRect_.getHeight() - thumbH - 8.0f;
-            const float pos = flyScroll_ / (float) (flyContentH_ - flyRect_.getHeight());
-            g.setColour (col::inkA (0.25f));
-            g.fillRoundedRectangle ((float) flyRect_.getRight() - 7.0f,
-                                    (float) flyRect_.getY() + 4.0f + travel * pos,
-                                    3.0f, thumbH, 1.5f);
-        }
-    }
-
     // --- Transport: side chevrons + dots pagination ----------------------
     text (juce::String::fromUTF8 ("\xE2\x80\xB9"), uiFont (26.0f, false),
           col::inkA (0.5f), prevRect_, juce::Justification::centred);
@@ -658,9 +669,123 @@ void PlayScreen::paint (juce::Graphics& g) {
         }
 
     }
+
+    // Filters flyout floats over the card; content scrolls when it exceeds
+    // the panel height.
+    if (! flyRect_.isEmpty()) {
+        g.setColour (juce::Colour (0xf214101f));
+        g.fillRoundedRectangle (flyRect_.toFloat(), 14.0f);
+        g.setColour (col::inkA (0.18f));
+        g.drawRoundedRectangle (flyRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
+        g.saveState();
+        juce::Path clip;
+        clip.addRoundedRectangle (flyRect_.toFloat().reduced (1.0f), 13.0f);
+        g.reduceClipRegion (clip);
+        g.addTransform (juce::AffineTransform::translation (0.0f, -flyScroll_));
+        for (size_t li = 0; li < flyLabels_.size(); ++li) {
+            const auto& [rr, name] = flyLabels_[li];
+            if (li > 0) {   // separator hairline above each later group
+                g.setColour (col::inkA (0.10f));
+                g.fillRect (rr.getX() - 6, rr.getY() - 9, rr.getWidth() + 12, 1);
+            }
+            text (name, uiFontTracked (9.0f, true), col::inkA (0.4f),
+                  rr, juce::Justification::centredLeft);
+        }
+        for (size_t ci = 0; ci < flyChips_.size(); ++ci) {
+            const auto& [rr, label] = flyChips_[ci];
+            const auto& gp = filterGroups_[(size_t) flyChipGroup_[ci]];
+            const bool on = gp.selected.contains (label);
+            drawPill (g, rr.toFloat(), on ? col::accent : juce::Colours::transparentBlack,
+                      on ? col::accent : col::inkA (0.2f));
+            text (label, uiFont (11.0f, true), on ? col::inkOnAccent : col::inkA (0.7f),
+                  rr, juce::Justification::centred);
+        }
+        g.restoreState();
+        // Scroll affordance: thin track on the right when content overflows.
+        if (flyContentH_ > flyRect_.getHeight()) {
+            const float frac = (float) flyRect_.getHeight() / (float) flyContentH_;
+            const float thumbH = juce::jmax (24.0f, flyRect_.getHeight() * frac);
+            const float travel = (float) flyRect_.getHeight() - thumbH - 8.0f;
+            const float pos = flyScroll_ / (float) (flyContentH_ - flyRect_.getHeight());
+            g.setColour (col::inkA (0.25f));
+            g.fillRoundedRectangle ((float) flyRect_.getRight() - 7.0f,
+                                    (float) flyRect_.getY() + 4.0f + travel * pos,
+                                    3.0f, thumbH, 1.5f);
+        }
+    }
+
+    // Dropdown overlay (gear / pair / demo pickers) — same panel language
+    // as the filters flyout, anchored to its field.
+    if (menu_ != Menu::None) {
+        g.setColour (juce::Colour (0xf214101f));
+        g.fillRoundedRectangle (menuRect_.toFloat(), 14.0f);
+        g.setColour (col::inkA (0.18f));
+        g.drawRoundedRectangle (menuRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
+        g.saveState();
+        juce::Path clip;
+        clip.addRoundedRectangle (menuRect_.toFloat().reduced (1.0f), 13.0f);
+        g.reduceClipRegion (clip);
+        constexpr int rowH = 38;
+        for (int i = 0; i < menuOptions_.size(); ++i) {
+            const juce::Rectangle<int> row (menuRect_.getX() + 6,
+                                            menuRect_.getY() + 8 + i * rowH - (int) menuScroll_,
+                                            menuRect_.getWidth() - 12, rowH);
+            if (row.getBottom() < menuRect_.getY() || row.getY() > menuRect_.getBottom())
+                continue;
+            const bool sel = (i == menuSelected_);
+            if (sel) {
+                g.setColour (col::accentA (0.10f));
+                g.fillRoundedRectangle (row.toFloat(), 9.0f);
+            }
+            auto in = row.reduced (12, 0);
+            text (sel ? juce::String::fromUTF8 ("\xE2\x9C\x93") : juce::String(),
+                  uiFont (12.0f, false), col::accentAlt,
+                  in.removeFromLeft (18), juce::Justification::centredLeft);
+            text (menuOptions_[i], uiFont (13.0f, sel), sel ? col::accentAlt : col::inkA (0.85f),
+                  in, juce::Justification::centredLeft);
+        }
+        g.restoreState();
+        if (menuContentH_ > menuRect_.getHeight()) {
+            const float frac = (float) menuRect_.getHeight() / (float) menuContentH_;
+            const float thumbH = juce::jmax (24.0f, menuRect_.getHeight() * frac);
+            const float travel = (float) menuRect_.getHeight() - thumbH - 8.0f;
+            const float pos = menuScroll_ / (float) (menuContentH_ - menuRect_.getHeight());
+            g.setColour (col::inkA (0.25f));
+            g.fillRoundedRectangle ((float) menuRect_.getRight() - 7.0f,
+                                    (float) menuRect_.getY() + 4.0f + travel * pos,
+                                    3.0f, thumbH, 1.5f);
+        }
+    }
+
 }
 
 void PlayScreen::mouseUp (const juce::MouseEvent& e) {
+    if (menuPressed_) {
+        if (! menuMoved_) {
+            const int i = (e.getPosition().y - menuRect_.getY() - 8 + (int) menuScroll_) / 38;
+            if (i >= 0 && i < menuOptions_.size()) {
+                switch (menu_) {
+                    case Menu::Gear:
+                        gearSel_ = i;
+                        layout();   // pill width tracks the label
+                        if (onGearSelect) onGearSelect (i);
+                        break;
+                    case Menu::Pair:
+                        cabSel_ = i;
+                        if (onSelectCab) onSelectCab (i);
+                        break;
+                    case Menu::Demo:
+                        demoSel_ = i;
+                        if (onSelectDemoTrack) onSelectDemoTrack (i);
+                        break;
+                    default: break;
+                }
+            }
+            closeMenu();
+        }
+        menuPressed_ = menuMoved_ = false;
+        return;
+    }
     if (flyPressed_) {
         // Tap (no scroll drag) selects the chip under the finger.
         if (! flyMoved_) {
@@ -736,6 +861,17 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
 }
 
 void PlayScreen::mouseDrag (const juce::MouseEvent& e) {
+    if (menuPressed_) {
+        const int dy = e.getPosition().y - menuPressPos_.y;
+        if (std::abs (dy) > 8) menuMoved_ = true;
+        if (menuMoved_) {
+            menuScroll_ = juce::jlimit (0.0f,
+                (float) juce::jmax (0, menuContentH_ - menuRect_.getHeight()),
+                menuPressScroll_ - (float) dy);
+            repaint (menuRect_.expanded (2));
+        }
+        return;
+    }
     if (flyPressed_) {
         const int dy = e.getPosition().y - flyPressPos_.y;
         if (std::abs (dy) > 8) flyMoved_ = true;
@@ -753,6 +889,19 @@ void PlayScreen::mouseDrag (const juce::MouseEvent& e) {
 void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     const auto p = e.getPosition();
     pressPos_ = p;
+
+    // Open dropdown overlay consumes presses (tap selects, drag scrolls).
+    if (menu_ != Menu::None) {
+        if (menuRect_.contains (p)) {
+            menuPressed_ = true;
+            menuMoved_ = false;
+            menuPressPos_ = p;
+            menuPressScroll_ = menuScroll_;
+            return;
+        }
+        closeMenu();
+        return;   // outside tap just closes
+    }
 
     // Filters flyout consumes presses while open (tap selects, drag scrolls).
     if (! flyRect_.isEmpty()) {
@@ -774,17 +923,7 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     if (favViewRect_.contains (p))    { if (onViewChange) onViewChange (0); return; }
     if (browseViewRect_.contains (p)) { if (onViewChange) onViewChange (1); return; }
     if (! gearDdRect_.isEmpty() && gearDdRect_.contains (p)) {
-        juce::PopupMenu m;
-        for (int i = 0; i < gearNames_.size(); ++i)
-            m.addItem (i + 1, gearNames_[i], true, i == gearSel_);
-        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-            [this] (int r) {
-                if (r <= 0) return;
-                gearSel_ = r - 1;
-                layout();   // dropdown pill width tracks the label
-                repaint();
-                if (onGearSelect) onGearSelect (gearSel_);
-            });
+        openMenu (Menu::Gear, gearDdRect_, gearNames_, gearSel_);
         return;
     }
     if (! filterBtnRect_.isEmpty() && filterBtnRect_.contains (p)) {
@@ -803,23 +942,14 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
                 return;
             }
         if (pairRowRect_.contains (p)) {
-            juce::PopupMenu m;
-            for (int i = 0; i < cabNames_.size(); ++i)
-                m.addItem (i + 1, cabNames_[i], true, i == cabSel_);
-            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-                [this] (int r) {
-                    if (r > 0) { cabSel_ = r - 1; if (onSelectCab) onSelectCab (r - 1); repaint (artRect_); }
-                });
+            openMenu (Menu::Pair, pairRowRect_, cabNames_, cabSel_);
             return;
         }
         if (demoRowRect_.contains (p)) {
-            juce::PopupMenu m;
+            juce::StringArray tracks;
             for (int i = 0; i < nam::demo::kNumTracks; ++i)
-                m.addItem (i + 1, nam::demo::kTracks[i].display, true, i == demoSel_);
-            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
-                [this] (int r) {
-                    if (r > 0) { demoSel_ = r - 1; if (onSelectDemoTrack) onSelectDemoTrack (r - 1); repaint (artRect_); }
-                });
+                tracks.add (nam::demo::kTracks[i].display);
+            openMenu (Menu::Demo, demoRowRect_, std::move (tracks), demoSel_);
             return;
         }
         if (demoPlayRect_.expanded (4).contains (p)) { if (onToggleDemo) onToggleDemo(); return; }

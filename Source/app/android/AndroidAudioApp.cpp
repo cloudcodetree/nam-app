@@ -282,8 +282,12 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     {
         const float* rawIn = buf->getReadPointer(0, info.startSample);
         int w = tunerWrite_.load(std::memory_order_relaxed);
+        // A user input-mute silences the tuner too (zeros flush the ring);
+        // the automatic feedback guard does NOT — tuning without an
+        // interface via the phone mic stays useful.
+        const bool tunerMuted = inputMutedUser_.load(std::memory_order_relaxed);
         for (int i = 0; i < n; ++i) {
-            tunerRing_[(size_t) (w & (kTunerRingSize - 1))] = rawIn[i];
+            tunerRing_[(size_t) (w & (kTunerRingSize - 1))] = tunerMuted ? 0.0f : rawIn[i];
             ++w;
         }
         tunerWrite_.store(w, std::memory_order_release);
@@ -324,11 +328,22 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         demoPos_.store(pos, std::memory_order_relaxed);
         bypassEngine = true;   // slot is already model-processed
     } else if (liveMuted_.load(std::memory_order_relaxed)
-               || inputMutedUser_.load(std::memory_order_relaxed)) {
-        // No demo playing and live input muted (emulator or the status-orb
-        // input toggle): true silence.
-        // Also bypass the engine — amp models synthesise their own noise
-        // floor (hiss/hum) even on silent input, and inference costs CPU.
+               || inputMutedUser_.load(std::memory_order_relaxed)
+               || feedbackGuard_.load(std::memory_order_relaxed)) {
+        // No demo playing and the live path is muted (emulator, the status-
+        // orb input toggle, or the no-interface feedback guard): the engine
+        // gets silence. Also bypass it — amp models synthesise their own
+        // noise floor even on silent input, and inference costs CPU.
+        // Guard-only mute still METERS the raw mic so the input arc and
+        // tuner stay live (demo playback through the speaker is unaffected).
+        if (feedbackGuard_.load(std::memory_order_relaxed)
+            && ! inputMutedUser_.load(std::memory_order_relaxed)
+            && ! liveMuted_.load(std::memory_order_relaxed)
+            && buf->getNumChannels() > 0) {
+            const float* in = buf->getReadPointer(0, info.startSample);
+            for (int i = 0; i < n && i < cap; ++i)
+                inPk = juce::jmax(inPk, std::fabs(in[i]));
+        }
         for (int i = 0; i < n && i < cap; ++i) mono_[(size_t) i] = 0.0f;
         bypassEngine = true;
     } else {
@@ -343,11 +358,10 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     if (! bypassEngine)
         engine_.render(mono_.data(), mono_.data(), std::min(n, cap));
 
-    // Output mute: the user toggle (status orb) or the feedback guard (no
-    // interface -> mic through amp into speaker howls). Muting OUTPUT keeps
-    // the input meter/tuner alive so signal is still visible.
-    const bool outMuted = outputMutedUser_.load(std::memory_order_relaxed)
-                       || feedbackGuard_.load(std::memory_order_relaxed);
+    // Output mute is the user's alone — the feedback guard silences the
+    // live INPUT path instead, so demo playback keeps working without an
+    // interface connected.
+    const bool outMuted = outputMutedUser_.load(std::memory_order_relaxed);
     for (int ch = 0; ch < buf->getNumChannels(); ++ch) {
         float* out = buf->getWritePointer(ch, info.startSample);
         for (int i = 0; i < n && i < cap; ++i)
@@ -361,10 +375,10 @@ void AndroidAudioApp::timerCallback() {
     if (shell_ != nullptr) {
         shell_->setLevels(inPeak_.load(std::memory_order_relaxed),
                           engine_.outputPeak());
-        // Orb reflects the effective mute state (guard counts as out-muted).
+        // Orb reflects the user's mute toggles (the feedback guard is a
+        // monitoring-path protection, not a user state).
         shell_->setIoMuted(inputMutedUser_.load(std::memory_order_relaxed),
-                           outputMutedUser_.load(std::memory_order_relaxed)
-                               || feedbackGuard_.load(std::memory_order_relaxed));
+                           outputMutedUser_.load(std::memory_order_relaxed));
     }
 
     // Tuner analysis at ~10 Hz: copy the latest window out of the ring and
