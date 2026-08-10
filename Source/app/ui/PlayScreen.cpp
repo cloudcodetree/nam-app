@@ -112,26 +112,20 @@ void PlayScreen::layout() {
     gearRect_    = { topBar_.getRight() - 58,  topBar_.getCentreY() - 21, 42, 42 };
     liveTopRect_ = editTopRect_ = {};   // gear only (Hi-Fi design)
 
-    // View toggle slider (one pill, sliding thumb) + filters, under the bar.
-    auto strip = hero_.removeFromTop (44);
-    viewRow_ = strip.reduced (26, 5);
-    {
-        const int w = 118, h = viewRow_.getHeight();
-        const bool browse = view_ == 1;
-        const int total = w * 2 + 6 + (browse ? h + 10 : 0);
-        int x = viewRow_.getCentreX() - total / 2;
-        favViewRect_    = { x + 3, viewRow_.getY() + 3, w, h - 6 };
-        browseViewRect_ = { x + 3 + w, viewRow_.getY() + 3, w, h - 6 };
-        x += w * 2 + 6 + 10;
-        filterBtnRect_  = browse ? juce::Rectangle<int> { x, viewRow_.getY(), h, h }
-                                 : juce::Rectangle<int> {};
+    // Filters strip above the card (browse view only, per the design).
+    if (view_ == 1) {
+        auto fs = hero_.removeFromTop (46);
+        filterBtnRect_ = { fs.getCentreX() - 19, fs.getY() + 3, 38, 38 };
+    } else {
+        filterBtnRect_ = {};
     }
 
-    // Filters flyout (browse view): chips laid out under the strip.
+    // Filters flyout (browse view): chips anchored under the filter button.
     flyChips_.clear();
     if (flyOpen_ && view_ == 1) {
+        const int anchorY = filterBtnRect_.getBottom();
         const int chipH = 30, gap = 6;
-        int x = hero_.getX() + 34, y = viewRow_.getBottom() + 14;
+        int x = hero_.getX() + 34, y = anchorY + 14;
         auto place = [&] (const juce::String& label) {
             const int w = juce::jmax (56, label.length() * 8 + 24);
             if (x + w > getWidth() - 34) { x = hero_.getX() + 34; y += chipH + gap; }
@@ -143,18 +137,27 @@ void PlayScreen::layout() {
         for (const char* t : kTagChips)  place (t);
         x = hero_.getX() + 34; y += chipH + gap + 6;
         for (const char* m : kMakeChips) place (m);
-        flyRect_ = { hero_.getX() + 24, viewRow_.getBottom() + 6,
-                     hero_.getWidth() - 48, (y + chipH + 12) - (viewRow_.getBottom() + 6) };
+        flyRect_ = { hero_.getX() + 24, anchorY + 6,
+                     hero_.getWidth() - 48, (y + chipH + 12) - (anchorY + 6) };
     } else {
         flyRect_ = {};
     }
 
-    // Full-bleed tone card with the text footer INSIDE it; dots row below.
+    // Full-bleed tone card; below it: pagination dots, then the view toggle
+    // (Hi-Fi design order: card / dots / toggle).
     auto inner = hero_.reduced (26, 8);
-    dotsRect_ = inner.removeFromBottom (26);
+    viewRow_ = inner.removeFromBottom (38);
+    inner.removeFromBottom (6);
+    dotsRect_ = inner.removeFromBottom (24);
     inner.removeFromBottom (4);
     artRect_ = inner;
     textRect_ = transportRect_ = {};
+    {
+        const int w = 118, h = viewRow_.getHeight();
+        const int x = viewRow_.getCentreX() - (w * 2 + 6) / 2;
+        favViewRect_    = { x + 3, viewRow_.getY() + 3, w, h - 6 };
+        browseViewRect_ = { x + 3 + w, viewRow_.getY() + 3, w, h - 6 };
+    }
 
     // Card footer heart (front face).
     heartRect_ = { artRect_.getRight() - 64, artRect_.getBottom() - 64, 46, 46 };
