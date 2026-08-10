@@ -115,7 +115,7 @@ void PlayScreen::layout() {
     // Filters strip above the card (browse view only, per the design).
     if (view_ == 1) {
         auto fs = hero_.removeFromTop (46);
-        filterBtnRect_ = { fs.getCentreX() - 19, fs.getY() + 3, 38, 38 };
+        filterBtnRect_ = { fs.getCentreX() - 62, fs.getY() + 3, 124, 38 };
     } else {
         filterBtnRect_ = {};
     }
@@ -290,23 +290,21 @@ void PlayScreen::paint (juce::Graphics& g) {
         if (! filterBtnRect_.isEmpty()) {
             const int n = selTags_.size() + selMakes_.size() + (gearSel_ == 1 ? 1 : 0);
             const bool hot = flyOpen_ || n > 0;
-            g.setColour (flyOpen_ ? col::accentA (0.12f) : col::bg.withAlpha (0.4f));
-            g.fillEllipse (filterBtnRect_.toFloat());
-            g.setColour (hot ? col::accentA (0.6f) : col::inkA (0.18f));
-            g.drawEllipse (filterBtnRect_.toFloat().reduced (0.5f), 1.0f);
-            // Funnel-style filter icon: three centred bars, narrowing down.
+            drawPill (g, filterBtnRect_.toFloat(),
+                      flyOpen_ ? col::accentA (0.12f) : col::bg.withAlpha (0.4f),
+                      hot ? col::accentA (0.6f) : col::inkA (0.18f));
+            // Funnel icon (three narrowing bars) + label.
             g.setColour (hot ? col::accentAlt : col::inkA (0.6f));
-            const float cx = (float) filterBtnRect_.getCentreX();
+            const float cx = (float) filterBtnRect_.getX() + 26.0f;
             const float cy = (float) filterBtnRect_.getCentreY();
-            const float widths[] = { 18.0f, 12.0f, 6.0f };
+            const float widths[] = { 16.0f, 11.0f, 6.0f };
             for (int i = 0; i < 3; ++i)
-                g.fillRoundedRectangle (cx - widths[i] * 0.5f, cy - 6.0f + (float) i * 5.0f,
+                g.fillRoundedRectangle (cx - widths[i] * 0.5f, cy - 5.5f + (float) i * 4.5f,
                                         widths[i], 2.5f, 1.25f);
-            if (n > 0) {   // active-filter badge
-                g.setColour (col::accent);
-                g.fillEllipse ((float) filterBtnRect_.getRight() - 12.0f,
-                               (float) filterBtnRect_.getY() + 2.0f, 9.0f, 9.0f);
-            }
+            text (n > 0 ? "Filters " + juce::String::fromUTF8 ("\xC2\xB7") + " " + juce::String (n)
+                        : "Filters",
+                  uiFont (12.0f, true), hot ? col::accentAlt : col::inkA (0.7f),
+                  filterBtnRect_.withTrimmedLeft (42), juce::Justification::centredLeft);
         }
     }
 
