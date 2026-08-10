@@ -603,16 +603,19 @@ void AppShell::paint (juce::Graphics& g) {
         arc (pi, 2.0f * pi, inMuted_ ? juce::Colour (0x55ff3b30) : nam::ui::col::inkA (0.10f), 3.0f);
         arc (pi, 0.0f,      outMuted_ ? juce::Colour (0x55ff3b30) : nam::ui::col::inkA (0.10f), 3.0f);
 
-        // Levels.
+        // Levels: input grows both ways out of 9 o'clock, output out of
+        // 3 o'clock (full level = that side's whole semicircle).
         if (! inMuted_) {
             const float f = levelFrac (meterInPeak_);
             if (f > 0.01f)
-                arc (pi, pi + f * pi, nam::ui::col::meterLime, 3.5f);
+                arc (1.5f * pi - f * 0.5f * pi, 1.5f * pi + f * 0.5f * pi,
+                     nam::ui::col::meterLime, 3.5f);
         }
         if (! outMuted_) {
             const float f = levelFrac (meterOutPeak_);
             if (f > 0.01f)
-                arc (pi, pi - f * pi, nam::ui::col::meterGreen, 3.5f);
+                arc (0.5f * pi - f * 0.5f * pi, 0.5f * pi + f * 0.5f * pi,
+                     nam::ui::col::meterGreen, 3.5f);
         }
 
         // Centre: latency, or MUTE when the output is silenced.
