@@ -1,9 +1,31 @@
 #include "app/ui/PlayScreen.h"
+#include "app/ui/DemoTrackCatalog.h"
 #include "app/ui/NamLookAndFeel.h"
 
 #include <cmath>
 
 using namespace nam::ui;
+
+namespace {
+const char* kTagChips[]  = { "clean", "blues", "vintage", "metal", "high gain" };
+const char* kMakeChips[] = { "Marshall", "Fender", "Vox", "Mesa", "Orange", "EVH" };
+
+// Vector heart (Android's filled U+2665 falls back to the colour-emoji font).
+juce::Path heartPath (juce::Rectangle<float> b) {
+    juce::Path p;
+    p.startNewSubPath (0.50f, 0.32f);
+    p.cubicTo (0.50f, 0.20f, 0.38f, 0.12f, 0.27f, 0.12f);
+    p.cubicTo (0.11f, 0.12f, 0.04f, 0.26f, 0.04f, 0.38f);
+    p.cubicTo (0.04f, 0.58f, 0.26f, 0.74f, 0.50f, 0.92f);
+    p.cubicTo (0.74f, 0.74f, 0.96f, 0.58f, 0.96f, 0.38f);
+    p.cubicTo (0.96f, 0.26f, 0.89f, 0.12f, 0.73f, 0.12f);
+    p.cubicTo (0.62f, 0.12f, 0.50f, 0.20f, 0.50f, 0.32f);
+    p.closeSubPath();
+    p.applyTransform (juce::AffineTransform::scale (b.getWidth(), b.getHeight())
+                          .translated (b.getX(), b.getY()));
+    return p;
+}
+}
 
 PlayScreen::PlayScreen() { setOpaque (true); }
 
@@ -24,6 +46,40 @@ void PlayScreen::setPosition (int index, int count) {
 void PlayScreen::setArtwork (juce::Image art) {
     art_ = std::move (art);
     repaint (artRect_);
+}
+
+void PlayScreen::setKept (bool kept) {
+    if (kept_ == kept) return;
+    kept_ = kept;
+    repaint (artRect_);
+}
+
+void PlayScreen::setDemoPlaying (bool on) {
+    if (demoPlaying_ == on) return;
+    demoPlaying_ = on;
+    repaint (artRect_);
+}
+
+void PlayScreen::setCabChoices (juce::StringArray names, int sel) {
+    cabNames_ = std::move (names);
+    cabSel_ = sel;
+    repaint (artRect_);
+}
+
+void PlayScreen::setDeckView (int v) {
+    if (view_ == v) return;
+    view_ = v;
+    flyOpen_ = false;
+    layout();
+    repaint();
+}
+
+void PlayScreen::composeBrowseQuery() {
+    juce::String q;
+    if (gearSel_ == 1) q << "#ir ";
+    for (const auto& t : selTags_)  q << t << " ";
+    for (const auto& m : selMakes_) q << m << " ";
+    if (onBrowseQuery) onBrowseQuery (q.trim());
 }
 
 void PlayScreen::setTuner (juce::String note, float cents, bool active) {
@@ -50,9 +106,47 @@ void PlayScreen::layout() {
     metersRow_ = r.removeFromBottom (juce::jmax (78, r.getHeight() / 9)).reduced (20, 6);
     hero_    = r;
 
-    // Top bar: NAM PLAYER wordmark left, settings gear right (Hi-Fi design).
+    // Top bar: NAM PLAYER wordmark left; edit / live / settings icons right.
     libRect_ = {};
-    gearRect_ = { topBar_.getRight() - 62, topBar_.getCentreY() - 21, 42, 42 };
+    gearRect_    = { topBar_.getRight() - 58,  topBar_.getCentreY() - 21, 42, 42 };
+    liveTopRect_ = { gearRect_.getX() - 46,    topBar_.getCentreY() - 21, 42, 42 };
+    editTopRect_ = { liveTopRect_.getX() - 46, topBar_.getCentreY() - 21, 42, 42 };
+
+    // View toggle strip (favorites / browse + filters) under the top bar.
+    auto strip = hero_.removeFromTop (44);
+    viewRow_ = strip.reduced (26, 5);
+    {
+        const int w = 118, h = viewRow_.getHeight();
+        const bool browse = view_ == 1;
+        const int total = w * 2 + (browse ? 96 + 10 : 0);
+        int x = viewRow_.getCentreX() - total / 2;
+        favViewRect_    = { x, viewRow_.getY(), w, h };  x += w;
+        browseViewRect_ = { x, viewRow_.getY(), w, h };  x += w + 10;
+        filterBtnRect_  = browse ? juce::Rectangle<int> { x, viewRow_.getY(), 96, h }
+                                 : juce::Rectangle<int> {};
+    }
+
+    // Filters flyout (browse view): chips laid out under the strip.
+    flyChips_.clear();
+    if (flyOpen_ && view_ == 1) {
+        const int chipH = 30, gap = 6;
+        int x = hero_.getX() + 34, y = viewRow_.getBottom() + 14;
+        auto place = [&] (const juce::String& label) {
+            const int w = juce::jmax (56, label.length() * 8 + 24);
+            if (x + w > getWidth() - 34) { x = hero_.getX() + 34; y += chipH + gap; }
+            flyChips_.push_back ({ { x, y, w, chipH }, label });
+            x += w + gap;
+        };
+        place ("AMPS"); place ("CABS");
+        x = hero_.getX() + 34; y += chipH + gap + 6;
+        for (const char* t : kTagChips)  place (t);
+        x = hero_.getX() + 34; y += chipH + gap + 6;
+        for (const char* m : kMakeChips) place (m);
+        flyRect_ = { hero_.getX() + 24, viewRow_.getBottom() + 6,
+                     hero_.getWidth() - 48, (y + chipH + 12) - (viewRow_.getBottom() + 6) };
+    } else {
+        flyRect_ = {};
+    }
 
     // Full-bleed tone card with the text footer INSIDE it; dots row below.
     auto inner = hero_.reduced (26, 8);
@@ -60,6 +154,9 @@ void PlayScreen::layout() {
     inner.removeFromBottom (4);
     artRect_ = inner;
     textRect_ = transportRect_ = {};
+
+    // Card footer heart (front face).
+    heartRect_ = { artRect_.getRight() - 64, artRect_.getBottom() - 64, 46, 46 };
 
     // Chevrons float at the card's outer edges.
     prevRect_ = { hero_.getX() + 2,        artRect_.getCentreY() - 34, 26, 68 };
@@ -84,14 +181,20 @@ void PlayScreen::layout() {
 
     backBtnRect_ = { artRect_.getRight() - 48, artRect_.getY() + 14, 34, 34 };
 
-    // Card-back settings rows (drawn/hit only while flipped).
+    // Card-back settings rows (drawn/hit only while flipped), then the
+    // PAIR-IR and DEMO AUDIO rows (Hi-Fi design).
     {
         auto rows = artRect_.reduced (24, 16);
         rows.removeFromTop (40);   // name + return button header
         rows.removeFromTop (22);   // QUICK SETTINGS label
-        const int rowH = juce::jmin (52, rows.getHeight() / kNumToneParams);
+        auto bottom = rows.removeFromBottom (104);
+        const int rowH = juce::jmin (48, rows.getHeight() / kNumToneParams);
         for (int i = 0; i < kNumToneParams; ++i)
             paramRows_[(size_t) i] = rows.removeFromTop (rowH).reduced (0, 6);
+        pairRowRect_ = bottom.removeFromTop (46).reduced (0, 4);
+        auto demo = bottom.removeFromTop (46).reduced (0, 4);
+        demoPlayRect_ = demo.removeFromRight (44);
+        demoRowRect_ = demo.withTrimmedRight (8);
     }
 }
 
@@ -101,11 +204,18 @@ void PlayScreen::toggleFlip() {
 }
 
 void PlayScreen::timerCallback() {
+    bool busy = false;
     const float target = flipped_ ? 1.0f : 0.0f;
-    const float step = 1.0f / 11.0f;
-    flip_ += (target > flip_ ? step : -step);
-    flip_ = juce::jlimit (0.0f, 1.0f, flip_);
-    if (std::abs (flip_ - target) < 0.001f) { flip_ = target; stopTimer(); }
+    if (std::abs (flip_ - target) > 0.0005f) {
+        const float step = 1.0f / 11.0f;
+        flip_ = juce::jlimit (0.0f, 1.0f, flip_ + (target > flip_ ? step : -step));
+        busy = busy || std::abs (flip_ - target) > 0.0005f;
+    }
+    if (burst_ > 0.0f) {
+        burst_ = juce::jmax (0.0f, burst_ - 1.0f / 40.0f);
+        busy = busy || burst_ > 0.0f;
+    }
+    if (! busy) stopTimer();
     repaint (artRect_.expanded (12));
 }
 
@@ -139,6 +249,40 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.drawText ("PLAYER", brand.withTrimmedLeft (nw), juce::Justification::centredLeft, false);
         text (juce::String::fromUTF8 ("\xE2\x9A\x99"), uiFont (22.0f, false),
               col::inkA (0.6f), gearRect_, juce::Justification::centred);
+        text (juce::String::fromUTF8 ("\xE2\x9C\x8E"), uiFont (18.0f, false),
+              col::inkA (0.6f), editTopRect_, juce::Justification::centred);
+        text (juce::String::fromUTF8 ("\xE2\x89\xA1"), uiFont (20.0f, false),
+              col::inkA (0.6f), liveTopRect_, juce::Justification::centred);
+    }
+
+    // --- View toggle (♥ FAVORITES / BROWSE) + Filters ---------------------
+    {
+        auto seg = [&] (juce::Rectangle<int> rr, const juce::String& label, bool on) {
+            drawPill (g, rr.toFloat(), on ? col::accent : juce::Colours::transparentBlack,
+                      on ? col::accent : col::inkA (0.18f));
+            text (label, uiFontTracked (10.0f, true),
+                  on ? col::inkOnAccent : col::inkA (0.55f), rr, juce::Justification::centred);
+        };
+        seg (favViewRect_, "FAVORITES", view_ == 0);
+        {   // vector heart before the label (emoji fallback ruins the glyph)
+            const auto hb = juce::Rectangle<float> (
+                (float) favViewRect_.getX() + 16.0f,
+                (float) favViewRect_.getCentreY() - 6.0f, 12.0f, 12.0f);
+            g.setColour (view_ == 0 ? col::inkOnAccent : col::inkA (0.55f));
+            g.fillPath (heartPath (hb));
+        }
+        seg (browseViewRect_, "BROWSE", view_ == 1);
+        if (! filterBtnRect_.isEmpty()) {
+            const int n = selTags_.size() + selMakes_.size() + (gearSel_ == 1 ? 1 : 0);
+            const bool hot = flyOpen_ || n > 0;
+            drawPill (g, filterBtnRect_.toFloat(),
+                      flyOpen_ ? col::accentA (0.12f) : juce::Colours::transparentBlack,
+                      hot ? col::accentA (0.6f) : col::inkA (0.18f));
+            text (n > 0 ? "Filters " + juce::String::fromUTF8 ("\xC2\xB7") + " " + juce::String (n)
+                        : "Filters",
+                  uiFont (11.0f, true), hot ? col::accentAlt : col::inkA (0.6f),
+                  filterBtnRect_, juce::Justification::centred);
+        }
     }
 
     // --- Hero card: artwork front / settings back (flip = squash-X) -----
@@ -172,6 +316,35 @@ void PlayScreen::paint (juce::Graphics& g) {
                 text ("QUICK SETTINGS", uiFontTracked (9.0f, true), col::inkA (0.4f),
                       { artRect_.getX() + 24, artRect_.getY() + 52, artRect_.getWidth() - 48, 18 },
                       juce::Justification::centredLeft);
+
+                // PAIR + DEMO rows (Hi-Fi design).
+                auto ddRow = [&] (juce::Rectangle<int> rr, const juce::String& label,
+                                  const juce::String& value) {
+                    g.setColour (col::inkA (0.04f));
+                    g.fillRoundedRectangle (rr.toFloat(), 10.0f);
+                    g.setColour (col::inkA (0.16f));
+                    g.drawRoundedRectangle (rr.toFloat().reduced (0.5f), 10.0f, 1.0f);
+                    auto in = rr.reduced (12, 4);
+                    text (label, uiFontTracked (8.0f, true), col::inkA (0.4f),
+                          in.removeFromTop (14), juce::Justification::centredLeft);
+                    auto val = in;
+                    text (juce::String::fromUTF8 ("\xE2\x96\xBE"), uiFont (10.0f, false),
+                          col::inkA (0.5f), val.removeFromRight (16), juce::Justification::centred);
+                    text (value, uiFont (12.0f, true), col::ink, val, juce::Justification::centredLeft);
+                };
+                ddRow (pairRowRect_, "PAIR CAB",
+                       cabNames_.isEmpty() ? juce::String ("--")
+                                           : cabNames_[juce::jlimit (0, cabNames_.size() - 1, cabSel_)]);
+                ddRow (demoRowRect_, "DEMO AUDIO",
+                       juce::String (nam::demo::kTracks[juce::jlimit (0, nam::demo::kNumTracks - 1,
+                                                                      demoSel_)].display));
+                g.setColour (demoPlaying_ ? col::accent : juce::Colours::transparentBlack);
+                g.fillEllipse (demoPlayRect_.toFloat().reduced (2.0f));
+                g.setColour (demoPlaying_ ? col::accent : col::inkA (0.3f));
+                g.drawEllipse (demoPlayRect_.toFloat().reduced (2.5f), 1.0f);
+                text (juce::String::fromUTF8 (demoPlaying_ ? "\xE2\x97\xBC" : "\xE2\x96\xB6"),
+                      uiFont (12.0f, false), demoPlaying_ ? col::inkOnAccent : col::inkA (0.8f),
+                      demoPlayRect_, juce::Justification::centred);
                 for (int i = 0; i < kNumToneParams; ++i) {
                     const auto row = paramRows_[(size_t) i];
                     const auto& pm = params_[(size_t) i];
@@ -220,10 +393,11 @@ void PlayScreen::paint (juce::Graphics& g) {
                   artRect_.withTrimmedBottom (110), juce::Justification::centred);
         }
 
-        // Front footer: tone text lives INSIDE the card (Hi-Fi design).
+        // Front footer: tone text + heart live INSIDE the card (Hi-Fi design).
         if (! backFace) {
             auto ft = face.reduced (18, 0).withTrimmedBottom (16);
-            auto block = ft.removeFromBottom (author_.isNotEmpty() ? 84 : 62);
+            auto block = ft.removeFromBottom (author_.isNotEmpty() ? 84 : 62)
+                           .withTrimmedRight (56);
             text (family_.toUpperCase(), uiFontTracked (11.0f, false), col::inkA (0.45f),
                   block.removeFromTop (18), juce::Justification::centredLeft);
             text (name_, displayFont (26.0f), col::ink,
@@ -231,10 +405,44 @@ void PlayScreen::paint (juce::Graphics& g) {
             if (author_.isNotEmpty())
                 text ("by " + author_, uiFont (12.0f, false), col::inkA (0.5f),
                       block.removeFromTop (22), juce::Justification::centredLeft);
+
+            g.setColour (kept_ ? col::accentA (0.14f) : col::bg.withAlpha (0.35f));
+            g.fillEllipse (heartRect_.toFloat());
+            g.setColour (kept_ ? col::accentA (0.7f) : col::inkA (0.25f));
+            g.drawEllipse (heartRect_.toFloat().reduced (0.5f), 1.0f);
+            const auto hb = heartRect_.toFloat().withSizeKeepingCentre (20.0f, 20.0f);
+            if (kept_) { g.setColour (col::accent); g.fillPath (heartPath (hb)); }
+            else       { g.setColour (col::inkA (0.6f)); g.strokePath (heartPath (hb),
+                                                                       juce::PathStrokeType (1.5f)); }
+
+            // Heart-pop burst on keep.
+            if (burst_ > 0.001f) {
+                const float s = 60.0f + (1.0f - burst_) * 60.0f;
+                const auto bb = face.toFloat().withSizeKeepingCentre (s, s);
+                g.setColour (col::accent.withAlpha (burst_));
+                g.fillPath (heartPath (bb));
+            }
         }
         g.restoreState();
         g.setColour (col::inkA (backFace ? 0.14f : 0.10f));
         g.drawRoundedRectangle (face.toFloat(), 14.0f, 1.0f);
+    }
+
+    // Filters flyout floats over the card (browse view).
+    if (! flyRect_.isEmpty()) {
+        g.setColour (juce::Colour (0xf214101f));
+        g.fillRoundedRectangle (flyRect_.toFloat(), 14.0f);
+        g.setColour (col::inkA (0.18f));
+        g.drawRoundedRectangle (flyRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
+        for (const auto& [rr, label] : flyChips_) {
+            const bool isGear = (label == "AMPS" || label == "CABS");
+            const bool on = isGear ? ((label == "CABS") == (gearSel_ == 1))
+                          : selTags_.contains (label) || selMakes_.contains (label);
+            drawPill (g, rr.toFloat(), on ? col::accent : juce::Colours::transparentBlack,
+                      on ? col::accent : col::inkA (0.2f));
+            text (label, uiFont (11.0f, true), on ? col::inkOnAccent : col::inkA (0.7f),
+                  rr, juce::Justification::centred);
+        }
     }
 
     // --- Transport: side chevrons + dots pagination ----------------------
@@ -332,7 +540,10 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
     if (flipped_) {
         if (tap && ! prevRect_.contains (pressPos_) && ! nextRect_.contains (pressPos_)
                 && ! gearRect_.contains (pressPos_) && ! tunerRect_.contains (pressPos_)
-                && ! dotsRect_.contains (pressPos_)) {
+                && ! dotsRect_.contains (pressPos_) && ! viewRow_.contains (pressPos_)
+                && ! pairRowRect_.contains (pressPos_) && ! demoRowRect_.contains (pressPos_)
+                && ! demoPlayRect_.contains (pressPos_)
+                && ! editTopRect_.contains (pressPos_) && ! liveTopRect_.contains (pressPos_)) {
             toggleFlip();
             return;
         }
@@ -344,8 +555,18 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
         return;
     }
 
+    // Swipe DOWN on the card keeps/unkeeps it (Hi-Fi design).
+    if (artRect_.contains (pressPos_) && dy > 50 && std::abs (dy) > std::abs (dx) * 3 / 2) {
+        if (onKeepToggle) onKeepToggle();
+        if (! kept_) { burst_ = 1.0f; startTimerHz (60); }
+        return;
+    }
+
     // A tap on the card flips it around to the settings face.
-    if (tap && artRect_.contains (pressPos_)) { toggleFlip(); return; }
+    if (tap && artRect_.contains (pressPos_) && ! heartRect_.expanded (4).contains (pressPos_)) {
+        toggleFlip();
+        return;
+    }
 
     // Swipe across the hero area steps through the collection (front only).
     if (! hero_.contains (pressPos_)) return;
@@ -362,15 +583,83 @@ void PlayScreen::mouseDrag (const juce::MouseEvent& e) {
 void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     const auto p = e.getPosition();
     pressPos_ = p;
-    if (gearRect_.expanded (6).contains (p)) { if (onSettings) onSettings(); return; }
-    // Settings face: grab a slider row.
-    if (flipped_ && flip_ >= 1.0f)
+
+    // Filters flyout consumes taps while open.
+    if (! flyRect_.isEmpty()) {
+        if (flyRect_.contains (p)) {
+            for (const auto& [rr, label] : flyChips_)
+                if (rr.contains (p)) {
+                    if (label == "AMPS" || label == "CABS") {
+                        gearSel_ = (label == "CABS") ? 1 : 0;
+                    } else {
+                        auto& list = juce::StringArray (kTagChips, 5).contains (label)
+                                   ? selTags_ : selMakes_;
+                        if (list.contains (label)) list.removeString (label);
+                        else                       list.add (label);
+                    }
+                    repaint();
+                    composeBrowseQuery();
+                    return;
+                }
+            return;
+        }
+        flyOpen_ = false;
+        layout();
+        repaint();
+        return;   // outside tap just closes
+    }
+
+    if (gearRect_.expanded (4).contains (p))    { if (onSettings) onSettings(); return; }
+    if (editTopRect_.expanded (4).contains (p)) { if (onEdit) onEdit(); return; }
+    if (liveTopRect_.expanded (4).contains (p)) { if (onLive) onLive(); return; }
+
+    if (favViewRect_.contains (p))    { if (onViewChange) onViewChange (0); return; }
+    if (browseViewRect_.contains (p)) { if (onViewChange) onViewChange (1); return; }
+    if (! filterBtnRect_.isEmpty() && filterBtnRect_.contains (p)) {
+        flyOpen_ = true;
+        layout();
+        repaint();
+        return;
+    }
+
+    // Settings face: sliders + PAIR/DEMO controls.
+    if (flipped_ && flip_ >= 1.0f) {
         for (int i = 0; i < kNumToneParams; ++i)
             if (paramRows_[(size_t) i].expanded (0, 6).contains (p)) {
                 dragParam_ = i;
                 applyParamFromX (i, p.x);
                 return;
             }
+        if (pairRowRect_.contains (p)) {
+            juce::PopupMenu m;
+            for (int i = 0; i < cabNames_.size(); ++i)
+                m.addItem (i + 1, cabNames_[i], true, i == cabSel_);
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                [this] (int r) {
+                    if (r > 0) { cabSel_ = r - 1; if (onSelectCab) onSelectCab (r - 1); repaint (artRect_); }
+                });
+            return;
+        }
+        if (demoRowRect_.contains (p)) {
+            juce::PopupMenu m;
+            for (int i = 0; i < nam::demo::kNumTracks; ++i)
+                m.addItem (i + 1, nam::demo::kTracks[i].display, true, i == demoSel_);
+            m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+                [this] (int r) {
+                    if (r > 0) { demoSel_ = r - 1; if (onSelectDemoTrack) onSelectDemoTrack (r - 1); repaint (artRect_); }
+                });
+            return;
+        }
+        if (demoPlayRect_.expanded (4).contains (p)) { if (onToggleDemo) onToggleDemo(); return; }
+    }
+
+    // Front-face heart button.
+    if (! flipped_ && heartRect_.expanded (4).contains (p)) {
+        if (onKeepToggle) onKeepToggle();
+        if (! kept_) { burst_ = 1.0f; startTimerHz (60); }   // popping INTO the deck
+        return;
+    }
+
     if (prevRect_.expanded (6).contains (p)) { if (onPrev) onPrev(); return; }
     if (nextRect_.expanded (6).contains (p)) { if (onNext) onNext(); return; }
     if (tunerRect_.contains (p)) { if (onTuner) onTuner(); return; }

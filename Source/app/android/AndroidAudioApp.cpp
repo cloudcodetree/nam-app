@@ -52,6 +52,16 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.libraryIdForTone = [this](std::string toneId) {
         return libraryIdForTone(toneId);
     };
+    browse.removeKept = [this](std::string libraryId) {
+        library_.remove(libraryId);
+        library_.save();
+    };
+    browse.artworkForTone = [this](nam::ToneInfo t) {
+        const auto f = artworkFile(t.id);
+        if (f.existsAsFile()) return juce::ImageFileFormat::loadFrom(f);
+        fetchArtwork(t);   // async; caller re-asks on the next card show
+        return juce::Image();
+    };
     browse.listKept = [this] {
         // The deck as browse rows. Entries without a TONE3000 id (sideloaded
         // files) can't drive the TONE3000 row actions, so they stay out.
@@ -116,6 +126,15 @@ AndroidAudioApp::AndroidAudioApp() {
     shell_->setLibraryService(
         [this] { return library_.all(nam::LibraryType::Model); },
         [this](nam::LibraryEntry e) { loadModelEntry(e); });
+    shell_->setIrService(
+        [this] { return library_.all(nam::LibraryType::Ir); },
+        [this](nam::LibraryEntry e) {
+            const std::string p = library_.subdir(nam::LibraryType::Ir) + "/" + e.fileName;
+            if (auto ir = nam::loadImpulseResponse(p, (int) sampleRate_, dsp::kMaxIrTaps)) {
+                engine_.setImpulse(ir);
+                engine_.setIrEnabled(true);
+            }
+        });
     shell_->setMuteService(
         [this](bool m) { inputMutedUser_.store(m, std::memory_order_relaxed); },
         [this](bool m) { outputMutedUser_.store(m, std::memory_order_relaxed); });
@@ -1397,11 +1416,8 @@ std::string AndroidAudioApp::libraryIdForTone(const std::string& toneId) const {
 
 void AndroidAudioApp::doToggleKeep(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
-    // IRs are cabs, not tones — they can't join the Play deck, so hearting
-    // them is disabled (search is nam-only; this guards cached results).
-    if (tone.format == "ir") { done(false, "IR packs can't be added to the deck"); return; }
     const auto id = libraryIdForTone(tone.id);
-    if (! id.empty()) {
+    if (! id.empty()) {   // un-keep works for models AND IRs
         library_.remove(id);
         library_.save();
         done(true, juce::String(tone.title));

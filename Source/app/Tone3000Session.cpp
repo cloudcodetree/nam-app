@@ -332,10 +332,16 @@ private:
             return false;
         }
 
+        // "#ir " prefix (from the Play filters' Gear Type = Cabs) widens the
+        // search to include IR packs; everything else stays nam-only.
+        std::string q = query_;
+        bool namOnly = true;
+        if (q.rfind("#ir", 0) == 0) {
+            namOnly = false;
+            q = q.size() > 4 ? q.substr(4) : std::string();
+        }
         const juce::URL searchUrl{
-            // nam only: IR packs are cabs, not playable tones — they clutter
-            // the browse list and can't join the Play deck.
-            juce::String(nam::buildSearchUrl(query_, page_, /*pageSize*/ 25, /*namOnly*/ true))};
+            juce::String(nam::buildSearchUrl(q, page_, /*pageSize*/ 25, namOnly))};
         juce::MemoryBlock bytes;
         juce::String getError;
         if (!authenticatedGet(*this, accessToken_, searchUrl, true, bytes, getError)) {

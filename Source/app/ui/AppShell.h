@@ -67,8 +67,12 @@ public:
         // Library id of the entry imported for a tone ("" if not kept) —
         // lets Play snap to the deck entry of the last-auditioned tone.
         std::function<std::string (std::string)> libraryIdForTone;
+        // Remove a kept entry (model or IR) from the library by its id.
+        std::function<void (std::string)> removeKept;
         // The hearted deck as browse rows (favorites filter; works offline).
         std::function<std::vector<nam::ToneInfo>()> listKept;
+        // Cached/fetch-on-miss artwork for a browse card ({} until fetched).
+        std::function<juce::Image (nam::ToneInfo)> artworkForTone;
     };
     void setBrowseServices (BrowseServices services);
 
@@ -83,6 +87,13 @@ public:
     // Host loads cached TONE3000 artwork for a kept tone ({} = none cached).
     using ArtworkFn = std::function<juce::Image (const nam::LibraryEntry&)>;
     void setArtworkService (ArtworkFn artwork) { artwork_ = std::move (artwork); }
+
+    // Kept IR shelf: list entries + load one as the live cab impulse.
+    void setIrService (GetModelsFn getIrs, LoadModelFn loadIr) {
+        getIrs_ = std::move (getIrs);
+        loadIr_ = std::move (loadIr);
+        updateCabChoices();
+    }
 
     // Audio settings service: enumerate devices/rates/buffers, apply picks.
     using GetDevicesFn   = std::function<AudioSettingsState()>;
@@ -154,9 +165,20 @@ private:
     bool  inMuted_ = false, outMuted_ = false;
     MuteFn muteInput_, muteOutput_;
     double latencyMs_ = 0.0;
-    GetModelsFn getModels_;
-    LoadModelFn loadModel_;
+    GetModelsFn getModels_, getIrs_;
+    LoadModelFn loadModel_, loadIr_;
     ArtworkFn   artwork_;
+    // Play deck state: favorites (library models + kept IRs) or TONE3000
+    // browse results, swiped as cards.
+    bool browseView_ = false;
+    std::vector<nam::ToneInfo> playDeck_;     // browse view items
+    int  playDeckIndex_ = -1;
+    std::vector<nam::LibraryEntry> favDeck() const;   // models + kept IRs
+    void showFavCard (int index, bool loadIntoEngine);
+    void showBrowseCard (int index);
+    void runPlayBrowse (juce::String query);
+    void updateCabChoices();
+    int  cabBuiltinCount_ = 0;                // names beyond this are kept IRs
     GetDevicesFn   getDevices_;
     SelectDeviceFn selectInput_, selectOutput_, selectRate_, selectBuffer_;
     RescanFn       rescanDevices_;

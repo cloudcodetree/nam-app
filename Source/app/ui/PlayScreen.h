@@ -23,6 +23,10 @@ public:
     void setPosition (int index, int count);   // place in the collection (-1 = not in it)
     // TONE3000 artwork for the current tone (invalid image = initial-letter art).
     void setArtwork (juce::Image art);
+    void setKept (bool kept);                 // heart state of the current card
+    void setDemoPlaying (bool on);            // card-back demo transport state
+    void setCabChoices (juce::StringArray names, int sel);   // PAIR dropdown
+    void setDeckView (int v);                 // 0 favorites · 1 browse (reflect)
 
     // The tuner panel rect (local coords) — the expanding tuner overlay
     // grows upward from here and leaves it exposed as the collapse handle.
@@ -32,7 +36,14 @@ public:
     std::function<void()>     onPrev, onNext;   // step through the collection
     std::function<void (int)> onSelectIndex;    // dots pagination jump
     std::function<void()>     onSettings;       // top-bar gear -> audio settings
+    std::function<void()>     onEdit, onLive;   // top-bar shortcuts
     std::function<void()>     onTuner;          // tuner panel -> strobe tuner
+    std::function<void (int)> onViewChange;     // 0 favorites · 1 browse
+    std::function<void()>     onKeepToggle;     // heart tap / swipe-down keep
+    std::function<void (juce::String)> onBrowseQuery;   // composed filter query
+    std::function<void (int)> onSelectCab;      // PAIR pick (into setCabChoices)
+    std::function<void (int)> onSelectDemoTrack;
+    std::function<void()>     onToggleDemo;     // play/stop demo of current card
     // Card-back slider moved: (param index, normalised 0..1). The owner maps
     // to engine ranges (mirrors the EDIT screen mappings).
     std::function<void (int, float)> onToneParam;
@@ -48,9 +59,20 @@ private:
     void timerCallback() override;
     void toggleFlip();
     void applyParamFromX (int idx, int x);
+    void composeBrowseQuery();
 
     juce::String name_ { "Bundled Tone" }, family_ { "NAM PLAYER" }, author_;
     juce::Image  art_;
+    bool  kept_ = false;
+    bool  demoPlaying_ = false;
+    int   view_ = 0;                 // 0 favorites · 1 browse
+    juce::StringArray cabNames_;
+    int   cabSel_ = 0;
+    int   demoSel_ = 0;
+    float burst_ = 0.0f;             // heart-pop overlay (1 -> 0)
+    bool  flyOpen_ = false;          // filters flyout (browse view)
+    int   gearSel_ = 0;              // 0 amps · 1 cabs
+    juce::StringArray selTags_, selMakes_;
     // Card flip: 0 = artwork front, 1 = settings back.
     bool  flipped_ = false;
     float flip_ = 0.0f;
@@ -73,8 +95,13 @@ private:
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_,
                          metersRow_;
     juce::Rectangle<int> libRect_, prevRect_, nextRect_, dotsRect_, tunerRect_,
-                         gearRect_,      // settings gear in the top bar
-                         backBtnRect_;   // card-back return button
+                         gearRect_, editTopRect_, liveTopRect_,
+                         backBtnRect_,   // card-back return button
+                         heartRect_,     // card-footer keep toggle
+                         viewRow_, favViewRect_, browseViewRect_, filterBtnRect_,
+                         flyRect_,       // filters flyout panel
+                         pairRowRect_, demoRowRect_, demoPlayRect_;
+    std::vector<std::pair<juce::Rectangle<int>, juce::String>> flyChips_;
     std::array<juce::Rectangle<int>, 12> dotRects_;   // pagination hits (capped)
 
     void layout();

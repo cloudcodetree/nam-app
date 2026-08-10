@@ -1,4 +1,5 @@
 #include "app/ui/AppShell.h"
+#include "app/ui/DemoTrackCatalog.h"
 #include "app/ui/NamLookAndFeel.h"
 
 #include <algorithm>
@@ -28,14 +29,94 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
 
     play_->onLibrary  = [this] { show (Screen::Library); };
     play_->onSettings = [this] { show (Screen::Devices); };
+    play_->onEdit     = [this] { show (Screen::Edit); };
+    play_->onLive     = [this] { show (Screen::Live); };
     play_->onPrev     = [this] { stepCollection (-1); };
     play_->onNext     = [this] { stepCollection (+1); };
     play_->onSelectIndex = [this] (int k) {
-        if (! getModels_ || ! loadModel_) return;
-        const auto entries = getModels_();
-        if (k < 0 || k >= (int) entries.size()) return;
-        loadModel_ (entries[(size_t) k]);
-        showEntryAsNowPlaying (entries[(size_t) k]);
+        if (browseView_) showBrowseCard (k);
+        else             showFavCard (k, true);
+    };
+
+    play_->onViewChange = [this] (int v) {
+        const bool browse = (v == 1);
+        if (browse == browseView_) return;
+        browseView_ = browse;
+        play_->setDeckView (v);
+        if (svc_.stopDemo) svc_.stopDemo();
+        play_->setDemoPlaying (false);
+        if (browse) {
+            if (playDeck_.empty()) runPlayBrowse ({});
+            else showBrowseCard (playDeckIndex_ < 0 ? 0 : playDeckIndex_);
+        } else {
+            showFavCard (collectionIndex_ < 0 ? 0 : collectionIndex_, false);
+        }
+    };
+
+    play_->onBrowseQuery = [this] (juce::String q) { runPlayBrowse (std::move (q)); };
+
+    play_->onKeepToggle = [this] {
+        if (browseView_) {
+            if (playDeckIndex_ < 0 || playDeckIndex_ >= (int) playDeck_.size()
+                || ! svc_.keep)
+                return;
+            const auto tone = playDeck_[(size_t) playDeckIndex_];
+            svc_.keep (tone, [this, tone] (bool ok, juce::String) {
+                if (! ok) return;
+                play_->setKept (svc_.isKept && svc_.isKept (tone.id));
+                updateCabChoices();
+            });
+        } else {
+            const auto deck = favDeck();
+            if (collectionIndex_ < 0 || collectionIndex_ >= (int) deck.size()
+                || ! svc_.removeKept)
+                return;
+            svc_.removeKept (deck[(size_t) collectionIndex_].id);
+            updateCabChoices();
+            showFavCard (collectionIndex_, true);   // next card slides into the slot
+        }
+    };
+
+    play_->onSelectCab = [this] (int i) {
+        if (i < cabBuiltinCount_) { if (svc_.setCab) svc_.setCab (i); return; }
+        if (! getIrs_) return;
+        const auto irs = getIrs_();
+        const int k = i - cabBuiltinCount_;
+        if (k >= 0 && k < (int) irs.size() && loadIr_) loadIr_ (irs[(size_t) k]);
+    };
+
+    play_->onSelectDemoTrack = [this] (int i) {
+        if (svc_.setDemoTrack) svc_.setDemoTrack (i, [] (bool) {});
+    };
+
+    play_->onToggleDemo = [this] {
+        if (auditioningPack_ == -2) {   // Play-deck demo running -> stop
+            if (svc_.stopDemo) svc_.stopDemo();
+            auditioningPack_ = -1;
+            play_->setDemoPlaying (false);
+            return;
+        }
+        nam::ToneInfo tone;
+        if (browseView_) {
+            if (playDeckIndex_ < 0 || playDeckIndex_ >= (int) playDeck_.size()) return;
+            tone = playDeck_[(size_t) playDeckIndex_];
+        } else {
+            const auto deck = favDeck();
+            if (collectionIndex_ < 0 || collectionIndex_ >= (int) deck.size()) return;
+            const auto& e = deck[(size_t) collectionIndex_];
+            if (e.type == nam::LibraryType::Ir) { if (loadIr_) loadIr_ (e); return; }
+            int mi = 0;   // model position -> listKept index (same addedAt order)
+            for (int k = 0; k < collectionIndex_; ++k)
+                if (deck[(size_t) k].type == nam::LibraryType::Model) ++mi;
+            const auto kept = svc_.listKept ? svc_.listKept() : std::vector<nam::ToneInfo>{};
+            if (mi >= (int) kept.size()) return;
+            tone = kept[(size_t) mi];
+        }
+        if (! svc_.audition) return;
+        svc_.audition (tone, [this] (bool ok, juce::String) {
+            auditioningPack_ = ok ? -2 : -1;
+            play_->setDemoPlaying (ok);
+        });
     };
     play_->onTuner    = [this] { toggleTuner(); };
     tuner_->onBack    = [this] { if (tunerOpen_) toggleTuner(); };
@@ -213,6 +294,7 @@ void AppShell::stopAudition() {
     auditioningPack_ = auditioningModel_ = -1;
     browse_->setPlaying (-1, -1);
     browse_->setLoading (-1, 0.0f);
+    play_->setDemoPlaying (false);
 }
 
 void AppShell::setAuditionProgress (float progress) {
@@ -254,27 +336,108 @@ void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) 
     };
 }
 
-void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {
-    auditionToneId_.clear();   // a library entry owns the engine now
-    int idx = -1, count = 0;
-    if (getModels_) {
-        const auto entries = getModels_();
-        count = (int) entries.size();
-        for (size_t i = 0; i < entries.size(); ++i)
-            if (entries[i].id == e.id) { idx = (int) i; break; }
+std::vector<nam::LibraryEntry> AppShell::favDeck() const {
+    // Combined favorites deck: models + kept IRs, in the order they were
+    // hearted (stable sort keeps store order for ties).
+    std::vector<nam::LibraryEntry> deck;
+    if (getModels_) for (auto& e : getModels_()) deck.push_back (e);
+    if (getIrs_)    for (auto& e : getIrs_())    deck.push_back (e);
+    std::stable_sort (deck.begin(), deck.end(),
+                      [] (const auto& a, const auto& b) { return a.addedAt < b.addedAt; });
+    return deck;
+}
+
+void AppShell::showFavCard (int index, bool loadIntoEngine) {
+    const auto deck = favDeck();
+    if (deck.empty()) {
+        collectionIndex_ = -1;
+        play_->setNowPlaying ("Nothing kept yet", "NAM PLAYER", {});
+        play_->setArtwork ({});
+        play_->setKept (false);
+        play_->setPosition (-1, 0);
+        return;
     }
-    collectionIndex_ = idx;
-    // Raw arch strings are internal ("SlimmableContainer" etc.) — show the
-    // TONE3000 generation label instead.
+    const int n = (int) deck.size();
+    index = ((index % n) + n) % n;
+    collectionIndex_ = index;
+    const auto& e = deck[(size_t) index];
+    const bool isIr = (e.type == nam::LibraryType::Ir);
+    if (loadIntoEngine) {
+        if (isIr) { if (loadIr_) loadIr_ (e); }        // swap the cab, keep the amp
+        else      { if (loadModel_) loadModel_ (e); }
+    }
     juce::String family ("MY TONES");
-    if (! e.arch.empty()) {
+    if (isIr) {
+        family = "CABINET IR " + kDotSep + " MY TONES";
+    } else if (! e.arch.empty()) {
         const auto a = juce::String (e.arch).toLowerCase();
         const bool isA2 = a.contains ("slim") || a.startsWith ("2") || a.startsWith ("a2");
         family = juce::String (isA2 ? "A2" : "A1") + " " + kDotSep + " MY TONES";
     }
     play_->setNowPlaying (juce::String (e.displayName), family, {});
     play_->setArtwork (artwork_ ? artwork_ (e) : juce::Image());
-    play_->setPosition (idx, count);
+    play_->setKept (true);
+    play_->setPosition (index, n);
+}
+
+void AppShell::showBrowseCard (int index) {
+    if (playDeck_.empty()) {
+        playDeckIndex_ = -1;
+        play_->setNowPlaying ("No results", "TONE3000", {});
+        play_->setArtwork ({});
+        play_->setKept (false);
+        play_->setPosition (-1, 0);
+        return;
+    }
+    const int n = (int) playDeck_.size();
+    index = ((index % n) + n) % n;
+    playDeckIndex_ = index;
+    const auto& t = playDeck_[(size_t) index];
+    play_->setNowPlaying (juce::String (t.title),
+                          (t.gear.empty() ? juce::String ("TONE3000")
+                           : juce::String (t.gear).toUpperCase() + " " + kDotSep + " TONE3000"),
+                          {});
+    play_->setArtwork (svc_.artworkForTone ? svc_.artworkForTone (t) : juce::Image());
+    play_->setKept (svc_.isKept && svc_.isKept (t.id));
+    play_->setPosition (index, n);
+}
+
+void AppShell::runPlayBrowse (juce::String q) {
+    if (! svc_.search) return;
+    svc_.search (q, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
+        if (! ok) return;
+        playDeck_ = std::move (tones);
+        playDeckIndex_ = playDeck_.empty() ? -1 : 0;
+        if (browseView_) showBrowseCard (0);
+    });
+}
+
+void AppShell::updateCabChoices() {
+    juce::StringArray names;
+    for (int c = 0; c < nam::demo::kNumCabs; ++c)
+        names.add (nam::demo::kCabs[(size_t) c].display);
+    cabBuiltinCount_ = names.size();
+    if (getIrs_)
+        for (const auto& e : getIrs_())
+            names.add (juce::String (e.displayName));
+    play_->setCabChoices (std::move (names), 0);
+}
+
+void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {
+    auditionToneId_.clear();   // a library entry owns the engine now
+    browseView_ = false;
+    play_->setDeckView (0);
+    const auto deck = favDeck();
+    for (size_t i = 0; i < deck.size(); ++i)
+        if (deck[i].id == e.id && deck[i].type == e.type) {
+            showFavCard ((int) i, false);
+            return;
+        }
+    collectionIndex_ = -1;
+    play_->setNowPlaying (juce::String (e.displayName), "MY TONES", {});
+    play_->setArtwork (artwork_ ? artwork_ (e) : juce::Image());
+    play_->setKept (false);
+    play_->setPosition (-1, 0);
 }
 
 void AppShell::setNowPlayingInfo (juce::String name, juce::String family) {
@@ -285,19 +448,11 @@ void AppShell::setNowPlayingInfo (juce::String name, juce::String family) {
 }
 
 void AppShell::stepCollection (int delta) {
-    if (! getModels_ || ! loadModel_) return;
-    const auto entries = getModels_();
-    if (entries.empty()) {
-        play_->setNowPlaying ("Bundled Tone", "NAM PLAYER", {});
-        play_->setPosition (-1, 0);
+    if (browseView_) {
+        showBrowseCard (playDeckIndex_ < 0 ? (delta > 0 ? 0 : -1) : playDeckIndex_ + delta);
         return;
     }
-    const int n = (int) entries.size();
-    const int idx = collectionIndex_ < 0
-        ? (delta > 0 ? 0 : n - 1)
-        : ((collectionIndex_ + delta) % n + n) % n;
-    loadModel_ (entries[(size_t) idx]);
-    showEntryAsNowPlaying (entries[(size_t) idx]);
+    showFavCard (collectionIndex_ < 0 ? (delta > 0 ? 0 : -1) : collectionIndex_ + delta, true);
 }
 
 void AppShell::runBrowseSearch (juce::String q) {
@@ -531,16 +686,12 @@ juce::Rectangle<int> AppShell::contentBounds() const {
 
 void AppShell::resized() {
     auto b = getLocalBounds();
-    navBar_ = b.removeFromBottom (juce::jmax (68, getHeight() / 12));
-    // Five tabs with a centre slot for the status orb: [P][E] (orb) [T][L][S].
-    const int orbW = juce::jmin (76, navBar_.getWidth() / 6);
-    const int nw = (navBar_.getWidth() - orbW) / 5;
-    for (int i = 0; i < 5; ++i) {
-        const int x = navBar_.getX() + i * nw + (i >= 2 ? orbW : 0);
-        navRects_[(size_t) i] = { x, navBar_.getY(), nw, navBar_.getHeight() };
-    }
-    const int orbD = juce::jmin (orbW - 8, navBar_.getHeight() - 8);
-    orbRect_ = { navBar_.getX() + 2 * nw + (orbW - orbD) / 2,
+    // Bottom chrome is just the status orb now (Hi-Fi design): navigation
+    // lives in the Play top bar; the orb is the one persistent control.
+    navBar_ = b.removeFromBottom (juce::jmax (72, getHeight() / 12));
+    for (auto& r : navRects_) r = {};
+    const int orbD = juce::jmin (58, navBar_.getHeight() - 10);
+    orbRect_ = { navBar_.getCentreX() - orbD / 2,
                  navBar_.getCentreY() - orbD / 2, orbD, orbD };
 
     // I/O mute panel floats above the nav, centred on the orb.
@@ -569,23 +720,6 @@ void AppShell::paint (juce::Graphics& g) {
     // Global bottom chrome only — screens paint everything above it.
     g.setColour (nam::ui::col::bg);
     g.fillRect (navBar_);
-
-    // Persistent nav
-    static const char* labels[] = { "PLAY", "EDIT", "TONES", "LIVE", "SETUP" };
-    static const char* glyphsUtf8[] = { "\xE2\x96\xB6", "\xE2\x9C\x8E", "\xE2\x97\x89",
-                                        "\xE2\x89\xA1", "\xE2\x9A\x99" };
-    for (int i = 0; i < 5; ++i) {
-        const bool active = (i == activeTab_);
-        const auto c = active ? nam::ui::col::accent : nam::ui::col::inkA (0.45f);
-        auto cell = navRects_[(size_t) i];
-        auto icon = cell.removeFromTop (cell.getHeight() * 6 / 10);
-        g.setFont (nam::ui::uiFont (16.0f, false));
-        g.setColour (c);
-        g.drawText (juce::String::fromUTF8 (glyphsUtf8[i]), icon.withTrimmedTop (8),
-                    juce::Justification::centredBottom, false);
-        g.setFont (nam::ui::uiFontTracked (10.0f, true));
-        g.drawText (labels[i], cell, juce::Justification::centredTop, false);
-    }
 
     // Status orb: input level = left arc, output level = right arc, both
     // filling upward from 6 o'clock. Centre shows the round-trip latency
@@ -746,15 +880,6 @@ void AppShell::mouseDown (const juce::MouseEvent& e) {
         return;
     }
 
-    for (int i = 0; i < 5; ++i)
-        if (navRects_[(size_t) i].contains (p)) {
-            switch (i) {
-                case 1: show (Screen::Edit);    break;
-                case 2: show (Screen::Browse);  break;
-                case 3: show (Screen::Live);    break;
-                case 4: show (Screen::Devices); break;
-                default: show (Screen::Play);   break;
-            }
-            return;
-        }
+    // Tapping the bar anywhere else returns home to Play.
+    if (navBar_.contains (p) && current_ != play_.get()) show (Screen::Play);
 }
