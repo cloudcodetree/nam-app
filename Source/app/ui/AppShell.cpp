@@ -27,8 +27,16 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         addChildComponent (*c);
 
     play_->onLibrary  = [this] { show (Screen::Library); };
+    play_->onSettings = [this] { show (Screen::Devices); };
     play_->onPrev     = [this] { stepCollection (-1); };
     play_->onNext     = [this] { stepCollection (+1); };
+    play_->onSelectIndex = [this] (int k) {
+        if (! getModels_ || ! loadModel_) return;
+        const auto entries = getModels_();
+        if (k < 0 || k >= (int) entries.size()) return;
+        loadModel_ (entries[(size_t) k]);
+        showEntryAsNowPlaying (entries[(size_t) k]);
+    };
     play_->onTuner    = [this] { toggleTuner(); };
     tuner_->onBack    = [this] { if (tunerOpen_) toggleTuner(); };
     addChildComponent (tunerScrim_);
@@ -475,6 +483,7 @@ void AppShell::setLevels (float in, float out) {
         meterInPeak_ = in;
         meterOutPeak_ = out;
         repaint (orbRect_.expanded (4));
+        if (ioPanelOpen_) repaint (ioPanelRect_);
     }
 }
 
@@ -615,7 +624,7 @@ void AppShell::paint (juce::Graphics& g) {
             const float f = levelFrac (meterOutPeak_);
             if (f > 0.01f)
                 arc (0.5f * pi - f * 0.5f * pi, 0.5f * pi + f * 0.5f * pi,
-                     nam::ui::col::meterGreen, 3.5f);
+                     nam::ui::col::accentAlt, 3.5f);   // design: output = orange
         }
 
         // Centre: latency, or MUTE when the output is silenced.
@@ -655,11 +664,14 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
         }
 
         auto row = [&] (juce::Rectangle<int> rr, const juce::String& label,
-                        const juce::String& device, bool muted) {
+                        const juce::String& device, bool muted, float level,
+                        juce::Colour levelColour) {
             g.setColour (nam::ui::col::inkA (muted ? 0.02f : 0.04f));
             g.fillRoundedRectangle (rr.toFloat(), 10.0f);
             auto inner = rr.reduced (14, 6);
             auto toggle = inner.removeFromRight (74);
+            auto meter = inner.removeFromRight (juce::jmax (60, inner.getWidth() / 3))
+                             .reduced (10, 0);
             g.setFont (nam::ui::uiFontTracked (10.0f, true));
             g.setColour (nam::ui::col::inkA (0.45f));
             g.drawText (label, inner.removeFromTop (inner.getHeight() / 2),
@@ -667,15 +679,29 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
             g.setFont (nam::ui::uiFont (13.0f, true));
             g.setColour (muted ? nam::ui::col::inkA (0.4f) : nam::ui::col::ink);
             g.drawText (device, inner, juce::Justification::topLeft, false);
+            // Horizontal level meter (Hi-Fi design), dead when muted.
+            {
+                const auto track = meter.withSizeKeepingCentre (meter.getWidth(), 5).toFloat();
+                g.setColour (nam::ui::col::inkA (0.10f));
+                g.fillRoundedRectangle (track, 2.5f);
+                const float db = level > 0.001f ? 20.0f * std::log10 (level) : -60.0f;
+                const float f = muted ? 0.0f
+                              : juce::jlimit (0.0f, 1.0f, (db + 60.0f) / 60.0f);
+                if (f > 0.01f) {
+                    g.setColour (levelColour);
+                    g.fillRoundedRectangle (track.withWidth (
+                        juce::jmax (4.0f, track.getWidth() * f)), 2.5f);
+                }
+            }
             nam::ui::drawPill (g, toggle.toFloat(),
-                               muted ? juce::Colour (0x33ff3b30) : nam::ui::col::accentA (0.10f),
-                               muted ? juce::Colour (0xaaff3b30) : nam::ui::col::accentA (0.55f));
+                               muted ? juce::Colour (0x33ff3b30) : juce::Colours::transparentBlack,
+                               muted ? juce::Colour (0xaaff3b30) : nam::ui::col::inkA (0.2f));
             g.setFont (nam::ui::uiFontTracked (10.0f, true));
-            g.setColour (muted ? juce::Colour (0xffff3b30) : nam::ui::col::accentAlt);
-            g.drawText (muted ? "MUTED" : "LIVE", toggle, juce::Justification::centred, false);
+            g.setColour (muted ? juce::Colour (0xffff3b30) : nam::ui::col::inkA (0.6f));
+            g.drawText (muted ? "MUTED" : "MUTE", toggle, juce::Justification::centred, false);
         };
-        row (ioInRow_,  "INPUT",  inName,  inMuted_);
-        row (ioOutRow_, "OUTPUT", outName, outMuted_);
+        row (ioInRow_,  "INPUT",  inName,  inMuted_,  meterInPeak_,  nam::ui::col::meterLime);
+        row (ioOutRow_, "OUTPUT", outName, outMuted_, meterOutPeak_, nam::ui::col::accentAlt);
     }
 }
 

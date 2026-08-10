@@ -30,6 +30,8 @@ public:
 
     std::function<void()>     onLibrary;
     std::function<void()>     onPrev, onNext;   // step through the collection
+    std::function<void (int)> onSelectIndex;    // dots pagination jump
+    std::function<void()>     onSettings;       // top-bar gear -> audio settings
     std::function<void()>     onTuner;          // tuner panel -> strobe tuner
     // Card-back slider moved: (param index, normalised 0..1). The owner maps
     // to engine ranges (mirrors the EDIT screen mappings).
@@ -70,8 +72,10 @@ private:
     // Hit / layout rects, computed in resized(). (Nav lives in AppShell.)
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_,
                          metersRow_;
-    juce::Rectangle<int> libRect_, prevRect_, nextRect_, progressRect_, tunerRect_,
-                         gearRect_;   // card top-right: gear (front) / back (settings)
+    juce::Rectangle<int> libRect_, prevRect_, nextRect_, dotsRect_, tunerRect_,
+                         gearRect_,      // settings gear in the top bar
+                         backBtnRect_;   // card-back return button
+    std::array<juce::Rectangle<int>, 12> dotRects_;   // pagination hits (capped)
 
     void layout();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlayScreen)

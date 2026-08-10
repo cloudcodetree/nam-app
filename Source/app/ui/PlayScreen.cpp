@@ -17,7 +17,8 @@ void PlayScreen::setNowPlaying (juce::String name, juce::String family, juce::St
 void PlayScreen::setPosition (int index, int count) {
     index_ = index;
     count_ = count;
-    repaint (transportRect_);
+    layout();   // dot rects depend on index/count
+    repaint (dotsRect_.expanded (4));
 }
 
 void PlayScreen::setArtwork (juce::Image art) {
@@ -45,39 +46,52 @@ void PlayScreen::resized() { layout(); }
 
 void PlayScreen::layout() {
     auto r = getLocalBounds();
-    topBar_  = r.removeFromTop (juce::jmax (56, r.getHeight() / 14));
+    topBar_  = r.removeFromTop (juce::jmax (52, r.getHeight() / 15));
     metersRow_ = r.removeFromBottom (juce::jmax (78, r.getHeight() / 9)).reduced (20, 6);
-    hero_    = r.reduced (26, 4);
+    hero_    = r;
 
-    // Top bar: LIBRARY pill (left). CAB badge at right.
-    libRect_ = { topBar_.getX() + 20, topBar_.getCentreY() - 16, 92, 32 };
+    // Top bar: NAM PLAYER wordmark left, settings gear right (Hi-Fi design).
+    libRect_ = {};
+    gearRect_ = { topBar_.getRight() - 62, topBar_.getCentreY() - 21, 42, 42 };
 
-    // Hero vertical stack: art (square) / text / transport, centred.
-    const int artSize = juce::jmin (hero_.getWidth(), (int) (hero_.getHeight() * 0.48f));
-    const int textH = 100, transH = 52, gap = 18;
-    const int stackH = artSize + gap + textH + gap + transH;
-    const int top = hero_.getY() + juce::jmax (0, (hero_.getHeight() - stackH) / 2);
-    artRect_       = { hero_.getCentreX() - artSize / 2, top, artSize, artSize };
-    textRect_      = { hero_.getX(), artRect_.getBottom() + gap, hero_.getWidth(), textH };
-    transportRect_ = { hero_.getX(), textRect_.getBottom() + gap, hero_.getWidth(), transH };
+    // Full-bleed tone card with the text footer INSIDE it; dots row below.
+    auto inner = hero_.reduced (26, 8);
+    dotsRect_ = inner.removeFromBottom (26);
+    inner.removeFromBottom (4);
+    artRect_ = inner;
+    textRect_ = transportRect_ = {};
 
-    prevRect_ = { transportRect_.getX(), transportRect_.getY(), 52, 52 };
-    nextRect_ = { transportRect_.getRight() - 52, transportRect_.getY(), 52, 52 };
-    progressRect_ = { prevRect_.getRight() + 14, transportRect_.getCentreY() - 1,
-                      nextRect_.getX() - 14 - (prevRect_.getRight() + 14), 2 };
+    // Chevrons float at the card's outer edges.
+    prevRect_ = { hero_.getX() + 2,        artRect_.getCentreY() - 34, 26, 68 };
+    nextRect_ = { hero_.getRight() - 28,   artRect_.getCentreY() - 34, 26, 68 };
+
+    // Pagination dot hit rects (capped; beyond that a bar is drawn instead).
+    {
+        const int n = juce::jlimit (0, (int) dotRects_.size(), count_);
+        const int active = 22, idle = 8, gap = 8;
+        int total = 0;
+        for (int k = 0; k < n; ++k) total += (k == index_ ? active : idle) + (k ? gap : 0);
+        int x = dotsRect_.getCentreX() - total / 2;
+        for (int k = 0; k < n; ++k) {
+            const int w = (k == index_ ? active : idle);
+            dotRects_[(size_t) k] = { x, dotsRect_.getCentreY() - 6, w, 12 };
+            x += w + gap;
+        }
+    }
 
     // The tuner panel (full meters row) opens the strobe tuner.
     tunerRect_ = metersRow_;
 
-    gearRect_ = { artRect_.getRight() - 54, artRect_.getY() + 14, 40, 40 };
+    backBtnRect_ = { artRect_.getRight() - 48, artRect_.getY() + 14, 34, 34 };
 
     // Card-back settings rows (drawn/hit only while flipped).
     {
-        auto inner = artRect_.reduced (24, 18);
-        inner.removeFromTop (30);   // title strip
-        const int rowH = inner.getHeight() / kNumToneParams;
+        auto rows = artRect_.reduced (24, 16);
+        rows.removeFromTop (40);   // name + return button header
+        rows.removeFromTop (22);   // QUICK SETTINGS label
+        const int rowH = juce::jmin (52, rows.getHeight() / kNumToneParams);
         for (int i = 0; i < kNumToneParams; ++i)
-            paramRows_[(size_t) i] = inner.removeFromTop (rowH).reduced (0, 6);
+            paramRows_[(size_t) i] = rows.removeFromTop (rowH).reduced (0, 6);
     }
 }
 
@@ -112,14 +126,20 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.setFont (f); g.setColour (c); g.drawText (s, rr, j, false);
     };
 
-    // --- Top bar --------------------------------------------------------
-    drawPill (g, libRect_.toFloat(), juce::Colours::transparentBlack, col::inkA (0.22f));
-    text ("LIBRARY", uiFontTracked (12.0f, true), col::ink, libRect_, juce::Justification::centred);
-
-    juce::Rectangle<int> cab { topBar_.getRight() - 20 - 96, topBar_.getCentreY() - 16, 96, 32 };
-    drawPill (g, cab.toFloat(), col::accentA (0.08f), col::accentA (0.5f));
-    text (juce::String::fromUTF8 ("\xF0\x9F\x94\x92") + " CAB",
-          uiFontTracked (11.0f, true), col::accentAlt, cab, juce::Justification::centred);
+    // --- Top bar: wordmark + settings gear (Hi-Fi design) ----------------
+    {
+        auto brand = topBar_.reduced (20, 0);
+        g.setFont (uiFontTracked (11.0f, true));
+        g.setColour (col::inkA (0.55f));
+        const juce::String namPart ("NAM ");
+        g.drawText (namPart, brand, juce::Justification::centredLeft, false);
+        const int nw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
+                           uiFontTracked (11.0f, true), namPart));
+        g.setColour (col::accent);
+        g.drawText ("PLAYER", brand.withTrimmedLeft (nw), juce::Justification::centredLeft, false);
+        text (juce::String::fromUTF8 ("\xE2\x9A\x99"), uiFont (22.0f, false),
+              col::inkA (0.6f), gearRect_, juce::Justification::centred);
+    }
 
     // --- Hero card: artwork front / settings back (flip = squash-X) -----
     {
@@ -140,8 +160,17 @@ void PlayScreen::paint (juce::Graphics& g) {
                                      (float) face.getBottom(), false);
             g.setGradientFill (bg); g.fillRect (face);
             if (flip_ > 0.92f) {
-                text ("TONE SETTINGS", uiFontTracked (11.0f, true), col::inkA (0.45f),
-                      { artRect_.getX() + 24, artRect_.getY() + 16, artRect_.getWidth() - 48, 20 },
+                // Header: tone name + return button (Hi-Fi design).
+                text (name_, displayFont (18.0f), col::ink,
+                      { artRect_.getX() + 24, artRect_.getY() + 14,
+                        backBtnRect_.getX() - artRect_.getX() - 34, 34 },
+                      juce::Justification::centredLeft);
+                g.setColour (col::inkA (0.3f));
+                g.drawEllipse (backBtnRect_.toFloat().reduced (0.5f), 1.0f);
+                text (juce::String::fromUTF8 ("\xE2\x86\xA9"), uiFont (15.0f, false),
+                      col::inkA (0.8f), backBtnRect_, juce::Justification::centred);
+                text ("QUICK SETTINGS", uiFontTracked (9.0f, true), col::inkA (0.4f),
+                      { artRect_.getX() + 24, artRect_.getY() + 52, artRect_.getWidth() - 48, 18 },
                       juce::Justification::centredLeft);
                 for (int i = 0; i < kNumToneParams; ++i) {
                     const auto row = paramRows_[(size_t) i];
@@ -170,11 +199,11 @@ void PlayScreen::paint (juce::Graphics& g) {
                 juce::AffineTransform::scale (scale)
                     .translated (artRect_.getCentreX() - w * 0.5f,
                                  artRect_.getCentreY() - h * 0.5f));
-            // Bottom scrim keeps the card readable against bright photos.
-            juce::ColourGradient scrim (col::bg.withAlpha (0.55f), (float) artRect_.getCentreX(),
+            // Footer scrim keeps the in-card text readable over bright photos.
+            juce::ColourGradient scrim (col::bg.withAlpha (0.88f), (float) artRect_.getCentreX(),
                                         (float) artRect_.getBottom(), col::bg.withAlpha (0.0f),
                                         (float) artRect_.getCentreX(),
-                                        (float) artRect_.getCentreY(), false);
+                                        (float) (artRect_.getBottom() - 170), false);
             g.setGradientFill (scrim); g.fillRect (artRect_);
         } else {
             juce::ColourGradient ag (col::bgGradTop.brighter (0.06f), (float) artRect_.getCentreX(),
@@ -187,52 +216,47 @@ void PlayScreen::paint (juce::Graphics& g) {
             g.setGradientFill (glow); g.fillRect (artRect_);
             // big faint tone initial as "album art"
             text (name_.substring (0, 1).toUpperCase(),
-                  displayFont (artRect_.getHeight() * 0.62f), col::inkA (0.10f),
-                  artRect_, juce::Justification::centred);
+                  displayFont (artRect_.getHeight() * 0.5f), col::inkA (0.10f),
+                  artRect_.withTrimmedBottom (110), juce::Justification::centred);
+        }
+
+        // Front footer: tone text lives INSIDE the card (Hi-Fi design).
+        if (! backFace) {
+            auto ft = face.reduced (18, 0).withTrimmedBottom (16);
+            auto block = ft.removeFromBottom (author_.isNotEmpty() ? 84 : 62);
+            text (family_.toUpperCase(), uiFontTracked (11.0f, false), col::inkA (0.45f),
+                  block.removeFromTop (18), juce::Justification::centredLeft);
+            text (name_, displayFont (26.0f), col::ink,
+                  block.removeFromTop (36), juce::Justification::centredLeft);
+            if (author_.isNotEmpty())
+                text ("by " + author_, uiFont (12.0f, false), col::inkA (0.5f),
+                      block.removeFromTop (22), juce::Justification::centredLeft);
         }
         g.restoreState();
         g.setColour (col::inkA (backFace ? 0.14f : 0.10f));
         g.drawRoundedRectangle (face.toFloat(), 14.0f, 1.0f);
+    }
 
-        // Corner affordance at rest: gear opens settings, ‹ goes back.
-        if (flip_ < 0.05f || flip_ > 0.95f) {
-            g.setColour (col::bg.withAlpha (0.5f));
-            g.fillEllipse (gearRect_.toFloat());
-            g.setColour (col::inkA (0.3f));
-            g.drawEllipse (gearRect_.toFloat().reduced (0.5f), 1.0f);
-            text (juce::String::fromUTF8 (backFace ? "\xE2\x80\xB9" : "\xE2\x9A\x99"),
-                  uiFont (backFace ? 22.0f : 18.0f, false), col::ink,
-                  backFace ? gearRect_.translated (-1, -2) : gearRect_,
-                  juce::Justification::centred);
+    // --- Transport: side chevrons + dots pagination ----------------------
+    text (juce::String::fromUTF8 ("\xE2\x80\xB9"), uiFont (26.0f, false),
+          col::inkA (0.5f), prevRect_, juce::Justification::centred);
+    text (juce::String::fromUTF8 ("\xE2\x80\xBA"), uiFont (26.0f, false),
+          col::inkA (0.5f), nextRect_, juce::Justification::centred);
+    if (count_ > 0 && count_ <= (int) dotRects_.size()) {
+        for (int k = 0; k < count_; ++k) {
+            g.setColour (k == index_ ? col::accent : col::inkA (0.2f));
+            g.fillRoundedRectangle (dotRects_[(size_t) k].toFloat()
+                                        .withSizeKeepingCentre ((float) dotRects_[(size_t) k].getWidth(), 8.0f),
+                                    4.0f);
         }
-    }
-
-    // --- Tone text ------------------------------------------------------
-    {
-        auto tr = textRect_;
-        text (family_.toUpperCase(), uiFontTracked (13.0f, false), col::inkA (0.45f),
-              tr.removeFromTop (20), juce::Justification::topLeft);
-        text (name_, displayFont (40.0f), col::ink,
-              tr.removeFromTop (52), juce::Justification::topLeft);
-        if (author_.isNotEmpty())
-            text ("by " + author_, uiFont (13.0f, false), col::inkA (0.5f),
-                  tr.removeFromTop (24), juce::Justification::topLeft);
-    }
-
-    // --- Transport ------------------------------------------------------
-    auto circleBtn = [&] (juce::Rectangle<int> rr, const juce::String& glyph) {
-        g.setColour (col::inkA (0.25f));
-        g.drawEllipse (rr.toFloat().reduced (0.5f), 1.0f);
-        text (glyph, uiFont (20.0f, false), col::ink, rr, juce::Justification::centred);
-    };
-    circleBtn (prevRect_, juce::String::fromUTF8 ("\xE2\x80\xB9")); // ‹
-    circleBtn (nextRect_, juce::String::fromUTF8 ("\xE2\x80\xBA")); // ›
-    g.setColour (col::inkA (0.14f));
-    g.fillRoundedRectangle (progressRect_.toFloat(), 1.0f);
-    if (count_ > 0 && index_ >= 0) {
-        const float prog = (float) (index_ + 1) / (float) count_;
+    } else if (count_ > 0 && index_ >= 0) {
+        // Big decks: thin progress bar instead of a dot per tone.
+        auto bar = dotsRect_.reduced (60, 11);
+        g.setColour (col::inkA (0.14f));
+        g.fillRoundedRectangle (bar.toFloat(), 1.5f);
         g.setColour (col::accent);
-        g.fillRoundedRectangle (progressRect_.toFloat().withWidth (progressRect_.getWidth() * prog), 1.0f);
+        g.fillRoundedRectangle (bar.toFloat().withWidth (
+            bar.getWidth() * (float) (index_ + 1) / (float) count_), 1.5f);
     }
 
     // --- Tuner row (levels live in the global bottom meter) -------------
@@ -307,7 +331,8 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
     // showing whichever face is up (flip state is untouched).
     if (flipped_) {
         if (tap && ! prevRect_.contains (pressPos_) && ! nextRect_.contains (pressPos_)
-                && ! libRect_.contains (pressPos_) && ! tunerRect_.contains (pressPos_)) {
+                && ! gearRect_.contains (pressPos_) && ! tunerRect_.contains (pressPos_)
+                && ! dotsRect_.contains (pressPos_)) {
             toggleFlip();
             return;
         }
@@ -337,6 +362,7 @@ void PlayScreen::mouseDrag (const juce::MouseEvent& e) {
 void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     const auto p = e.getPosition();
     pressPos_ = p;
+    if (gearRect_.expanded (6).contains (p)) { if (onSettings) onSettings(); return; }
     // Settings face: grab a slider row.
     if (flipped_ && flip_ >= 1.0f)
         for (int i = 0; i < kNumToneParams; ++i)
@@ -345,8 +371,13 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
                 applyParamFromX (i, p.x);
                 return;
             }
-    if (prevRect_.contains (p)) { if (onPrev) onPrev(); return; }
-    if (nextRect_.contains (p)) { if (onNext) onNext(); return; }
-    if (libRect_.contains (p)) { if (onLibrary) onLibrary(); return; }
+    if (prevRect_.expanded (6).contains (p)) { if (onPrev) onPrev(); return; }
+    if (nextRect_.expanded (6).contains (p)) { if (onNext) onNext(); return; }
     if (tunerRect_.contains (p)) { if (onTuner) onTuner(); return; }
+    if (dotsRect_.contains (p) && count_ <= (int) dotRects_.size())
+        for (int k = 0; k < count_; ++k)
+            if (dotRects_[(size_t) k].expanded (4, 7).contains (p)) {
+                if (onSelectIndex) onSelectIndex (k);
+                return;
+            }
 }
