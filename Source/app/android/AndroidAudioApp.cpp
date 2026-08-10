@@ -34,6 +34,23 @@ AndroidAudioApp::AndroidAudioApp() {
     }
 
     library_.load();
+    // Migration (2026-08-10): before the saved/favorite split, every library
+    // entry was an implicit "heart". If nothing carries the flag yet, mark
+    // them all favorite so existing decks keep their hearts.
+    {
+        bool anyFav = false, anyEntry = false;
+        for (auto type : { nam::LibraryType::Model, nam::LibraryType::Ir })
+            for (const auto& e : library_.all(type)) {
+                anyEntry = true;
+                anyFav = anyFav || e.favorite;
+            }
+        if (anyEntry && ! anyFav) {
+            for (auto type : { nam::LibraryType::Model, nam::LibraryType::Ir })
+                for (const auto& e : library_.all(type))
+                    library_.setFavorite(e.id, true);
+            library_.save();
+        }
+    }
     t3kAuth_.loadTokens();   // reuse a prior refresh token if present
 
     shell_ = std::make_unique<AppShell>(engine_);
@@ -51,7 +68,22 @@ AndroidAudioApp::AndroidAudioApp() {
         doToggleKeep(std::move(t), std::move(done));
     };
     browse.isKept = [this](std::string toneId) {
+        // Heart state = the favorite flag, not mere presence on device.
+        const auto id = libraryIdForTone(toneId);
+        if (id.empty()) return false;
+        const auto* e = library_.find(id);
+        return e != nullptr && e->favorite;
+    };
+    browse.isSaved = [this](std::string toneId) {
         return ! libraryIdForTone(toneId).empty();
+    };
+    browse.save = [this](nam::ToneInfo t, AppShell::DoneFn done) {
+        fetchArtwork(t);
+        doDownload(std::move(t), std::move(done));   // import; favorite stays false
+    };
+    browse.setFavoriteById = [this](std::string libraryId, bool fav) {
+        library_.setFavorite(libraryId, fav);
+        library_.save();
     };
     browse.libraryIdForTone = [this](std::string toneId) {
         return libraryIdForTone(toneId);
@@ -1461,15 +1493,27 @@ std::string AndroidAudioApp::libraryIdForTone(const std::string& toneId) const {
 
 void AndroidAudioApp::doToggleKeep(nam::ToneInfo tone,
         std::function<void(bool, juce::String)> done) {
+    // Heart = saved + favorite flag. Already saved -> toggle the flag only
+    // (un-hearting KEEPS the download; the save button owns removal).
     const auto id = libraryIdForTone(tone.id);
-    if (! id.empty()) {   // un-keep works for models AND IRs
-        library_.remove(id);
+    if (! id.empty()) {
+        const auto* e = library_.find(id);
+        library_.setFavorite(id, ! (e != nullptr && e->favorite));
         library_.save();
         done(true, juce::String(tone.title));
         return;
     }
     fetchArtwork(tone);   // Play-screen art for the newly kept tone
-    doDownload(std::move(tone), std::move(done));
+    doDownload(tone, [this, tone, done](bool ok, juce::String msg) {
+        if (ok) {
+            const auto id2 = libraryIdForTone(tone.id);
+            if (! id2.empty()) {
+                library_.setFavorite(id2, true);
+                library_.save();
+            }
+        }
+        done(ok, std::move(msg));
+    });
 }
 
 // Keep = favorite: imports the already-downloaded file into the Library

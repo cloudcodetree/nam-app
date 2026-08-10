@@ -24,6 +24,7 @@ public:
     // TONE3000 artwork for the current tone (invalid image = initial-letter art).
     void setArtwork (juce::Image art);
     void setKept (bool kept);                 // heart state of the current card
+    void setSaved (bool saved);               // on-device state (download button)
     void setDemoPlaying (bool on);            // card-back demo transport state
     // Pairing dropdown on the card back — complements the card's gear type
     // (amp cards pair a cab; cab cards pair an amp; etc).
@@ -42,8 +43,9 @@ public:
     std::function<void()>     onSettings;       // top-bar gear -> audio settings
     std::function<void()>     onEdit, onLive;   // top-bar shortcuts
     std::function<void()>     onTuner;          // tuner panel -> strobe tuner
-    std::function<void (int)> onViewChange;     // 0 favorites · 1 browse
+    std::function<void (int)> onViewChange;     // 0 favorites · 1 downloaded · 2 browse
     std::function<void()>     onKeepToggle;     // heart tap / swipe-down keep
+    std::function<void()>     onSaveToggle;     // download button (save / remove)
     // Gear dropdown (browse strip): owner supplies choices (index 0 = all);
     // selection index is reported back.
     void setGearChoices (juce::StringArray names);
@@ -82,10 +84,11 @@ private:
     juce::String name_ { "Bundled Tone" }, family_ { "NAM PLAYER" }, author_;
     juce::Image  art_;
     bool  kept_ = false;
+    bool  saved_ = false;
     bool  demoPlaying_ = false;
     bool  cabCard_ = false;          // current card is a cab/IR
-    int   view_ = 0;                 // 0 favorites · 1 browse
-    float viewSlide_ = 0.0f;         // animated thumb position (0 fav .. 1 browse)
+    int   view_ = 0;                 // 0 favorites · 1 downloaded · 2 browse
+    float viewSlide_ = 0.0f;         // animated thumb position (0..2)
     juce::String pairLabel_ { "PAIR CAB" };
     juce::StringArray pairNames_;
     int   pairSel_ = 0;
@@ -121,7 +124,9 @@ private:
                          gearRect_, editTopRect_, liveTopRect_,
                          backBtnRect_,   // card-back return button
                          heartRect_,     // card-footer keep toggle
-                         viewRow_, favViewRect_, browseViewRect_, filterBtnRect_,
+                         saveRect_,      // card-footer download/save toggle
+                         viewRow_, favViewRect_, savedViewRect_, browseViewRect_,
+                         filterBtnRect_,
                          flyRect_,       // filters flyout panel
                          pairRowRect_, demoRowRect_, demoPlayRect_;
     std::vector<std::pair<juce::Rectangle<int>, juce::String>> flyChips_;

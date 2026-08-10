@@ -69,6 +69,10 @@ public:
         std::function<std::string (std::string)> libraryIdForTone;
         // Remove a kept entry (model or IR) from the library by its id.
         std::function<void (std::string)> removeKept;
+        // Save without hearting (download + import, favorite flag untouched).
+        DownloadFn save;
+        std::function<bool (std::string)> isSaved;          // on device (library)
+        std::function<void (std::string, bool)> setFavoriteById;
         // The hearted deck as browse rows (favorites filter; works offline).
         std::function<std::vector<nam::ToneInfo>()> listKept;
         // Structured search matching TONE3000's real /tones/search params.
@@ -196,7 +200,7 @@ private:
     ArtworkFn   artwork_;
     // Play deck state: favorites (library models + kept IRs) or TONE3000
     // browse results, swiped as cards.
-    bool browseView_ = false;
+    int  deckMode_ = 0;   // 0 favorites · 1 downloaded (all saved) · 2 browse
     std::vector<nam::ToneInfo> playDeck_;     // browse view items
     int  playDeckIndex_ = -1;
     std::vector<nam::LibraryEntry> favDeckAll() const;   // models + kept IRs

@@ -55,14 +55,13 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_->onPrev     = [this] { stepCollection (-1); };
     play_->onNext     = [this] { stepCollection (+1); };
     play_->onSelectIndex = [this] (int k) {
-        if (browseView_) showBrowseCard (k);
-        else             showFavCard (k, true);
+        if (deckMode_ == 2) showBrowseCard (k);
+        else                showFavCard (k, true);
     };
 
     play_->onViewChange = [this] (int v) {
-        const bool browse = (v == 1);
-        if (browse == browseView_) return;
-        browseView_ = browse;
+        if (v == deckMode_) return;
+        deckMode_ = v;
         play_->setDeckView (v);
         favGear_ = -1;
         favTags_.clear();
@@ -71,21 +70,21 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         pushFilterGroups();
         if (svc_.stopDemo) svc_.stopDemo();
         play_->setDemoPlaying (false);
-        if (browse) {
+        if (deckMode_ == 2) {
             runPlayBrowse();
         } else {
-            showFavCard (collectionIndex_ < 0 ? 0 : collectionIndex_, false);
+            showFavCard (0, false);
         }
     };
 
     play_->onGearSelect = [this] (int idx) {
-        if (! browseView_) return;
+        if (deckMode_ != 2) return;
         browseGear_ = idx;
         runPlayBrowse();
     };
 
     play_->onFilterGroupsChanged = [this] (const std::vector<PlayScreen::FilterGroup>& groups) {
-        if (browseView_) {
+        if (deckMode_ == 2) {
             browseGroups_ = groups;
             runPlayBrowse();
         } else {
@@ -100,7 +99,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     };
 
     play_->onKeepToggle = [this] {
-        if (browseView_) {
+        if (deckMode_ == 2) {
             if (playDeckIndex_ < 0 || playDeckIndex_ >= (int) playDeck_.size()
                 || ! svc_.keep)
                 return;
@@ -108,18 +107,55 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
             svc_.keep (tone, [this, tone] (bool ok, juce::String) {
                 if (! ok) return;
                 play_->setKept (svc_.isKept && svc_.isKept (tone.id));
+                play_->setSaved (svc_.isSaved && svc_.isSaved (tone.id));
                 updateCabChoices();
             });
         } else {
+            // Local decks: toggle the favorite flag (the download stays).
             const auto deck = favDeck();
             if (collectionIndex_ < 0 || collectionIndex_ >= (int) deck.size()
-                || ! svc_.removeKept)
+                || ! svc_.setFavoriteById)
                 return;
-            svc_.removeKept (deck[(size_t) collectionIndex_].id);
-            updateCabChoices();
+            const auto& e = deck[(size_t) collectionIndex_];
+            svc_.setFavoriteById (e.id, ! e.favorite);
             pushFilterGroups();
-            showFavCard (collectionIndex_, true);   // next card slides into the slot
+            // Favorites deck: an un-hearted entry leaves; the next card
+            // takes its slot. Downloaded deck: it stays, heart empties.
+            showFavCard (collectionIndex_, deckMode_ == 0);
         }
+    };
+
+    play_->onSaveToggle = [this] {
+        if (deckMode_ == 2) {
+            if (playDeckIndex_ < 0 || playDeckIndex_ >= (int) playDeck_.size()) return;
+            const auto tone = playDeck_[(size_t) playDeckIndex_];
+            const bool saved = svc_.isSaved && svc_.isSaved (tone.id);
+            if (! saved) {
+                if (! svc_.save) return;
+                svc_.save (tone, [this, tone] (bool ok, juce::String) {
+                    if (! ok) return;
+                    play_->setSaved (true);
+                    play_->setKept (svc_.isKept && svc_.isKept (tone.id));
+                    updateCabChoices();
+                });
+            } else if (svc_.removeKept && svc_.libraryIdForTone) {
+                const auto id = svc_.libraryIdForTone (tone.id);
+                if (! id.empty()) svc_.removeKept (id);
+                play_->setSaved (false);
+                play_->setKept (false);
+                updateCabChoices();
+            }
+            return;
+        }
+        // Local decks: un-saving removes the entry from the device.
+        const auto deck = favDeck();
+        if (collectionIndex_ < 0 || collectionIndex_ >= (int) deck.size()
+            || ! svc_.removeKept)
+            return;
+        svc_.removeKept (deck[(size_t) collectionIndex_].id);
+        updateCabChoices();
+        pushFilterGroups();
+        showFavCard (collectionIndex_, true);
     };
 
     play_->onSelectPair = [this] (int i) {
@@ -152,7 +188,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
             return;
         }
         nam::ToneInfo tone;
-        if (browseView_) {
+        if (deckMode_ == 2) {
             if (playDeckIndex_ < 0 || playDeckIndex_ >= (int) playDeck_.size()) return;
             tone = playDeck_[(size_t) playDeckIndex_];
         } else {
@@ -404,10 +440,12 @@ std::vector<nam::LibraryEntry> AppShell::favDeckAll() const {
 }
 
 std::vector<nam::LibraryEntry> AppShell::favDeck() const {
-    // Apply the favorites filters: gear by entry type; tags/makes by
-    // display-name match (OR within a group, AND across groups).
+    // Apply the local-deck filters: mode scope (favorites vs all saved),
+    // gear by entry type; tags/makes by display-name match (OR within a
+    // group, AND across groups).
     auto deck = favDeckAll();
     auto matches = [this] (const nam::LibraryEntry& e) {
+        if (deckMode_ == 0 && ! e.favorite) return false;
         if (favGear_ == 0 && e.type != nam::LibraryType::Model) return false;
         if (favGear_ == 1 && e.type != nam::LibraryType::Ir) return false;
         const auto name = juce::String (e.displayName).toLowerCase();
@@ -428,7 +466,7 @@ std::vector<nam::LibraryEntry> AppShell::favDeck() const {
 
 void AppShell::pushFilterGroups() {
     std::vector<PlayScreen::FilterGroup> groups;
-    if (browseView_) {
+    if (deckMode_ == 2) {
         // Full tone3000.com/search vocabulary via the real API parameters.
         // Gear lives in the strip dropdown, not the flyout.
         juce::StringArray gearChoices { "All Gear" };
@@ -444,9 +482,14 @@ void AppShell::pushFilterGroups() {
         groups = { tags, makes, tech, sort };
         browseGroups_ = groups;
     } else {
-        // Favorites: only offer chips the deck can actually satisfy (the
+        // Local decks: only offer chips the deck can actually satisfy (the
         // first word of a make is enough to match against display names).
-        const auto deck = favDeckAll();
+        // Favorites mode derives from favorites only.
+        auto deck = favDeckAll();
+        if (deckMode_ == 0)
+            deck.erase (std::remove_if (deck.begin(), deck.end(),
+                                        [] (const auto& e) { return ! e.favorite; }),
+                        deck.end());
         PlayScreen::FilterGroup tags { "TAGS", {}, {}, false };
         for (const char* t : kTagVocab)
             for (const auto& e : deck)
@@ -498,7 +541,8 @@ void AppShell::showFavCard (int index, bool loadIntoEngine) {
     }
     play_->setNowPlaying (juce::String (e.displayName), family, {});
     play_->setArtwork (artwork_ ? artwork_ (e) : juce::Image());
-    play_->setKept (true);
+    play_->setKept (e.favorite);
+    play_->setSaved (true);
     play_->setCabCard (isIr);
     if (curCardIsCab_ != isIr) {
         curCardIsCab_ = isIr;
@@ -526,6 +570,7 @@ void AppShell::showBrowseCard (int index) {
                           {});
     play_->setArtwork (svc_.artworkForTone ? svc_.artworkForTone (t) : juce::Image());
     play_->setKept (svc_.isKept && svc_.isKept (t.id));
+    play_->setSaved (svc_.isSaved && svc_.isSaved (t.id));
     const bool cab = (t.format == "ir" || t.gear == "cab");
     play_->setCabCard (cab);
     if (curCardIsCab_ != cab) {
@@ -559,7 +604,7 @@ void AppShell::runPlayBrowse() {
         if (! ok) return;
         playDeck_ = std::move (tones);
         playDeckIndex_ = playDeck_.empty() ? -1 : 0;
-        if (browseView_) showBrowseCard (0);
+        if (deckMode_ == 2) showBrowseCard (0);
     });
 }
 
@@ -596,7 +641,7 @@ void AppShell::pushPairChoices() {
 
 void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {
     auditionToneId_.clear();   // a library entry owns the engine now
-    browseView_ = false;
+    deckMode_ = 0;
     play_->setDeckView (0);
     const auto deck = favDeck();
     for (size_t i = 0; i < deck.size(); ++i)
@@ -619,7 +664,7 @@ void AppShell::setNowPlayingInfo (juce::String name, juce::String family) {
 }
 
 void AppShell::stepCollection (int delta) {
-    if (browseView_) {
+    if (deckMode_ == 2) {
         showBrowseCard (playDeckIndex_ < 0 ? (delta > 0 ? 0 : -1) : playDeckIndex_ + delta);
         return;
     }

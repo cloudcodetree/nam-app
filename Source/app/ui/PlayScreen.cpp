@@ -51,6 +51,12 @@ void PlayScreen::setKept (bool kept) {
     repaint (artRect_);
 }
 
+void PlayScreen::setSaved (bool saved) {
+    if (saved_ == saved) return;
+    saved_ = saved;
+    repaint (artRect_);
+}
+
 void PlayScreen::setDemoPlaying (bool on) {
     if (demoPlaying_ == on) return;
     demoPlaying_ = on;
@@ -187,7 +193,7 @@ void PlayScreen::layout() {
     bool anyFilterChips = false;
     for (const auto& gp : filterGroups_)
         if (! gp.options.isEmpty()) { anyFilterChips = true; break; }
-    if (view_ == 1 || anyFilterChips) {
+    if (view_ == 2 || anyFilterChips) {
         auto fs = hero_.removeFromTop (46);
         const int n = activeFilterCount();
         const juce::String label = n > 0
@@ -196,7 +202,7 @@ void PlayScreen::layout() {
         const int tw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
                            uiFont (12.0f, true), label));
         const int fw = 14 + 16 + 10 + tw + 16;   // pad · icon · gap · label · pad
-        if (view_ == 1 && ! gearNames_.isEmpty()) {
+        if (view_ == 2 && ! gearNames_.isEmpty()) {
             const auto gearLabel = gearNames_[juce::jlimit (0, gearNames_.size() - 1, gearSel_)];
             const int gtw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
                                 uiFont (12.0f, true), gearLabel));
@@ -266,14 +272,17 @@ void PlayScreen::layout() {
     artRect_ = inner;
     textRect_ = transportRect_ = {};
     {
-        const int w = 118, h = viewRow_.getHeight();
-        const int x = viewRow_.getCentreX() - (w * 2 + 6) / 2;
-        favViewRect_    = { x + 3, viewRow_.getY() + 3, w, h - 6 };
-        browseViewRect_ = { x + 3 + w, viewRow_.getY() + 3, w, h - 6 };
+        const int w = juce::jmin (106, (viewRow_.getWidth() - 12) / 3);
+        const int h = viewRow_.getHeight();
+        const int x = viewRow_.getCentreX() - (w * 3 + 6) / 2;
+        favViewRect_    = { x + 3,         viewRow_.getY() + 3, w, h - 6 };
+        savedViewRect_  = { x + 3 + w,     viewRow_.getY() + 3, w, h - 6 };
+        browseViewRect_ = { x + 3 + w * 2, viewRow_.getY() + 3, w, h - 6 };
     }
 
-    // Card footer heart (front face).
+    // Card footer heart + download buttons (front face).
     heartRect_ = { artRect_.getRight() - 64, artRect_.getBottom() - 64, 46, 46 };
+    saveRect_  = { heartRect_.getX() - 54, heartRect_.getY(), 46, 46 };
 
     // Chevrons float at the card's outer edges.
     prevRect_ = { hero_.getX() + 2,        artRect_.getCentreY() - 34, 26, 68 };
@@ -342,9 +351,10 @@ void PlayScreen::timerCallback() {
     }
     const float slideTarget = (float) view_;
     if (std::abs (viewSlide_ - slideTarget) > 0.001f) {
-        const float step = 1.0f / 8.0f;
-        viewSlide_ = juce::jlimit (0.0f, 1.0f,
-            viewSlide_ + (slideTarget > viewSlide_ ? step : -step));
+        const float step = 1.0f / 6.0f;
+        float next = viewSlide_ + (slideTarget > viewSlide_ ? step : -step);
+        if (std::abs (next - slideTarget) < step) next = slideTarget;
+        viewSlide_ = juce::jlimit (0.0f, 2.0f, next);
         busy = busy || std::abs (viewSlide_ - slideTarget) > 0.001f;
         repaint (viewRow_.expanded (4));
     }
@@ -384,30 +394,24 @@ void PlayScreen::paint (juce::Graphics& g) {
               col::inkA (0.6f), gearRect_, juce::Justification::centred);
     }
 
-    // --- View toggle slider (single pill, animated thumb) + Filters ------
+    // --- View toggle slider (single pill, animated 3-way thumb) ----------
     {
         const auto container = favViewRect_.getUnion (browseViewRect_).expanded (3);
         drawPill (g, container.toFloat(), col::bg.withAlpha (0.4f), col::inkA (0.16f));
-        // Sliding accent thumb.
-        const float tx = (float) favViewRect_.getX()
-                       + viewSlide_ * (float) (browseViewRect_.getX() - favViewRect_.getX());
+        // Sliding accent thumb (0 favorites · 1 downloaded · 2 browse).
+        const float seg = (float) favViewRect_.getWidth();
+        const float tx = (float) favViewRect_.getX() + viewSlide_ * seg;
         const juce::Rectangle<float> thumb (tx, (float) favViewRect_.getY(),
-                                            (float) favViewRect_.getWidth(),
-                                            (float) favViewRect_.getHeight());
+                                            seg, (float) favViewRect_.getHeight());
         drawPill (g, thumb, col::accent, col::accent);
-        const auto favCol    = viewSlide_ < 0.5f ? col::inkOnAccent : col::inkA (0.55f);
-        const auto browseCol = viewSlide_ >= 0.5f ? col::inkOnAccent : col::inkA (0.55f);
-        text ("FAVORITES", uiFontTracked (10.0f, true), favCol,
-              favViewRect_.withTrimmedLeft (14), juce::Justification::centred);
-        {   // vector heart before the label (emoji fallback ruins the glyph)
-            const auto hb = juce::Rectangle<float> (
-                (float) favViewRect_.getX() + 13.0f,
-                (float) favViewRect_.getCentreY() - 6.0f, 12.0f, 12.0f);
-            g.setColour (favCol);
-            g.fillPath (heartPath (hb));
-        }
-        text ("BROWSE", uiFontTracked (10.0f, true), browseCol,
-              browseViewRect_, juce::Justification::centred);
+        auto segText = [&] (juce::Rectangle<int> rr, const char* label, int idx) {
+            const bool on = std::abs (viewSlide_ - (float) idx) < 0.5f;
+            text (label, uiFontTracked (9.0f, true),
+                  on ? col::inkOnAccent : col::inkA (0.55f), rr, juce::Justification::centred);
+        };
+        segText (favViewRect_, "FAVORITES", 0);
+        segText (savedViewRect_, "DOWNLOADED", 1);
+        segText (browseViewRect_, "BROWSE", 2);
         // Gear-type dropdown (browse strip).
         if (! gearDdRect_.isEmpty()) {
             const bool hot = gearSel_ > 0;
@@ -554,7 +558,7 @@ void PlayScreen::paint (juce::Graphics& g) {
         if (! backFace) {
             auto ft = face.reduced (18, 0).withTrimmedBottom (16);
             auto block = ft.removeFromBottom (author_.isNotEmpty() ? 84 : 62)
-                           .withTrimmedRight (56);
+                           .withTrimmedRight (110);
             text (family_.toUpperCase(), uiFontTracked (11.0f, false), col::inkA (0.45f),
                   block.removeFromTop (18), juce::Justification::centredLeft);
             text (name_, displayFont (26.0f), col::ink,
@@ -571,6 +575,15 @@ void PlayScreen::paint (juce::Graphics& g) {
             if (kept_) { g.setColour (col::accent); g.fillPath (heartPath (hb)); }
             else       { g.setColour (col::inkA (0.6f)); g.strokePath (heartPath (hb),
                                                                        juce::PathStrokeType (1.5f)); }
+
+            // Download / saved toggle (left of the heart).
+            g.setColour (saved_ ? col::accentA (0.14f) : col::bg.withAlpha (0.35f));
+            g.fillEllipse (saveRect_.toFloat());
+            g.setColour (saved_ ? col::accentA (0.7f) : col::inkA (0.25f));
+            g.drawEllipse (saveRect_.toFloat().reduced (0.5f), 1.0f);
+            text (juce::String::fromUTF8 (saved_ ? "\xE2\x9C\x93" : "\xE2\x86\x93"),
+                  uiFont (18.0f, false), saved_ ? col::accent : col::inkA (0.6f),
+                  saveRect_, juce::Justification::centred);
 
             // Heart-pop burst on keep.
             if (burst_ > 0.001f) {
@@ -843,7 +856,8 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
     }
 
     // A tap on the card flips it around to the settings face.
-    if (tap && artRect_.contains (pressPos_) && ! heartRect_.expanded (4).contains (pressPos_)) {
+    if (tap && artRect_.contains (pressPos_) && ! heartRect_.expanded (4).contains (pressPos_)
+        && ! saveRect_.expanded (4).contains (pressPos_)) {
         toggleFlip();
         return;
     }
@@ -917,7 +931,8 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
     if (gearRect_.expanded (4).contains (p)) { if (onSettings) onSettings(); return; }
 
     if (favViewRect_.contains (p))    { if (onViewChange) onViewChange (0); return; }
-    if (browseViewRect_.contains (p)) { if (onViewChange) onViewChange (1); return; }
+    if (savedViewRect_.contains (p))  { if (onViewChange) onViewChange (1); return; }
+    if (browseViewRect_.contains (p)) { if (onViewChange) onViewChange (2); return; }
     if (! gearDdRect_.isEmpty() && gearDdRect_.contains (p)) {
         openMenu (Menu::Gear, gearDdRect_, gearNames_, gearSel_);
         return;
@@ -951,10 +966,14 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
         if (demoPlayRect_.expanded (4).contains (p)) { if (onToggleDemo) onToggleDemo(); return; }
     }
 
-    // Front-face heart button.
+    // Front-face heart + download buttons.
     if (! flipped_ && heartRect_.expanded (4).contains (p)) {
         if (onKeepToggle) onKeepToggle();
         if (! kept_) { burst_ = 1.0f; startTimerHz (60); }   // popping INTO the deck
+        return;
+    }
+    if (! flipped_ && saveRect_.expanded (4).contains (p)) {
+        if (onSaveToggle) onSaveToggle();
         return;
     }
 
