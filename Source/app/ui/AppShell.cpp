@@ -67,7 +67,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         favGear_ = -1;
         favTags_.clear();
         favMakes_.clear();
-        browseFormat_ = -1;
+        browseGear_ = 0;
         pushFilterGroups();
         if (svc_.stopDemo) svc_.stopDemo();
         play_->setDemoPlaying (false);
@@ -78,9 +78,9 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         }
     };
 
-    play_->onFormatChange = [this] (int f) {
+    play_->onGearSelect = [this] (int idx) {
         if (! browseView_) return;
-        browseFormat_ = f;
+        browseGear_ = idx;
         runPlayBrowse();
     };
 
@@ -420,8 +420,10 @@ void AppShell::pushFilterGroups() {
     std::vector<PlayScreen::FilterGroup> groups;
     if (browseView_) {
         // Full tone3000.com/search vocabulary via the real API parameters.
-        PlayScreen::FilterGroup gear { "GEAR TYPE", {}, {}, false };
-        for (const auto& gd : kGearVocab) gear.options.add (gd.display);
+        // Gear lives in the strip dropdown, not the flyout.
+        juce::StringArray gearChoices { "All Gear" };
+        for (const auto& gd : kGearVocab) gearChoices.add (gd.display);
+        play_->setGearChoices (std::move (gearChoices));
         PlayScreen::FilterGroup tags { "TAGS", {}, {}, false };
         for (const char* t : kTagVocab) tags.options.add (t);
         PlayScreen::FilterGroup makes { "MAKES & MODELS", {}, {}, false };
@@ -429,7 +431,7 @@ void AppShell::pushFilterGroups() {
         PlayScreen::FilterGroup tech { "TECHNICAL", { "Any", "A2", "A1" }, { "Any" }, true };
         PlayScreen::FilterGroup sort { "SORT", {}, { "Trending" }, true };
         for (const auto& sd : kSortVocab) sort.options.add (sd.display);
-        groups = { gear, tags, makes, tech, sort };
+        groups = { tags, makes, tech, sort };
         browseGroups_ = groups;
     } else {
         // Favorites: only offer chips the deck can actually satisfy (the
@@ -516,14 +518,12 @@ void AppShell::runPlayBrowse() {
     if (! svc_.searchEx) return;
     // Build real /tones/search params from the strip + flyout state.
     nam::SearchParams p;
-    p.format = browseFormat_ == 0 ? "nam" : browseFormat_ == 1 ? "ir" : "";
     p.sort = "trending";
+    const int gi = browseGear_ - 1;   // dropdown index 0 = All Gear
+    if (gi >= 0 && gi < (int) (sizeof (kGearVocab) / sizeof (kGearVocab[0])))
+        p.gears.push_back (kGearVocab[gi].api);
     for (const auto& gp : browseGroups_) {
-        if (gp.title == "GEAR TYPE") {
-            for (const auto& sel : gp.selected)
-                for (const auto& gd : kGearVocab)
-                    if (sel == gd.display) p.gears.push_back (gd.api);
-        } else if (gp.title == "TAGS") {
+        if (gp.title == "TAGS") {
             for (const auto& sel : gp.selected) p.tags.push_back (sel.toStdString());
         } else if (gp.title == "MAKES & MODELS") {
             for (const auto& sel : gp.selected) p.makes.push_back (sel.toStdString());

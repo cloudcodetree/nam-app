@@ -67,7 +67,7 @@ void PlayScreen::setDeckView (int v) {
     if (view_ == v) return;
     view_ = v;
     flyOpen_ = false;
-    gearSel_ = -1;       // fresh filter state per view (owner re-sends groups)
+    gearSel_ = 0;        // fresh filter state per view (owner re-sends groups)
     layout();
     startTimerHz (60);   // slide the toggle thumb
     repaint();
@@ -79,6 +79,13 @@ void PlayScreen::notifyFilters() {
 
 void PlayScreen::setFilterGroups (std::vector<FilterGroup> groups) {
     filterGroups_ = std::move (groups);
+    layout();
+    repaint();
+}
+
+void PlayScreen::setGearChoices (juce::StringArray names) {
+    gearNames_ = std::move (names);
+    gearSel_ = 0;
     layout();
     repaint();
 }
@@ -127,10 +134,10 @@ void PlayScreen::layout() {
     gearRect_    = { topBar_.getRight() - 58,  topBar_.getCentreY() - 21, 42, 42 };
     liveTopRect_ = editTopRect_ = {};   // gear only (Hi-Fi design)
 
-    // Filters strip above the card. Browse: [ALL][AMPS][CABS] format pills
-    // to the left of a Filters pill. Favorites: Filters pill alone, shown
-    // only when the deck offers any chips. Pills hug their content.
-    gearRects_.fill ({});
+    // Filters strip above the card. Browse: gear-type dropdown to the left
+    // of a Filters pill. Favorites: Filters pill alone, shown only when the
+    // deck offers any chips. Pills hug their content.
+    gearDdRect_ = {};
     bool anyFilterChips = false;
     for (const auto& gp : filterGroups_)
         if (! gp.options.isEmpty()) { anyFilterChips = true; break; }
@@ -143,21 +150,15 @@ void PlayScreen::layout() {
         const int tw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
                            uiFont (12.0f, true), label));
         const int fw = 14 + 16 + 10 + tw + 16;   // pad · icon · gap · label · pad
-        if (view_ == 1) {
-            static const char* gearNames[] = { "ALL", "AMPS", "CABS" };
-            int gw[3], total = 0;
-            for (int i = 0; i < 3; ++i) {
-                gw[i] = 24 + (int) std::ceil (juce::GlyphArrangement::getStringWidth (
-                            uiFontTracked (10.0f, true), gearNames[i]));
-                total += gw[i] + 8;
-            }
-            total += fw;
+        if (view_ == 1 && ! gearNames_.isEmpty()) {
+            const auto gearLabel = gearNames_[juce::jlimit (0, gearNames_.size() - 1, gearSel_)];
+            const int gtw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
+                                uiFont (12.0f, true), gearLabel));
+            const int gw = 16 + gtw + 10 + 12 + 12;   // pad · label · gap · chevron · pad
+            const int total = gw + 8 + fw;
             int x = fs.getCentreX() - total / 2;
-            for (int i = 0; i < 3; ++i) {
-                gearRects_[(size_t) i] = { x, fs.getY() + 3, gw[i], 38 };
-                x += gw[i] + 8;
-            }
-            filterBtnRect_ = { x, fs.getY() + 3, fw, 38 };
+            gearDdRect_ = { x, fs.getY() + 3, gw, 38 };
+            filterBtnRect_ = { x + gw + 8, fs.getY() + 3, fw, 38 };
         } else {
             filterBtnRect_ = { fs.getCentreX() - fw / 2, fs.getY() + 3, fw, 38 };
         }
@@ -356,18 +357,18 @@ void PlayScreen::paint (juce::Graphics& g) {
         }
         text ("BROWSE", uiFontTracked (10.0f, true), browseCol,
               browseViewRect_, juce::Justification::centred);
-        // Gear pills (browse): ALL / AMPS / CABS radio.
-        if (! gearRects_[0].isEmpty()) {
-            static const char* gearNames[] = { "ALL", "AMPS", "CABS" };
-            for (int i = 0; i < 3; ++i) {
-                const bool on = gearSel_ == i - 1;
-                drawPill (g, gearRects_[(size_t) i].toFloat(),
-                          on ? col::accent : col::bg.withAlpha (0.4f),
-                          on ? col::accent : col::inkA (0.18f));
-                text (gearNames[i], uiFontTracked (10.0f, true),
-                      on ? col::inkOnAccent : col::inkA (0.55f),
-                      gearRects_[(size_t) i], juce::Justification::centred);
-            }
+        // Gear-type dropdown (browse strip).
+        if (! gearDdRect_.isEmpty()) {
+            const bool hot = gearSel_ > 0;
+            drawPill (g, gearDdRect_.toFloat(),
+                      hot ? col::accentA (0.12f) : col::bg.withAlpha (0.4f),
+                      hot ? col::accentA (0.6f) : col::inkA (0.18f));
+            auto in = gearDdRect_.reduced (14, 0);
+            text (juce::String::fromUTF8 ("\xE2\x96\xBE"), uiFont (10.0f, false),
+                  col::inkA (0.5f), in.removeFromRight (14), juce::Justification::centred);
+            text (gearNames_[juce::jlimit (0, gearNames_.size() - 1, gearSel_)],
+                  uiFont (12.0f, true), hot ? col::accentAlt : col::inkA (0.7f),
+                  in, juce::Justification::centredLeft);
         }
         if (! filterBtnRect_.isEmpty()) {
             const int n = activeFilterCount();
@@ -772,13 +773,20 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
 
     if (favViewRect_.contains (p))    { if (onViewChange) onViewChange (0); return; }
     if (browseViewRect_.contains (p)) { if (onViewChange) onViewChange (1); return; }
-    for (int i = 0; i < 3; ++i)
-        if (! gearRects_[(size_t) i].isEmpty() && gearRects_[(size_t) i].contains (p)) {
-            gearSel_ = i - 1;
-            repaint();
-            if (onFormatChange) onFormatChange (gearSel_);
-            return;
-        }
+    if (! gearDdRect_.isEmpty() && gearDdRect_.contains (p)) {
+        juce::PopupMenu m;
+        for (int i = 0; i < gearNames_.size(); ++i)
+            m.addItem (i + 1, gearNames_[i], true, i == gearSel_);
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this),
+            [this] (int r) {
+                if (r <= 0) return;
+                gearSel_ = r - 1;
+                layout();   // dropdown pill width tracks the label
+                repaint();
+                if (onGearSelect) onGearSelect (gearSel_);
+            });
+        return;
+    }
     if (! filterBtnRect_.isEmpty() && filterBtnRect_.contains (p)) {
         flyOpen_ = true;
         layout();

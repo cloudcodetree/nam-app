@@ -40,8 +40,10 @@ public:
     std::function<void()>     onTuner;          // tuner panel -> strobe tuner
     std::function<void (int)> onViewChange;     // 0 favorites · 1 browse
     std::function<void()>     onKeepToggle;     // heart tap / swipe-down keep
-    // Format strip (browse): -1 all · 0 amps (nam) · 1 cabs (ir).
-    std::function<void (int)> onFormatChange;
+    // Gear dropdown (browse strip): owner supplies choices (index 0 = all);
+    // selection index is reported back.
+    void setGearChoices (juce::StringArray names);
+    std::function<void (int)> onGearSelect;
 
     // Generic filter groups (owner defines them per view; radio groups keep
     // exactly one selection). The flyout renders them with separators.
@@ -84,7 +86,8 @@ private:
     int   demoSel_ = 0;
     float burst_ = 0.0f;             // heart-pop overlay (1 -> 0)
     bool  flyOpen_ = false;          // filters flyout
-    int   gearSel_ = -1;             // format strip: -1 all · 0 amps · 1 cabs
+    juce::StringArray gearNames_;    // dropdown choices (0 = all)
+    int   gearSel_ = 0;
     std::vector<FilterGroup> filterGroups_;
     int  activeFilterCount() const;
     // Card flip: 0 = artwork front, 1 = settings back.
@@ -123,7 +126,7 @@ private:
     int   flyContentH_ = 0;
     bool  flyPressed_ = false, flyMoved_ = false;
     juce::Point<int> flyPressPos_;
-    std::array<juce::Rectangle<int>, 3> gearRects_;   // ALL / AMPS / CABS (browse)
+    juce::Rectangle<int> gearDdRect_;   // gear-type dropdown (browse strip)
     std::array<juce::Rectangle<int>, 25> dotRects_;   // pagination hits (one page)
 
     void layout();

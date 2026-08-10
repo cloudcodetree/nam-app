@@ -183,7 +183,7 @@ private:
     void pushFilterGroups();
     int  favGear_ = -1;                      // -1 all · 0 amps · 1 cabs
     juce::StringArray favTags_, favMakes_;
-    int  browseFormat_ = -1;                 // -1 all · 0 nam · 1 ir
+    int  browseGear_ = 0;                    // gear dropdown index (0 = all)
     std::vector<PlayScreen::FilterGroup> browseGroups_;
     void showFavCard (int index, bool loadIntoEngine);
     void showBrowseCard (int index);
