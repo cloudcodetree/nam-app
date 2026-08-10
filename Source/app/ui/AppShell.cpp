@@ -122,7 +122,17 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         }
     };
 
-    play_->onSelectCab = [this] (int i) {
+    play_->onSelectPair = [this] (int i) {
+        if (curCardIsCab_) {
+            // PAIR AMP: load the chosen kept model under this cab (0 keeps
+            // whatever amp is already running).
+            if (i <= 0 || ! loadModel_) return;
+            const auto ms = keptModelsSorted();
+            if (i - 1 < (int) ms.size()) loadModel_ (ms[(size_t) (i - 1)]);
+            return;
+        }
+        // PAIR CAB: bundled cab or a kept IR.
+        pairCabSel_ = i;
         if (i < cabBuiltinCount_) { if (svc_.setCab) svc_.setCab (i); return; }
         if (! getIrs_) return;
         const auto irs = getIrs_();
@@ -490,6 +500,10 @@ void AppShell::showFavCard (int index, bool loadIntoEngine) {
     play_->setArtwork (artwork_ ? artwork_ (e) : juce::Image());
     play_->setKept (true);
     play_->setCabCard (isIr);
+    if (curCardIsCab_ != isIr) {
+        curCardIsCab_ = isIr;
+        pushPairChoices();
+    }
     play_->setPosition (index, n);
 }
 
@@ -512,7 +526,12 @@ void AppShell::showBrowseCard (int index) {
                           {});
     play_->setArtwork (svc_.artworkForTone ? svc_.artworkForTone (t) : juce::Image());
     play_->setKept (svc_.isKept && svc_.isKept (t.id));
-    play_->setCabCard (t.format == "ir" || t.gear == "cab");
+    const bool cab = (t.format == "ir" || t.gear == "cab");
+    play_->setCabCard (cab);
+    if (curCardIsCab_ != cab) {
+        curCardIsCab_ = cab;
+        pushPairChoices();
+    }
     play_->setPosition (index, n);
 }
 
@@ -545,14 +564,34 @@ void AppShell::runPlayBrowse() {
 }
 
 void AppShell::updateCabChoices() {
-    juce::StringArray names;
+    cabChoiceNames_.clear();
     for (int c = 0; c < nam::demo::kNumCabs; ++c)
-        names.add (nam::demo::kCabs[(size_t) c].display);
-    cabBuiltinCount_ = names.size();
+        cabChoiceNames_.add (nam::demo::kCabs[(size_t) c].display);
+    cabBuiltinCount_ = cabChoiceNames_.size();
     if (getIrs_)
         for (const auto& e : getIrs_())
+            cabChoiceNames_.add (juce::String (e.displayName));
+    pushPairChoices();
+}
+
+std::vector<nam::LibraryEntry> AppShell::keptModelsSorted() const {
+    auto ms = getModels_ ? getModels_() : std::vector<nam::LibraryEntry>{};
+    std::stable_sort (ms.begin(), ms.end(),
+                      [] (const auto& a, const auto& b) { return a.addedAt < b.addedAt; });
+    return ms;
+}
+
+void AppShell::pushPairChoices() {
+    if (curCardIsCab_) {
+        // Cab card: choose which amp head drives it (TONE3000 cab pages do
+        // the same). Options come from the kept/downloaded models.
+        juce::StringArray names { "Current amp" };
+        for (const auto& e : keptModelsSorted())
             names.add (juce::String (e.displayName));
-    play_->setCabChoices (std::move (names), 0);
+        play_->setPairChoices ("PAIR AMP", std::move (names), 0);
+    } else {
+        play_->setPairChoices ("PAIR CAB", cabChoiceNames_, pairCabSel_);
+    }
 }
 
 void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {

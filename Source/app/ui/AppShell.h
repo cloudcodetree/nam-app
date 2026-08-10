@@ -209,7 +209,12 @@ private:
     void showFavCard (int index, bool loadIntoEngine);
     void showBrowseCard (int index);
     void updateCabChoices();
+    void pushPairChoices();                   // PAIR row matches the card's gear
+    std::vector<nam::LibraryEntry> keptModelsSorted() const;
     int  cabBuiltinCount_ = 0;                // names beyond this are kept IRs
+    juce::StringArray cabChoiceNames_;
+    bool curCardIsCab_ = false;
+    int  pairCabSel_ = 0;                     // amp cards: current cab pick
     GetDevicesFn   getDevices_;
     SelectDeviceFn selectInput_, selectOutput_, selectRate_, selectBuffer_;
     RescanFn       rescanDevices_;

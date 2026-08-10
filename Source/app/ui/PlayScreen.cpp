@@ -57,9 +57,10 @@ void PlayScreen::setDemoPlaying (bool on) {
     repaint (artRect_);
 }
 
-void PlayScreen::setCabChoices (juce::StringArray names, int sel) {
-    cabNames_ = std::move (names);
-    cabSel_ = sel;
+void PlayScreen::setPairChoices (juce::String label, juce::StringArray names, int sel) {
+    pairLabel_ = std::move (label);
+    pairNames_ = std::move (names);
+    pairSel_ = sel;
     repaint (artRect_);
 }
 
@@ -307,22 +308,18 @@ void PlayScreen::layout() {
         auto rows = artRect_.reduced (24, 16);
         rows.removeFromTop (40);   // name + return button header
         rows.removeFromTop (22);   // QUICK SETTINGS label
+        auto bottom = rows.removeFromBottom (104);
         if (cabCard_) {
-            for (auto& pr : paramRows_) pr = {};
-            pairRowRect_ = {};
-            auto demo = rows.removeFromBottom (54).removeFromTop (46).reduced (0, 4);
-            demoPlayRect_ = demo.removeFromRight (44);
-            demoRowRect_ = demo.withTrimmedRight (8);
+            for (auto& pr : paramRows_) pr = {};   // amp sliders don't apply
         } else {
-            auto bottom = rows.removeFromBottom (104);
             const int rowH = juce::jmin (48, rows.getHeight() / kNumToneParams);
             for (int i = 0; i < kNumToneParams; ++i)
                 paramRows_[(size_t) i] = rows.removeFromTop (rowH).reduced (0, 6);
-            pairRowRect_ = bottom.removeFromTop (46).reduced (0, 4);
-            auto demo = bottom.removeFromTop (46).reduced (0, 4);
-            demoPlayRect_ = demo.removeFromRight (44);
-            demoRowRect_ = demo.withTrimmedRight (8);
         }
+        pairRowRect_ = bottom.removeFromTop (46).reduced (0, 4);
+        auto demo = bottom.removeFromTop (46).reduced (0, 4);
+        demoPlayRect_ = demo.removeFromRight (44);
+        demoRowRect_ = demo.withTrimmedRight (8);
     }
 }
 
@@ -492,10 +489,9 @@ void PlayScreen::paint (juce::Graphics& g) {
                           col::inkA (0.5f), val.removeFromRight (16), juce::Justification::centred);
                     text (value, uiFont (12.0f, true), col::ink, val, juce::Justification::centredLeft);
                 };
-                if (! pairRowRect_.isEmpty())
-                    ddRow (pairRowRect_, "PAIR CAB",
-                           cabNames_.isEmpty() ? juce::String ("--")
-                                               : cabNames_[juce::jlimit (0, cabNames_.size() - 1, cabSel_)]);
+                if (! pairRowRect_.isEmpty() && ! pairNames_.isEmpty())
+                    ddRow (pairRowRect_, pairLabel_,
+                           pairNames_[juce::jlimit (0, pairNames_.size() - 1, pairSel_)]);
                 ddRow (demoRowRect_, "DEMO AUDIO",
                        juce::String (nam::demo::kTracks[juce::jlimit (0, nam::demo::kNumTracks - 1,
                                                                       demoSel_)].display));
@@ -771,8 +767,8 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
                         if (onGearSelect) onGearSelect (i);
                         break;
                     case Menu::Pair:
-                        cabSel_ = i;
-                        if (onSelectCab) onSelectCab (i);
+                        pairSel_ = i;
+                        if (onSelectPair) onSelectPair (i);
                         break;
                     case Menu::Demo:
                         demoSel_ = i;
@@ -941,8 +937,8 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
                 applyParamFromX (i, p.x);
                 return;
             }
-        if (pairRowRect_.contains (p)) {
-            openMenu (Menu::Pair, pairRowRect_, cabNames_, cabSel_);
+        if (pairRowRect_.contains (p) && ! pairNames_.isEmpty()) {
+            openMenu (Menu::Pair, pairRowRect_, pairNames_, pairSel_);
             return;
         }
         if (demoRowRect_.contains (p)) {

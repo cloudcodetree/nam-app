@@ -25,7 +25,9 @@ public:
     void setArtwork (juce::Image art);
     void setKept (bool kept);                 // heart state of the current card
     void setDemoPlaying (bool on);            // card-back demo transport state
-    void setCabChoices (juce::StringArray names, int sel);   // PAIR dropdown
+    // Pairing dropdown on the card back — complements the card's gear type
+    // (amp cards pair a cab; cab cards pair an amp; etc).
+    void setPairChoices (juce::String label, juce::StringArray names, int sel);
     void setDeckView (int v);                 // 0 favorites · 1 browse (reflect)
     // Cab/IR cards: no amp sliders, no PAIR row (a cab can't pair a cab).
     void setCabCard (bool isCab);
@@ -57,7 +59,7 @@ public:
     };
     void setFilterGroups (std::vector<FilterGroup> groups);
     std::function<void (const std::vector<FilterGroup>&)> onFilterGroupsChanged;
-    std::function<void (int)> onSelectCab;      // PAIR pick (into setCabChoices)
+    std::function<void (int)> onSelectPair;     // PAIR pick (into setPairChoices)
     std::function<void (int)> onSelectDemoTrack;
     std::function<void()>     onToggleDemo;     // play/stop demo of current card
     // Card-back slider moved: (param index, normalised 0..1). The owner maps
@@ -84,8 +86,9 @@ private:
     bool  cabCard_ = false;          // current card is a cab/IR
     int   view_ = 0;                 // 0 favorites · 1 browse
     float viewSlide_ = 0.0f;         // animated thumb position (0 fav .. 1 browse)
-    juce::StringArray cabNames_;
-    int   cabSel_ = 0;
+    juce::String pairLabel_ { "PAIR CAB" };
+    juce::StringArray pairNames_;
+    int   pairSel_ = 0;
     int   demoSel_ = 0;
     float burst_ = 0.0f;             // heart-pop overlay (1 -> 0)
     bool  flyOpen_ = false;          // filters flyout
