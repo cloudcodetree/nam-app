@@ -71,6 +71,7 @@ void PlayScreen::setDeckView (int v) {
     view_ = v;
     flyOpen_ = false;
     layout();
+    startTimerHz (60);   // slide the toggle thumb
     repaint();
 }
 
@@ -109,19 +110,19 @@ void PlayScreen::layout() {
     // Top bar: NAM PLAYER wordmark left; edit / live / settings icons right.
     libRect_ = {};
     gearRect_    = { topBar_.getRight() - 58,  topBar_.getCentreY() - 21, 42, 42 };
-    liveTopRect_ = { gearRect_.getX() - 46,    topBar_.getCentreY() - 21, 42, 42 };
-    editTopRect_ = { liveTopRect_.getX() - 46, topBar_.getCentreY() - 21, 42, 42 };
+    liveTopRect_ = editTopRect_ = {};   // gear only (Hi-Fi design)
 
-    // View toggle strip (favorites / browse + filters) under the top bar.
+    // View toggle slider (one pill, sliding thumb) + filters, under the bar.
     auto strip = hero_.removeFromTop (44);
     viewRow_ = strip.reduced (26, 5);
     {
         const int w = 118, h = viewRow_.getHeight();
         const bool browse = view_ == 1;
-        const int total = w * 2 + (browse ? 96 + 10 : 0);
+        const int total = w * 2 + 6 + (browse ? 96 + 10 : 0);
         int x = viewRow_.getCentreX() - total / 2;
-        favViewRect_    = { x, viewRow_.getY(), w, h };  x += w;
-        browseViewRect_ = { x, viewRow_.getY(), w, h };  x += w + 10;
+        favViewRect_    = { x + 3, viewRow_.getY() + 3, w, h - 6 };
+        browseViewRect_ = { x + 3 + w, viewRow_.getY() + 3, w, h - 6 };
+        x += w * 2 + 6 + 10;
         filterBtnRect_  = browse ? juce::Rectangle<int> { x, viewRow_.getY(), 96, h }
                                  : juce::Rectangle<int> {};
     }
@@ -215,6 +216,14 @@ void PlayScreen::timerCallback() {
         burst_ = juce::jmax (0.0f, burst_ - 1.0f / 40.0f);
         busy = busy || burst_ > 0.0f;
     }
+    const float slideTarget = (float) view_;
+    if (std::abs (viewSlide_ - slideTarget) > 0.001f) {
+        const float step = 1.0f / 8.0f;
+        viewSlide_ = juce::jlimit (0.0f, 1.0f,
+            viewSlide_ + (slideTarget > viewSlide_ ? step : -step));
+        busy = busy || std::abs (viewSlide_ - slideTarget) > 0.001f;
+        repaint (viewRow_.expanded (4));
+    }
     if (! busy) stopTimer();
     repaint (artRect_.expanded (12));
 }
@@ -249,29 +258,32 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.drawText ("PLAYER", brand.withTrimmedLeft (nw), juce::Justification::centredLeft, false);
         text (juce::String::fromUTF8 ("\xE2\x9A\x99"), uiFont (22.0f, false),
               col::inkA (0.6f), gearRect_, juce::Justification::centred);
-        text (juce::String::fromUTF8 ("\xE2\x9C\x8E"), uiFont (18.0f, false),
-              col::inkA (0.6f), editTopRect_, juce::Justification::centred);
-        text (juce::String::fromUTF8 ("\xE2\x89\xA1"), uiFont (20.0f, false),
-              col::inkA (0.6f), liveTopRect_, juce::Justification::centred);
     }
 
-    // --- View toggle (♥ FAVORITES / BROWSE) + Filters ---------------------
+    // --- View toggle slider (single pill, animated thumb) + Filters ------
     {
-        auto seg = [&] (juce::Rectangle<int> rr, const juce::String& label, bool on) {
-            drawPill (g, rr.toFloat(), on ? col::accent : juce::Colours::transparentBlack,
-                      on ? col::accent : col::inkA (0.18f));
-            text (label, uiFontTracked (10.0f, true),
-                  on ? col::inkOnAccent : col::inkA (0.55f), rr, juce::Justification::centred);
-        };
-        seg (favViewRect_, "FAVORITES", view_ == 0);
+        const auto container = favViewRect_.getUnion (browseViewRect_).expanded (3);
+        drawPill (g, container.toFloat(), col::bg.withAlpha (0.4f), col::inkA (0.16f));
+        // Sliding accent thumb.
+        const float tx = (float) favViewRect_.getX()
+                       + viewSlide_ * (float) (browseViewRect_.getX() - favViewRect_.getX());
+        const juce::Rectangle<float> thumb (tx, (float) favViewRect_.getY(),
+                                            (float) favViewRect_.getWidth(),
+                                            (float) favViewRect_.getHeight());
+        drawPill (g, thumb, col::accent, col::accent);
+        const auto favCol    = viewSlide_ < 0.5f ? col::inkOnAccent : col::inkA (0.55f);
+        const auto browseCol = viewSlide_ >= 0.5f ? col::inkOnAccent : col::inkA (0.55f);
+        text ("FAVORITES", uiFontTracked (10.0f, true), favCol,
+              favViewRect_.withTrimmedLeft (14), juce::Justification::centred);
         {   // vector heart before the label (emoji fallback ruins the glyph)
             const auto hb = juce::Rectangle<float> (
-                (float) favViewRect_.getX() + 16.0f,
+                (float) favViewRect_.getX() + 13.0f,
                 (float) favViewRect_.getCentreY() - 6.0f, 12.0f, 12.0f);
-            g.setColour (view_ == 0 ? col::inkOnAccent : col::inkA (0.55f));
+            g.setColour (favCol);
             g.fillPath (heartPath (hb));
         }
-        seg (browseViewRect_, "BROWSE", view_ == 1);
+        text ("BROWSE", uiFontTracked (10.0f, true), browseCol,
+              browseViewRect_, juce::Justification::centred);
         if (! filterBtnRect_.isEmpty()) {
             const int n = selTags_.size() + selMakes_.size() + (gearSel_ == 1 ? 1 : 0);
             const bool hot = flyOpen_ || n > 0;
@@ -609,9 +621,7 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
         return;   // outside tap just closes
     }
 
-    if (gearRect_.expanded (4).contains (p))    { if (onSettings) onSettings(); return; }
-    if (editTopRect_.expanded (4).contains (p)) { if (onEdit) onEdit(); return; }
-    if (liveTopRect_.expanded (4).contains (p)) { if (onLive) onLive(); return; }
+    if (gearRect_.expanded (4).contains (p)) { if (onSettings) onSettings(); return; }
 
     if (favViewRect_.contains (p))    { if (onViewChange) onViewChange (0); return; }
     if (browseViewRect_.contains (p)) { if (onViewChange) onViewChange (1); return; }

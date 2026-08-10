@@ -66,6 +66,7 @@ private:
     bool  kept_ = false;
     bool  demoPlaying_ = false;
     int   view_ = 0;                 // 0 favorites · 1 browse
+    float viewSlide_ = 0.0f;         // animated thumb position (0 fav .. 1 browse)
     juce::StringArray cabNames_;
     int   cabSel_ = 0;
     int   demoSel_ = 0;
