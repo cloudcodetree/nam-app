@@ -43,6 +43,20 @@ juce::Rectangle<int> PlayScreen::deckItemRect (int i) const {
              area.getY () + (i / cols) * (cw + gap) - (int)deckScroll_, cw, cw };
 }
 
+// Expanded-row control rects from CURRENT geometry (scroll included) — the
+// single source of truth for both painting and tap hit-testing.
+void PlayScreen::deckExpandedRects (juce::Rectangle<int>& demoRow, juce::Rectangle<int>& playBtn,
+                                    juce::Rectangle<int>& pairRow) const {
+    demoRow = playBtn = pairRow = {};
+    if (layoutMode_ != 1 || deckExpanded_ < 0 || deckExpanded_ >= (int)deckItems_.size ()) return;
+    auto ex = deckItemRect (deckExpanded_).withTrimmedTop (68).reduced (12, 4);
+    auto row = ex.removeFromTop (44);
+    playBtn = row.removeFromRight (40).withSizeKeepingCentre (34, 34);
+    demoRow = row.withTrimmedRight (6);
+    ex.removeFromTop (6);
+    pairRow = ex.removeFromTop (44);
+}
+
 int PlayScreen::deckContentHeight () const {
     const int n = (int)deckItems_.size ();
     if (n == 0) return 0;
@@ -144,7 +158,10 @@ void PlayScreen::paintDeckPanel (juce::Graphics& g) {
             if (expanded) {
                 // DEMO AUDIO + PAIR dropdown rows (mirror the card back;
                 // the PAIR label/choices already track this row's type).
-                auto ex = rr.withTrimmedTop (68).reduced (12, 4);
+                // Rects come from the shared live-geometry helper so paint
+                // and hit-testing can never disagree.
+                juce::Rectangle<int> demoRow, playBtn, pairRow;
+                deckExpandedRects (demoRow, playBtn, pairRow);
                 auto ddRow = [&g] (juce::Rectangle<int> r2, const juce::String& label,
                                    const juce::String& value) {
                     g.setColour (col::inkA (0.05f));
@@ -164,25 +181,20 @@ void PlayScreen::paintDeckPanel (juce::Graphics& g) {
                     g.setColour (col::ink);
                     g.drawText (value, r3, juce::Justification::centredLeft, false);
                 };
-                auto demoRow = ex.removeFromTop (44);
-                deckPlayR_ = demoRow.removeFromRight (40).withSizeKeepingCentre (34, 34);
-                deckDemoRowR_ = demoRow.withTrimmedRight (6);
-                ddRow (deckDemoRowR_, "DEMO AUDIO",
+                ddRow (demoRow, "DEMO AUDIO",
                        juce::String (
                            nam::demo::kTracks[juce::jlimit (0, nam::demo::kNumTracks - 1, demoSel_)]
                                .display));
                 g.setColour (demoPlaying_ ? col::accent : juce::Colours::transparentBlack);
-                g.fillEllipse (deckPlayR_.toFloat ().reduced (2.0f));
+                g.fillEllipse (playBtn.toFloat ().reduced (2.0f));
                 g.setColour (demoPlaying_ ? col::accent : col::inkA (0.3f));
-                g.drawEllipse (deckPlayR_.toFloat ().reduced (2.5f), 1.0f);
+                g.drawEllipse (playBtn.toFloat ().reduced (2.5f), 1.0f);
                 g.setFont (uiFont (11.0f, false));
                 g.setColour (demoPlaying_ ? col::inkOnAccent : col::inkA (0.8f));
                 g.drawText (juce::String::fromUTF8 (demoPlaying_ ? "\xE2\x97\xBC" : "\xE2\x96\xB6"),
-                            deckPlayR_, juce::Justification::centred, false);
-                ex.removeFromTop (6);
-                deckPairRowR_ = ex.removeFromTop (44);
+                            playBtn, juce::Justification::centred, false);
                 if (!pairNames_.isEmpty ())
-                    ddRow (deckPairRowR_, pairLabel_,
+                    ddRow (pairRow, pairLabel_,
                            pairNames_[juce::jlimit (0, pairNames_.size () - 1, pairSel_)]);
             }
         } else {

@@ -870,19 +870,23 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
             const auto p = e.getPosition ();
             deckPressed_ = deckMoved_ = false;
             if (layoutMode_ == 1 && deckExpanded_ >= 0) {
-                if (deckPlayR_.expanded (4).contains (p)) {
+                // Live geometry (shared with paint): a scroll since the last
+                // repaint can't leave these rects stale.
+                juce::Rectangle<int> demoRow, playBtn, pairRow;
+                deckExpandedRects (demoRow, playBtn, pairRow);
+                if (playBtn.expanded (4).contains (p)) {
                     if (onToggleDemo) onToggleDemo ();
                     return;
                 }
-                if (deckDemoRowR_.contains (p)) {
+                if (demoRow.contains (p)) {
                     juce::StringArray tracks;
                     for (int i = 0; i < nam::demo::kNumTracks; ++i)
                         tracks.add (nam::demo::kTracks[i].display);
-                    openMenu (Menu::Demo, deckDemoRowR_, std::move (tracks), demoSel_);
+                    openMenu (Menu::Demo, demoRow, std::move (tracks), demoSel_);
                     return;
                 }
-                if (deckPairRowR_.contains (p) && !pairNames_.isEmpty ()) {
-                    openMenu (Menu::Pair, deckPairRowR_, pairNames_, pairSel_);
+                if (pairRow.contains (p) && !pairNames_.isEmpty ()) {
+                    openMenu (Menu::Pair, pairRow, pairNames_, pairSel_);
                     return;
                 }
             }

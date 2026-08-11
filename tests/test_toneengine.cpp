@@ -108,6 +108,28 @@ TEST_CASE("ToneEngine frees retired models only after two completed blocks") {
     REQUIRE(w1.expired());
 }
 
+TEST_CASE("ToneEngine bounds retired models while the device is stopped") {
+    // Stagnation fallback: with no render running the block counter never
+    // advances, so the two-completed-blocks gate can never fire — but that
+    // also proves no render is holding a retiree. Swapping many models with
+    // audio stopped must not accumulate them all until the next prepare().
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
+
+    std::shared_ptr<nam::NamModel> m0 = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m0 != nullptr);
+    std::weak_ptr<nam::NamModel> w0 = m0;
+    e.setModel(std::move(m0));
+    m0.reset();
+
+    for (int i = 0; i < 12; ++i) {   // no render() calls anywhere in here
+        auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+        REQUIRE(m != nullptr);
+        e.setModel(std::move(m));
+    }
+    REQUIRE(w0.expired());   // the oldest retiree was reclaimed despite no blocks
+}
+
 TEST_CASE(
     "ToneEngine clamps render to the active model's max block during a buffer-size increase") {
     // Reproduces the hazardous window: prepare() resizes scratch_ for a new

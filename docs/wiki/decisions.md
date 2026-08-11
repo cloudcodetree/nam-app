@@ -3,6 +3,11 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-11** Async snapshots re-validate against live truth: browse
+  appends carry a generation token; expanded-row tap rects recompute from
+  current scroll; retire lists get a stagnation fallback for the stopped-
+  device case. Why: three reviewer MAJORs shared the same root cause —
+  state captured at one moment, consulted at another.
 - **2026-08-11** Pagination retired entirely (dots + page arrows): replaced
   by infinite append — browse fetches the next page when the user nears the
   deck end (scroll or swipe). Why: with view types + scrollable lists the

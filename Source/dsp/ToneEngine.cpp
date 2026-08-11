@@ -45,6 +45,12 @@ void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
     retired_.erase(std::remove_if(retired_.begin(), retired_.end(),
                                   [nowBlocks](const auto& r) { return nowBlocks >= r.second + 2; }),
                    retired_.end());
+    // Stagnation fallback: if the counter hasn't moved since the OLDEST
+    // retiree was stamped and the list keeps growing, no render has run for
+    // that entire span — the device is stopped, so freeing the oldest is
+    // safe and stops audio-stopped swaps from accumulating until prepare().
+    while (retired_.size() > 8 && nowBlocks == retired_.front().second)
+        retired_.erase(retired_.begin());
     if (current_) retired_.push_back({ std::move(current_), nowBlocks });
     current_ = m;
 

@@ -729,18 +729,18 @@ void AppShell::fetchMoreBrowse () {
     browseFetching_ = true;
     auto p = buildBrowseParams ();
     p.page = browsePage_ + 1;
-    svc_.searchEx (p,
-                   [this, page = p.page] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
-                       browseFetching_ = false;
-                       if (!ok || deckMode_ != 2) return;
-                       browsePage_ = page;
-                       if ((int)tones.size () < 25)
-                           browseExhausted_ = true;   // short page = the end
-                       for (auto& t : tones) playDeck_.push_back (std::move (t));
-                       pushDeckItems ();
-                       if (playDeckIndex_ >= 0)
-                           play_->setPosition (playDeckIndex_, (int)playDeck_.size ());
-                   });
+    svc_.searchEx (p, [this, page = p.page,
+                       gen = browseGen_] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
+        browseFetching_ = false;
+        // A fresh query replaced the deck while this page was
+        // in flight — appending would mix two searches. Drop.
+        if (!ok || deckMode_ != 2 || gen != browseGen_) return;
+        browsePage_ = page;
+        if ((int)tones.size () < 25) browseExhausted_ = true;   // short page = the end
+        for (auto& t : tones) playDeck_.push_back (std::move (t));
+        pushDeckItems ();
+        if (playDeckIndex_ >= 0) play_->setPosition (playDeckIndex_, (int)playDeck_.size ());
+    });
 }
 
 nam::SearchParams AppShell::buildBrowseParams () const {
@@ -767,17 +767,20 @@ nam::SearchParams AppShell::buildBrowseParams () const {
 
 void AppShell::runPlayBrowse () {
     if (!svc_.searchEx) return;
-    // A fresh query restarts the infinite deck at page 1.
+    // A fresh query restarts the infinite deck at page 1 and invalidates
+    // any in-flight append (generation token).
     browsePage_ = 1;
     browseExhausted_ = false;
+    ++browseGen_;
     auto p = buildBrowseParams ();
     p.page = 1;
-    svc_.searchEx (p, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
-        if (!ok) return;
-        playDeck_ = std::move (tones);
-        playDeckIndex_ = playDeck_.empty () ? -1 : 0;
-        if (deckMode_ == 2) showBrowseCard (0);
-    });
+    svc_.searchEx (
+        p, [this, gen = browseGen_] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
+            if (!ok || gen != browseGen_) return;   // superseded by a newer query
+            playDeck_ = std::move (tones);
+            playDeckIndex_ = playDeck_.empty () ? -1 : 0;
+            if (deckMode_ == 2) showBrowseCard (0);
+        });
 }
 
 void AppShell::updateCabChoices () {

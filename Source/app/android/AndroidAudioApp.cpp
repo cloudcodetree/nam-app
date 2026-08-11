@@ -1104,6 +1104,11 @@ void AndroidAudioApp::reclaimRetiredDemos() {
     retiredDemos_.erase(std::remove_if(retiredDemos_.begin(), retiredDemos_.end(),
                                        [now](const auto& r) { return now >= r.second + 2; }),
                         retiredDemos_.end());
+    // Stagnation fallback (device stopped: the counter never advances, so
+    // the block gate can never fire): no callback has run since the OLDEST
+    // retiree was stamped, so freeing it is safe. Mirrors ToneEngine.
+    while (retiredDemos_.size() > 8 && now == retiredDemos_.front().second)
+        retiredDemos_.erase(retiredDemos_.begin());
 }
 
 void AndroidAudioApp::publishTrack(int index, std::shared_ptr<const std::vector<float>> buf) {

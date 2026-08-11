@@ -146,8 +146,11 @@ private:
     // dropdown rows (same state the card back uses; type-aware PAIR label).
     int deckExpanded_ = -1;
     static constexpr int kDeckExpandH = 104;
-    juce::Rectangle<int> deckDemoRowR_, deckPairRowR_, deckPlayR_;   // inside the expanded row
-    juce::Rectangle<int> viewBtnRect_;                               // strip: layout picker button
+    // Expanded-row control rects, computed LIVE from the current scroll —
+    // shared by paint and hit-testing so a scroll can't leave taps stale.
+    void deckExpandedRects (juce::Rectangle<int>& demoRow, juce::Rectangle<int>& playBtn,
+                            juce::Rectangle<int>& pairRow) const;
+    juce::Rectangle<int> viewBtnRect_;   // strip: layout picker button
     float deckScroll_ = 0.0f, deckPressScroll_ = 0.0f;
     bool deckPressed_ = false, deckMoved_ = false;
     juce::Rectangle<int> deckItemRect (int i) const;   // list/grid geometry

@@ -235,6 +235,7 @@ private:
     int browsePage_ = 1;             // last TONE3000 page fetched (1-based)
     bool browseFetching_ = false;    // an append fetch is in flight
     bool browseExhausted_ = false;   // a short page came back: no more results
+    int browseGen_ = 0;              // bumped per fresh query; stale fetches drop
     void fetchMoreBrowse ();         // append the next page (infinite scroll)
     nam::SearchParams buildBrowseParams () const;
     static constexpr int kBrowseDeckCap = 300;   // bounded (house rule)
