@@ -1,0 +1,22 @@
+#!/bin/bash
+# Auto-push after merges: git merge fires post-merge (not post-commit), so
+# merge commits need this twin of .githooks/post-commit. Same behavior:
+# background push of the current branch, gated by pre-push review, logged to
+# .git/autopush.log. Disable per-merge with NO_AUTOPUSH=1.
+set -u
+
+[ "${NO_AUTOPUSH:-0}" = "1" ] && exit 0
+
+branch=$(git symbolic-ref --short -q HEAD) || exit 0   # detached HEAD: skip
+log="$(git rev-parse --git-dir)/autopush.log"
+
+{
+    echo "=== $(date '+%Y-%m-%d %H:%M:%S') autopush $branch ($(git rev-parse --short HEAD)) ==="
+    if git push origin "$branch" 2>&1; then
+        echo "[autopush] pushed $branch"
+    else
+        echo "[autopush] PUSH FAILED for $branch (review block or network — see above)"
+    fi
+} >> "$log" 2>&1 &
+
+echo "[post-merge] auto-push of $branch started (log: .git/autopush.log)"
