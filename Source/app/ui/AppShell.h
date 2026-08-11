@@ -2,6 +2,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <array>
 #include <functional>
+#include <map>
 #include <memory>
 #include <vector>
 #include "dsp/ToneEngine.h"
@@ -86,6 +87,7 @@ public:
         std::function<juce::String()> loadStacksJson;
         std::function<void (juce::String)> saveStacksJson;
         DownloadFn loadTone;
+        std::function<void (bool)> setTestTone;   // orb panel: output check tone
     };
     void setBrowseServices (BrowseServices services);
 
@@ -193,13 +195,21 @@ private:
     // Global bottom chrome: persistent nav bar with a central status orb —
     // circular meter (input arc left / output arc right), latency readout in
     // the centre, tap opens the I/O mute panel.
-    // Nav: BROWSE / FAVORITES | orb | DOWNLOADED / STACKS.
+    // Nav: BROWSE / FAVORITES | orb | STACKS / ⋯ (more menu holds DOWNLOADED).
     juce::Rectangle<int> navBar_, orbRect_,
-                         navBrowseRect_, navFavRect_, navSavedRect_, navStacksRect_;
+                         navBrowseRect_, navFavRect_, navStacksRect_, navMoreRect_;
     void setDeckMode (int mode);              // nav deck buttons (0 fav · 1 saved · 2 browse)
+    // ⋯ menu: small overlay above the nav's right corner (house overlay style).
+    bool moreOpen_ = false;
+    juce::Rectangle<int> moreRect_;
+    ClickAway moreScrim_;
+    void openMoreMenu();
+    void closeMoreMenu();
     juce::Rectangle<int> ioPanelRect_, ioEngRow_, ioInRow_, ioOutRow_;
     juce::Rectangle<int> ioRatePill_, ioBufPill_;   // ENGINE row dropdowns
     void openEnginePicker (bool buffer);            // rate / buffer chooser
+    juce::Rectangle<int> ioTestRect_;               // TEST TONE toggle row
+    bool testToneOn_ = false;
     bool  ioPanelOpen_ = false;
     std::array<juce::Rectangle<int>, 5> navRects_;
     int   activeTab_ = 0;   // 0 Play · 1 Edit · 2 Tones · 3 Live · 4 Setup (-1 none)
@@ -226,6 +236,8 @@ private:
     std::vector<PlayScreen::FilterGroup> browseGroups_;
     void showFavCard (int index, bool loadIntoEngine);
     void showBrowseCard (int index);
+    void pushDeckItems();                    // list/grid rows (AppShellDeck.cpp)
+    std::map<std::string, juce::Image> thumbCache_;   // id -> small image (bounded)
     void updateCabChoices();
     // Stacks state (persisted through the host as JSON).
     std::vector<StacksScreen::Stack> stackList_;

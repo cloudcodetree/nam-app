@@ -93,6 +93,8 @@ if(NAM_BUILD_APP)
             Source/app/android/AndroidAudioApp.cpp
             Source/app/ui/NamLookAndFeel.cpp
             Source/app/ui/PlayScreen.cpp
+            Source/app/ui/PlayScreenDeck.cpp
+            Source/app/ui/AppShellDeck.cpp
             Source/app/ui/EditScreen.cpp
             Source/app/ui/BrowseScreen.cpp
             Source/app/ui/LibraryScreen.cpp

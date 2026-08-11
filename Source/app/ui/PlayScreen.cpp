@@ -93,42 +93,6 @@ void PlayScreen::setDeckView (int v) {
     repaint();
 }
 
-void PlayScreen::setDeckItems (std::vector<DeckItem> items) {
-    deckItems_ = std::move (items);
-    deckScroll_ = juce::jlimit (0.0f,
-        (float) juce::jmax (0, deckContentHeight() - artRect_.getHeight()), deckScroll_);
-    if (layoutMode_ != 0) repaint (artRect_.expanded (12));
-}
-
-void PlayScreen::setActiveDeckIndex (int index) {
-    if (activeIdx_ == index) return;
-    activeIdx_ = index;
-    if (layoutMode_ != 0) repaint (artRect_.expanded (12));
-}
-
-// List/grid geometry, shared by paint and hit-testing. Rects are in screen
-// coords with the current scroll applied.
-juce::Rectangle<int> PlayScreen::deckItemRect (int i) const {
-    const auto area = artRect_.reduced (10, 10);
-    if (layoutMode_ == 1) {
-        constexpr int rowH = 68, gap = 6;
-        return { area.getX(), area.getY() + i * (rowH + gap) - (int) deckScroll_,
-                 area.getWidth(), rowH };
-    }
-    const int cols = layoutMode_ == 2 ? 2 : 4;
-    const int gap = layoutMode_ == 2 ? 8 : 6;
-    const int cw = (area.getWidth() - gap * (cols - 1)) / cols;
-    return { area.getX() + (i % cols) * (cw + gap),
-             area.getY() + (i / cols) * (cw + gap) - (int) deckScroll_, cw, cw };
-}
-
-int PlayScreen::deckContentHeight() const {
-    const int n = (int) deckItems_.size();
-    if (n == 0) return 0;
-    const auto last = deckItemRect (n - 1);
-    return last.getBottom() + (int) deckScroll_ - (artRect_.getY() + 10) + 20;
-}
-
 void PlayScreen::setPageNav (bool canPrev, bool canNext) {
     if (pagePrev_ == canPrev && pageNext_ == canNext) return;
     pagePrev_ = canPrev;
@@ -263,6 +227,11 @@ void PlayScreen::layout() {
         } else {
             filterBtnRect_ = {};
         }
+        // View-type button: leftmost of the right-side pill cluster.
+        const int anchorX = ! gearDdRect_.isEmpty() ? gearDdRect_.getX()
+                          : ! filterBtnRect_.isEmpty() ? filterBtnRect_.getX()
+                          : fs.getRight() - 30 + 8;
+        viewBtnRect_ = { anchorX - 8 - 38, fs.getY() + 3, 38, 38 };
     }
 
     // Filters flyout: chips anchored under the filter button, grouped under
@@ -422,6 +391,42 @@ void PlayScreen::paint (juce::Graphics& g) {
         text (view_ == 2 ? "BROWSE" : view_ == 1 ? "DOWNLOADED" : "FAVORITES",
               uiFontTracked (11.0f, true), col::inkA (0.5f),
               viewTitleRect_, juce::Justification::centredLeft);
+        // View-type button: icon mirrors the active layout.
+        drawPill (g, viewBtnRect_.toFloat(), col::bg.withAlpha (0.4f), col::inkA (0.18f));
+        {
+            const auto ib = viewBtnRect_.toFloat().withSizeKeepingCentre (16.0f, 16.0f);
+            g.setColour (col::inkA (0.7f));
+            switch (layoutMode_) {
+                case 1:   // detail list: thumb square + two text lines, ×2
+                    for (int r = 0; r < 2; ++r) {
+                        const float y = ib.getY() + 1.0f + (float) r * 8.0f;
+                        g.fillRoundedRectangle (ib.getX(), y, 6.0f, 6.0f, 1.5f);
+                        g.fillRoundedRectangle (ib.getX() + 9.0f, y + 0.5f, 7.0f, 2.0f, 1.0f);
+                        g.fillRoundedRectangle (ib.getX() + 9.0f, y + 3.8f, 5.0f, 1.6f, 0.8f);
+                    }
+                    break;
+                case 2:   // 2×2 grid
+                    for (int k = 0; k < 4; ++k)
+                        g.fillRoundedRectangle (ib.getX() + (float) (k % 2) * 9.0f,
+                                                ib.getY() + (float) (k / 2) * 9.0f,
+                                                7.0f, 7.0f, 1.6f);
+                    break;
+                case 3:   // 4×3 dots (dense grid)
+                    for (int k = 0; k < 12; ++k)
+                        g.fillRoundedRectangle (ib.getX() + (float) (k % 4) * 4.6f,
+                                                ib.getY() + 1.5f + (float) (k / 4) * 4.6f,
+                                                3.2f, 3.2f, 0.9f);
+                    break;
+                default:  // swipe cards: front card + peeking neighbour
+                    g.drawRoundedRectangle (ib.getX() + 3.5f, ib.getY() + 1.0f,
+                                            9.0f, 14.0f, 2.0f, 1.4f);
+                    g.fillRoundedRectangle (ib.getRight() - 2.5f, ib.getY() + 3.0f,
+                                            2.0f, 10.0f, 1.0f);
+                    g.fillRoundedRectangle (ib.getX(), ib.getY() + 3.0f,
+                                            2.0f, 10.0f, 1.0f);
+                    break;
+            }
+        }
         // Gear-type dropdown (browse strip).
         if (! gearDdRect_.isEmpty()) {
             const bool hot = gearSel_ > 0;
@@ -456,8 +461,10 @@ void PlayScreen::paint (juce::Graphics& g) {
         }
     }
 
-    // --- Hero card: artwork front / settings back (flip = squash-X) -----
-    {
+    // --- Deck area: hero card (mode 0) or list/grid panel ----------------
+    if (layoutMode_ != 0) {
+        paintDeckPanel (g);
+    } else {
         const float sc = std::abs (std::cos (flip_ * juce::MathConstants<float>::pi));
         const auto face = artRect_.withSizeKeepingCentre (
             juce::jmax (2, (int) ((float) artRect_.getWidth() * sc)), artRect_.getHeight());
@@ -643,20 +650,19 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.restoreState();
         g.setColour (col::inkA (backFace ? 0.14f : 0.10f));
         g.drawRoundedRectangle (face.toFloat(), 14.0f, 1.0f);
-    }
 
-    // --- Transport: circled side chevrons + dots pagination --------------
-    // The buttons straddle the card edge, so they paint after it (on top).
-    auto chevBtn = [&] (juce::Rectangle<int> rr, const char* glyph) {
-        g.setColour (col::bg.withAlpha (0.72f));
-        g.fillEllipse (rr.toFloat());
-        g.setColour (col::inkA (0.28f));
-        g.drawEllipse (rr.toFloat().reduced (0.5f), 1.0f);
-        text (juce::String::fromUTF8 (glyph), uiFont (22.0f, false),
-              col::inkA (0.75f), rr, juce::Justification::centred);
-    };
-    chevBtn (prevRect_, "\xE2\x80\xB9");
-    chevBtn (nextRect_, "\xE2\x80\xBA");
+        // Circled side chevrons straddle the card edge (card mode only).
+        auto chevBtn = [&] (juce::Rectangle<int> rr, const char* glyph) {
+            g.setColour (col::bg.withAlpha (0.72f));
+            g.fillEllipse (rr.toFloat());
+            g.setColour (col::inkA (0.28f));
+            g.drawEllipse (rr.toFloat().reduced (0.5f), 1.0f);
+            text (juce::String::fromUTF8 (glyph), uiFont (22.0f, false),
+                  col::inkA (0.75f), rr, juce::Justification::centred);
+        };
+        chevBtn (prevRect_, "\xE2\x80\xB9");
+        chevBtn (nextRect_, "\xE2\x80\xBA");
+    }
     // Page arrows bracketing the dots (dimmed when that direction is empty).
     if (pagePrev_ || pageNext_) {
         text (juce::String::fromUTF8 ("\xE2\x80\xB9"), uiFont (17.0f, true),
@@ -850,6 +856,13 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
                         demoSel_ = i;
                         if (onSelectDemoTrack) onSelectDemoTrack (i);
                         break;
+                    case Menu::ViewType:
+                        layoutMode_ = i;
+                        flipped_ = false;   // card back has no meaning off-card
+                        flip_ = 0.0f;
+                        deckScroll_ = 0.0f;
+                        layout();
+                        break;
                     default: break;
                 }
             }
@@ -884,7 +897,19 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
         flyPressed_ = flyMoved_ = false;
         return;
     }
+    if (deckPressed_) {
+        // Tap (no scroll) selects the item under the finger.
+        if (! deckMoved_)
+            for (int i = 0; i < (int) deckItems_.size(); ++i)
+                if (deckItemRect (i).contains (e.getPosition())) {
+                    if (onSelectAbsolute) onSelectAbsolute (i);
+                    break;
+                }
+        deckPressed_ = deckMoved_ = false;
+        return;
+    }
     if (dragParam_ >= 0) { dragParam_ = -1; return; }
+    if (layoutMode_ != 0) return;   // card gestures are card-mode only
     const int dx = e.getPosition().x - pressPos_.x;
     const int dy = e.getPosition().y - pressPos_.y;
     const bool tap = std::abs (dx) < 12 && std::abs (dy) < 12;
@@ -959,6 +984,17 @@ void PlayScreen::mouseDrag (const juce::MouseEvent& e) {
         }
         return;
     }
+    if (deckPressed_) {
+        const int dy = e.getPosition().y - pressPos_.y;
+        if (std::abs (dy) > 8) deckMoved_ = true;
+        if (deckMoved_) {
+            deckScroll_ = juce::jlimit (0.0f,
+                (float) juce::jmax (0, deckContentHeight() - artRect_.getHeight() + 20),
+                deckPressScroll_ - (float) dy);
+            repaint (artRect_.expanded (2));
+        }
+        return;
+    }
     if (dragParam_ >= 0) applyParamFromX (dragParam_, e.getPosition().x);
 }
 
@@ -1004,6 +1040,21 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
         repaint();
         return;
     }
+    if (! viewBtnRect_.isEmpty() && viewBtnRect_.contains (p)) {
+        openMenu (Menu::ViewType, viewBtnRect_,
+                  { "Swipe cards", "Detail list", "2-column grid", "4-column grid" },
+                  layoutMode_);
+        return;
+    }
+
+    // List/grid deck: presses scroll (drag) or select (tap) — handled in
+    // mouseUp so a scroll gesture never selects.
+    if (layoutMode_ != 0 && artRect_.contains (p)) {
+        deckPressed_ = true;
+        deckMoved_ = false;
+        deckPressScroll_ = deckScroll_;
+        return;
+    }
 
     // Settings face: sliders + PAIR/DEMO controls.
     if (flipped_ && flip_ >= 1.0f) {
@@ -1038,8 +1089,8 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
         return;
     }
 
-    if (prevRect_.expanded (6).contains (p)) { if (onPrev) onPrev(); return; }
-    if (nextRect_.expanded (6).contains (p)) { if (onNext) onNext(); return; }
+    if (layoutMode_ == 0 && prevRect_.expanded (6).contains (p)) { if (onPrev) onPrev(); return; }
+    if (layoutMode_ == 0 && nextRect_.expanded (6).contains (p)) { if (onNext) onNext(); return; }
     if (pagePrev_ && pagePrevRect_.expanded (4).contains (p)) {
         if (onPageDelta) onPageDelta (-1);
         return;

@@ -61,6 +61,11 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         else                showFavCard (deckWindow_ * 25 + k, true);   // dots are windowed
     };
 
+    play_->onSelectAbsolute = [this] (int i) {   // list/grid rows: full-deck index
+        if (deckMode_ == 2) showBrowseCard (i);
+        else                showFavCard (i, true);
+    };
+
     play_->onViewChange = [this] (int v) { setDeckMode (v); };
 
     play_->onPageDelta = [this] (int d) {
@@ -284,6 +289,16 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     ioScrim_.onTapAt  = [this] (juce::Point<int> p) { handleIoPanelTap (p); };
     ioScrim_.onDragAt = [this] (juce::Point<int> p) { handleIoDragAt (p); };
     ioScrim_.onUpAt   = [this] (juce::Point<int> p) { handleIoUpAt (p); };
+    addChildComponent (moreScrim_);
+    moreScrim_.onTapAt = [this] (juce::Point<int> p) {
+        // Single row for now: DOWNLOADED (the deck moved out of the nav).
+        if (moreOpen_ && moreRect_.reduced (6).contains (p)) {
+            closeMoreMenu();
+            setDeckMode (1);
+            return;
+        }
+        closeMoreMenu();
+    };
     devices_->onBack  = [this] { show (Screen::Play); };
     edit_->onDone    = [this] { show (Screen::Play); };
     browse_->onBack  = [this] { show (Screen::Play); };
@@ -597,6 +612,8 @@ void AppShell::showFavCard (int index, bool loadIntoEngine) {
         play_->setKept (false);
         play_->setPosition (-1, 0);
         play_->setPageNav (false, false);
+        pushDeckItems();
+        play_->setActiveDeckIndex (-1);
         return;
     }
     const int n = (int) deck.size();
@@ -630,6 +647,8 @@ void AppShell::showFavCard (int index, bool loadIntoEngine) {
     const int wStart = deckWindow_ * 25;
     play_->setPosition (index - wStart, juce::jmin (25, n - wStart));
     play_->setPageNav (deckWindow_ > 0, wStart + 25 < n);
+    pushDeckItems();
+    play_->setActiveDeckIndex (index);
 }
 
 void AppShell::showBrowseCard (int index) {
@@ -640,6 +659,8 @@ void AppShell::showBrowseCard (int index) {
         play_->setKept (false);
         play_->setPosition (-1, 0);
         play_->setPageNav (browsePage_ > 1, false);   // back out of an empty page
+        pushDeckItems();
+        play_->setActiveDeckIndex (-1);
         return;
     }
     const int n = (int) playDeck_.size();
@@ -662,6 +683,8 @@ void AppShell::showBrowseCard (int index) {
     play_->setPosition (index, n);
     // A full page implies more pages upstream (TONE3000 pages are 25).
     play_->setPageNav (browsePage_ > 1, n >= 25);
+    pushDeckItems();
+    play_->setActiveDeckIndex (index);
 }
 
 void AppShell::runPlayBrowse() {
@@ -965,6 +988,7 @@ void AppShell::toggleTuner() {
 
 void AppShell::show (Screen s) {
     closeIoPanel();
+    closeMoreMenu();
 
     // The tuner overlay belongs to Play: navigating anywhere closes it.
     if (tunerOpen_ && s != Screen::Play) {
@@ -1106,19 +1130,21 @@ void AppShell::resized() {
                             .withTrimmedRight (8);
         navBrowseRect_ = left.removeFromLeft (left.getWidth() / 2);
         navFavRect_    = left;
-        navSavedRect_  = right.removeFromLeft (right.getWidth() / 2);
-        navStacksRect_ = right;
+        navStacksRect_ = right.removeFromLeft (right.getWidth() / 2);
+        navMoreRect_   = right;
     }
 
     // I/O panel floats above the nav, centred on the orb: ENGINE row
-    // (rate/buffer pickers) on top, then INPUT and OUTPUT with padding.
+    // (rate/buffer pickers), INPUT, OUTPUT, then the TEST TONE row.
     const int pw = juce::jmin (380, getWidth() - 48);
-    ioPanelRect_ = { getWidth() / 2 - pw / 2, navBar_.getY() - 204 - 10, pw, 204 };
+    ioPanelRect_ = { getWidth() / 2 - pw / 2, navBar_.getY() - 248 - 10, pw, 248 };
     auto rows = ioPanelRect_.reduced (14, 12);
     ioEngRow_ = rows.removeFromTop (52);
     rows.removeFromTop (8);
     ioInRow_  = rows.removeFromTop (52);
-    ioOutRow_ = rows.removeFromBottom (52);
+    rows.removeFromTop (8);
+    ioOutRow_ = rows.removeFromTop (52);
+    ioTestRect_ = rows.removeFromBottom (36).reduced (rows.getWidth() / 4, 0);
     {
         auto pills = ioEngRow_.reduced (14, 6).removeFromRight (150).withTrimmedTop (10);
         ioRatePill_ = pills.removeFromLeft (70).withSizeKeepingCentre (70, 28);
@@ -1193,12 +1219,18 @@ void AppShell::paint (juce::Graphics& g) {
                                             ib.getWidth(), 1.8f, 0.9f);
                     break;
                 }
-                default: {  // three stacked bars (stacks)
+                case 3: {   // three stacked bars (stacks)
                     for (int i = 0; i < 3; ++i)
                         g.fillRoundedRectangle (ib.getX() + (float) (2 - i) * 1.5f,
                                                 ib.getY() + 1.0f + (float) i * 5.5f,
                                                 ib.getWidth() - (float) (2 - i) * 3.0f,
                                                 3.0f, 1.5f);
+                    break;
+                }
+                default: {  // horizontal three dots (more)
+                    for (int i = 0; i < 3; ++i)
+                        g.fillEllipse (ib.getX() + (float) i * 6.5f,
+                                       ib.getCentreY() - 1.75f, 3.5f, 3.5f);
                     break;
                 }
             }
@@ -1209,8 +1241,8 @@ void AppShell::paint (juce::Graphics& g) {
         };
         navBtn (navBrowseRect_, "BROWSE",  onPlay && deckMode_ == 2, 0);
         navBtn (navFavRect_,    "FAVORITES", onPlay && deckMode_ == 0, 1);
-        navBtn (navSavedRect_,  "DOWNLOADED", onPlay && deckMode_ == 1, 2);
         navBtn (navStacksRect_, "STACKS",  current_ == stacks_.get(), 3);
+        navBtn (navMoreRect_,   "MORE", moreOpen_ || (onPlay && deckMode_ == 1), 4);
     }
 
     // Status orb: input level = left arc, output level = right arc, both
@@ -1435,6 +1467,47 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
         };
         row (ioInRow_,  "INPUT",  inName,  inMuted_,  meterInPeak_,  nam::ui::col::meterLime);
         row (ioOutRow_, "OUTPUT", outName, outMuted_, meterOutPeak_, nam::ui::col::meterBlue);
+
+        // TEST TONE: plays a reference sine through the output path.
+        nam::ui::drawPill (g, ioTestRect_.toFloat(),
+                           testToneOn_ ? nam::ui::col::accentA (0.16f)
+                                       : juce::Colours::transparentBlack,
+                           testToneOn_ ? nam::ui::col::accentA (0.8f)
+                                       : nam::ui::col::inkA (0.2f));
+        g.setFont (nam::ui::uiFontTracked (10.0f, true));
+        g.setColour (testToneOn_ ? nam::ui::col::accent : nam::ui::col::inkA (0.6f));
+        g.drawText (testToneOn_ ? "STOP TONE" : "TEST TONE", ioTestRect_,
+                    juce::Justification::centred, false);
+    }
+
+    // ⋯ menu (right corner, above the nav) — painted last (overlay rule).
+    if (moreOpen_) {
+        g.setColour (juce::Colour (0xf214101f));
+        g.fillRoundedRectangle (moreRect_.toFloat(), 14.0f);
+        g.setColour (nam::ui::col::inkA (0.18f));
+        g.drawRoundedRectangle (moreRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
+        auto rrow = moreRect_.reduced (6);
+        const bool active = (current_ == play_.get() && deckMode_ == 1);
+        if (active) {
+            g.setColour (nam::ui::col::accentA (0.10f));
+            g.fillRoundedRectangle (rrow.toFloat(), 9.0f);
+        }
+        // Down-arrow-into-tray icon + label (DOWNLOADED lives here now).
+        auto in = rrow.reduced (14, 10);
+        const auto ib = in.removeFromLeft (18).toFloat()
+                            .withSizeKeepingCentre (16.0f, 16.0f);
+        g.setColour (active ? nam::ui::col::accent : nam::ui::col::inkA (0.7f));
+        const float cx = ib.getCentreX();
+        g.drawLine ({ { cx, ib.getY() + 1.0f }, { cx, ib.getBottom() - 6.0f } }, 1.8f);
+        juce::Path a;
+        a.addTriangle (cx - 4.0f, ib.getBottom() - 8.0f, cx + 4.0f, ib.getBottom() - 8.0f,
+                       cx, ib.getBottom() - 3.5f);
+        g.fillPath (a);
+        g.fillRoundedRectangle (ib.getX(), ib.getBottom() - 1.5f, ib.getWidth(), 1.8f, 0.9f);
+        g.setFont (nam::ui::uiFont (13.0f, true));
+        g.setColour (active ? nam::ui::col::accent : nam::ui::col::inkA (0.85f));
+        g.drawText ("Downloaded", in.withTrimmedLeft (12),
+                    juce::Justification::centredLeft, false);
     }
 }
 
@@ -1442,7 +1515,29 @@ void AppShell::closeIoPanel() {
     if (! ioPanelOpen_) return;
     ioPanelOpen_ = false;
     ioPicker_ = 0;
+    if (testToneOn_) {   // never leave the check tone running unattended
+        testToneOn_ = false;
+        if (svc_.setTestTone) svc_.setTestTone (false);
+    }
     ioScrim_.setVisible (false);
+    repaint();
+}
+
+void AppShell::openMoreMenu() {
+    // Content-sized, right-anchored above the nav (house overlay style).
+    constexpr int rowH = 46, w = 210;
+    moreRect_ = { getWidth() - w - 12, navBar_.getY() - rowH - 20, w, rowH + 12 };
+    moreOpen_ = true;
+    moreScrim_.setBounds (contentBounds());
+    moreScrim_.setVisible (true);
+    moreScrim_.toFront (false);
+    repaint();
+}
+
+void AppShell::closeMoreMenu() {
+    if (! moreOpen_) return;
+    moreOpen_ = false;
+    moreScrim_.setVisible (false);
     repaint();
 }
 
@@ -1496,6 +1591,16 @@ void AppShell::handleIoPanelTap (juce::Point<int> p) {
     // pill mutes; the device area opens the device picker.
     if (ioRatePill_.expanded (4).contains (p)) { openEnginePicker (false); return; }
     if (ioBufPill_.expanded (4).contains (p))  { openEnginePicker (true);  return; }
+    if (ioTestRect_.expanded (6).contains (p)) {
+        testToneOn_ = ! testToneOn_;
+        if (testToneOn_ && outMuted_ && muteOutput_) {   // hearing it is the point
+            outMuted_ = false;
+            muteOutput_ (false);
+        }
+        if (svc_.setTestTone) svc_.setTestTone (testToneOn_);
+        repaint (ioPanelRect_.expanded (4));
+        return;
+    }
     if (ioEngRow_.contains (p)) return;   // row body: nothing to toggle
     if (ioInRow_.contains (p)) {
         if (p.x > ioInRow_.getRight() - 96) {
@@ -1559,6 +1664,7 @@ void AppShell::mouseDown (const juce::MouseEvent& e) {
         closeIoPanel();
         return;
     }
+    if (moreOpen_) { closeMoreMenu(); return; }
 
     if (orbRect_.expanded (6).contains (p)) {
         ioPanelOpen_ = true;
@@ -1569,15 +1675,15 @@ void AppShell::mouseDown (const juce::MouseEvent& e) {
         return;
     }
 
-    // Nav buttons: deck pickers left/right of the orb, STACKS screen far right.
+    // Nav buttons: deck pickers left of the orb; STACKS + ⋯ menu right.
     if (navBrowseRect_.contains (p)) { setDeckMode (2); return; }
     if (navFavRect_.contains (p))    { setDeckMode (0); return; }
-    if (navSavedRect_.contains (p))  { setDeckMode (1); return; }
     if (navStacksRect_.contains (p)) {
         show (Screen::Stacks);
         repaint (navBar_);
         return;
     }
+    if (navMoreRect_.contains (p)) { openMoreMenu(); return; }
 
     // Tapping the bar anywhere else returns home to Play.
     if (navBar_.contains (p) && current_ != play_.get()) show (Screen::Play);

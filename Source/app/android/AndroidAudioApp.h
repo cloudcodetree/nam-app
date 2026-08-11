@@ -187,6 +187,11 @@ private:
     // Status-orb toggles (UI-driven, independent of the guard).
     std::atomic<bool> inputMutedUser_ { false };
     std::atomic<bool> outputMutedUser_ { false };
+    // Output-check tone (orb panel TEST TONE): 440 Hz sine, click-free via a
+    // short envelope. Phase/env live on the audio thread only.
+    std::atomic<bool> testTone_ { false };
+    double testPhase_ = 0.0;
+    float  testEnv_ = 0.0f;
 
     // Tuner: the audio thread mirrors the RAW live input into a ring; the
     // UI timer analyzes the latest window (guitar only — demos don't tune).

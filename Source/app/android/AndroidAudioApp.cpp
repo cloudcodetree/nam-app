@@ -167,6 +167,9 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.loadTone = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doLoadToneLive(std::move(t), std::move(done));
     };
+    browse.setTestTone = [this](bool on) {
+        testTone_.store(on, std::memory_order_relaxed);
+    };
     shell_->setBrowseServices(std::move(browse));
     shell_->setLibraryService(
         [this] { return library_.all(nam::LibraryType::Model); },
@@ -417,13 +420,37 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
             out[i] = (outMuted || i >= cap) ? 0.0f : mono_[(size_t) i];
     }
 
+    // Output-check tone: a plain 440 Hz sine ADDED to the device output
+    // (post-chain, respects the output mute). Envelope avoids clicks; both
+    // state vars are audio-thread-only, the on/off flag is the atomic.
+    const bool testOn = testTone_.load(std::memory_order_relaxed);
+    if (! outMuted && (testOn || testEnv_ > 0.0001f)) {
+        const double inc = 2.0 * juce::MathConstants<double>::pi * 440.0
+                           / juce::jmax(1.0, sampleRate_);
+        const float target = testOn ? 1.0f : 0.0f;
+        for (int i = 0; i < n; ++i) {
+            testEnv_ += (target - testEnv_) * 0.002f;
+            const float s = 0.16f * testEnv_ * (float) std::sin(testPhase_);
+            testPhase_ += inc;
+            if (testPhase_ > 2.0 * juce::MathConstants<double>::pi)
+                testPhase_ -= 2.0 * juce::MathConstants<double>::pi;
+            for (int ch = 0; ch < buf->getNumChannels(); ++ch)
+                buf->getWritePointer(ch, info.startSample)[i] += s;
+        }
+    } else {
+        testEnv_ = 0.0f;
+        testPhase_ = 0.0;
+    }
+
     // Meter the signal actually leaving the app. The engine's own peak
     // telemetry freezes whenever the engine is bypassed (demo playback,
     // mutes), so the output arc must tap the device write instead.
     float outPk = 0.0f;
-    if (! outMuted)
+    if (! outMuted) {
         for (int i = 0; i < n && i < cap; ++i)
             outPk = juce::jmax(outPk, std::fabs(mono_[(size_t) i]));
+        outPk = juce::jmax(outPk, 0.16f * testEnv_);
+    }
     outPeak_.store(outPk, std::memory_order_relaxed);
 }
 
