@@ -50,16 +50,16 @@ public:
     juce::Rectangle<int> tunerPanelBounds () const { return tunerRect_; }
 
     std::function<void ()> onLibrary;
-    std::function<void ()> onPrev, onNext;          // step through the collection
-    std::function<void (int)> onSelectIndex;        // dots pagination jump
-    std::function<void (int)> onPageDelta;          // dots-row ‹ › page arrows (±1)
-    void setPageNav (bool canPrev, bool canNext);   // show/hide the arrows
-    std::function<void ()> onSettings;              // top-bar gear -> audio settings
-    std::function<void ()> onEdit, onLive;          // top-bar shortcuts
-    std::function<void ()> onTuner;                 // tuner panel -> strobe tuner
-    std::function<void (int)> onViewChange;         // 0 favorites · 1 downloaded · 2 browse
-    std::function<void ()> onKeepToggle;            // heart tap / swipe-down keep
-    std::function<void ()> onSaveToggle;            // download button (save / remove)
+    std::function<void ()> onPrev, onNext;   // step through the collection
+    // Fires when the user nears the END of the deck (last cards in swipe
+    // view, bottom of list/grid): the owner appends the next results page.
+    std::function<void ()> onDeckEndReached;
+    std::function<void ()> onSettings;        // top-bar gear -> audio settings
+    std::function<void ()> onEdit, onLive;    // top-bar shortcuts
+    std::function<void ()> onTuner;           // tuner panel -> strobe tuner
+    std::function<void (int)> onViewChange;   // 0 favorites · 1 downloaded · 2 browse
+    std::function<void ()> onKeepToggle;      // heart tap / swipe-down keep
+    std::function<void ()> onSaveToggle;      // download button (save / remove)
     // Gear dropdown (browse strip): owner supplies choices (index 0 = all);
     // selection index is reported back.
     void setGearChoices (juce::StringArray names);
@@ -138,13 +138,16 @@ private:
 
     // Hit / layout rects, computed in resized(). (Nav lives in AppShell.)
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_, metersRow_;
-    bool pagePrev_ = false, pageNext_ = false;   // dots-row page arrows
-    juce::Rectangle<int> pagePrevRect_, pageNextRect_;
     // Deck layout: 0 swipe cards · 1 detail list · 2 two-col grid · 3 four-col.
     int layoutMode_ = 0;
     std::vector<DeckItem> deckItems_;
     int activeIdx_ = -1;
-    juce::Rectangle<int> viewBtnRect_;   // strip: layout picker button
+    // List view: the tapped row expands inline with the DEMO AUDIO + PAIR
+    // dropdown rows (same state the card back uses; type-aware PAIR label).
+    int deckExpanded_ = -1;
+    static constexpr int kDeckExpandH = 104;
+    juce::Rectangle<int> deckDemoRowR_, deckPairRowR_, deckPlayR_;   // inside the expanded row
+    juce::Rectangle<int> viewBtnRect_;                               // strip: layout picker button
     float deckScroll_ = 0.0f, deckPressScroll_ = 0.0f;
     bool deckPressed_ = false, deckMoved_ = false;
     juce::Rectangle<int> deckItemRect (int i) const;   // list/grid geometry
@@ -184,8 +187,7 @@ private:
     void openMenu (Menu which, juce::Rectangle<int> anchor, juce::StringArray options,
                    int selected);
     void closeMenu ();
-    juce::Rectangle<int> gearDdRect_;                 // gear-type dropdown (browse strip)
-    std::array<juce::Rectangle<int>, 25> dotRects_;   // pagination hits (one page)
+    juce::Rectangle<int> gearDdRect_;   // gear-type dropdown (browse strip)
 
     void layout ();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlayScreen)

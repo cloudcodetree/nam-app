@@ -36,8 +36,6 @@ void PlayScreen::setNowPlaying (juce::String name, juce::String family, juce::St
 void PlayScreen::setPosition (int index, int count) {
     index_ = index;
     count_ = count;
-    layout ();   // dot rects depend on index/count
-    repaint (dotsRect_.expanded (4));
 }
 
 void PlayScreen::setArtwork (juce::Image art) {
@@ -91,13 +89,6 @@ void PlayScreen::setDeckView (int v) {
     gearSel_ = 0;   // fresh filter state per view (owner re-sends groups)
     layout ();
     repaint ();
-}
-
-void PlayScreen::setPageNav (bool canPrev, bool canNext) {
-    if (pagePrev_ == canPrev && pageNext_ == canNext) return;
-    pagePrev_ = canPrev;
-    pageNext_ = canNext;
-    repaint (dotsRect_.expanded (40, 4));
 }
 
 void PlayScreen::notifyFilters () {
@@ -284,17 +275,13 @@ void PlayScreen::layout () {
         flyScroll_ = 0.0f;
     }
 
-    // Full-bleed tone card; below it: pagination dots. (Deck switching moved
-    // to the shell's bottom nav — no in-screen view toggle.)
+    // Full-bleed tone card (pagination retired: browse appends more results
+    // as the user nears the end — see onDeckEndReached).
     auto inner = hero_.reduced (26, 8);
-    dotsRect_ = inner.removeFromBottom (24);
-    inner.removeFromBottom (4);
+    dotsRect_ = {};
     artRect_ = inner;
     textRect_ = transportRect_ = {};
     viewRow_ = favViewRect_ = savedViewRect_ = browseViewRect_ = {};
-    // Page arrows bracket the dots row (browse pages / big-deck windows).
-    pagePrevRect_ = dotsRect_.removeFromLeft (34);
-    pageNextRect_ = dotsRect_.removeFromRight (34);
 
     // Card corner buttons (front face): download + heart top-left, in the
     // same 34px circle style as the mixer button opposite them.
@@ -304,23 +291,6 @@ void PlayScreen::layout () {
     // Circled chevrons straddle the card's side edges (half in, half out).
     prevRect_ = { artRect_.getX () - 20, artRect_.getCentreY () - 20, 40, 40 };
     nextRect_ = { artRect_.getRight () - 20, artRect_.getCentreY () - 20, 40, 40 };
-
-    // Pagination dot hit rects. Dots shrink as the deck grows so a full
-    // results page (25) still fits; beyond that a bar is drawn instead.
-    {
-        const int n = juce::jlimit (0, (int)dotRects_.size (), count_);
-        const int idle = n > 12 ? 5 : 8;
-        const int gap = n > 12 ? 4 : 8;
-        const int active = n > 12 ? 16 : 22;
-        int total = 0;
-        for (int k = 0; k < n; ++k) total += (k == index_ ? active : idle) + (k ? gap : 0);
-        int x = dotsRect_.getCentreX () - total / 2;
-        for (int k = 0; k < n; ++k) {
-            const int w = (k == index_ ? active : idle);
-            dotRects_[(size_t)k] = { x, dotsRect_.getCentreY () - 6, w, 12 };
-            x += w + gap;
-        }
-    }
 
     // The tuner panel (full meters row) opens the strobe tuner.
     tunerRect_ = metersRow_;
@@ -686,29 +656,7 @@ void PlayScreen::paint (juce::Graphics& g) {
         chevBtn (prevRect_, "\xE2\x80\xB9");
         chevBtn (nextRect_, "\xE2\x80\xBA");
     }
-    // Page arrows bracketing the dots (dimmed when that direction is empty).
-    if (pagePrev_ || pageNext_) {
-        text (juce::String::fromUTF8 ("\xE2\x80\xB9"), uiFont (17.0f, true),
-              col::inkA (pagePrev_ ? 0.6f : 0.15f), pagePrevRect_, juce::Justification::centred);
-        text (juce::String::fromUTF8 ("\xE2\x80\xBA"), uiFont (17.0f, true),
-              col::inkA (pageNext_ ? 0.6f : 0.15f), pageNextRect_, juce::Justification::centred);
-    }
-    if (count_ > 0 && count_ <= (int)dotRects_.size ()) {
-        for (int k = 0; k < count_; ++k) {
-            g.setColour (k == index_ ? col::accent : col::inkA (0.2f));
-            g.fillRoundedRectangle (dotRects_[(size_t)k].toFloat ().withSizeKeepingCentre (
-                                        (float)dotRects_[(size_t)k].getWidth (), 8.0f),
-                                    4.0f);
-        }
-    } else if (count_ > 0 && index_ >= 0) {
-        // Big decks: thin progress bar instead of a dot per tone.
-        auto bar = dotsRect_.reduced (60, 11);
-        g.setColour (col::inkA (0.14f));
-        g.fillRoundedRectangle (bar.toFloat (), 1.5f);
-        g.setColour (col::accent);
-        g.fillRoundedRectangle (
-            bar.toFloat ().withWidth (bar.getWidth () * (float)(index_ + 1) / (float)count_), 1.5f);
-    }
+    // (Pagination dots retired — browse appends pages as the deck end nears.)
 
     // --- Tuner row (levels live in the global bottom meter) -------------
     {
@@ -880,6 +828,7 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
                         flipped_ = false;   // card back has no meaning off-card
                         flip_ = 0.0f;
                         deckScroll_ = 0.0f;
+                        deckExpanded_ = -1;
                         layout ();
                         break;
                     default: break;
@@ -916,13 +865,45 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
         return;
     }
     if (deckPressed_) {
-        // Tap (no scroll) selects the item under the finger.
-        if (!deckMoved_)
+        // Tap (no scroll): expanded-row controls first, then row select.
+        if (!deckMoved_) {
+            const auto p = e.getPosition ();
+            deckPressed_ = deckMoved_ = false;
+            if (layoutMode_ == 1 && deckExpanded_ >= 0) {
+                if (deckPlayR_.expanded (4).contains (p)) {
+                    if (onToggleDemo) onToggleDemo ();
+                    return;
+                }
+                if (deckDemoRowR_.contains (p)) {
+                    juce::StringArray tracks;
+                    for (int i = 0; i < nam::demo::kNumTracks; ++i)
+                        tracks.add (nam::demo::kTracks[i].display);
+                    openMenu (Menu::Demo, deckDemoRowR_, std::move (tracks), demoSel_);
+                    return;
+                }
+                if (deckPairRowR_.contains (p) && !pairNames_.isEmpty ()) {
+                    openMenu (Menu::Pair, deckPairRowR_, pairNames_, pairSel_);
+                    return;
+                }
+            }
             for (int i = 0; i < (int)deckItems_.size (); ++i)
-                if (deckItemRect (i).contains (e.getPosition ())) {
-                    if (onSelectAbsolute) onSelectAbsolute (i);
+                if (deckItemRect (i).contains (p)) {
+                    if (layoutMode_ == 1) {
+                        // Same row again folds it; a new row selects+expands.
+                        if (i == deckExpanded_) {
+                            deckExpanded_ = -1;
+                        } else {
+                            deckExpanded_ = i;
+                            if (onSelectAbsolute) onSelectAbsolute (i);
+                        }
+                        repaint (artRect_.expanded (4));
+                    } else if (onSelectAbsolute) {
+                        onSelectAbsolute (i);
+                    }
                     break;
                 }
+            return;
+        }
         deckPressed_ = deckMoved_ = false;
         return;
     }
@@ -1018,9 +999,11 @@ void PlayScreen::mouseDrag (const juce::MouseEvent& e) {
         const int dy = e.getPosition ().y - pressPos_.y;
         if (std::abs (dy) > 8) deckMoved_ = true;
         if (deckMoved_) {
-            deckScroll_ = juce::jlimit (
-                0.0f, (float)juce::jmax (0, deckContentHeight () - artRect_.getHeight () + 20),
-                deckPressScroll_ - (float)dy);
+            const float maxScroll =
+                (float)juce::jmax (0, deckContentHeight () - artRect_.getHeight () + 20);
+            deckScroll_ = juce::jlimit (0.0f, maxScroll, deckPressScroll_ - (float)dy);
+            // Nearing the bottom: let the owner append the next results page.
+            if (maxScroll - deckScroll_ < 300.0f && onDeckEndReached) onDeckEndReached ();
             repaint (artRect_.expanded (2));
         }
         return;
@@ -1132,22 +1115,8 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
         if (onNext) onNext ();
         return;
     }
-    if (pagePrev_ && pagePrevRect_.expanded (4).contains (p)) {
-        if (onPageDelta) onPageDelta (-1);
-        return;
-    }
-    if (pageNext_ && pageNextRect_.expanded (4).contains (p)) {
-        if (onPageDelta) onPageDelta (+1);
-        return;
-    }
     if (tunerRect_.contains (p)) {
         if (onTuner) onTuner ();
         return;
     }
-    if (dotsRect_.contains (p) && count_ <= (int)dotRects_.size ())
-        for (int k = 0; k < count_; ++k)
-            if (dotRects_[(size_t)k].expanded (2, 7).contains (p)) {
-                if (onSelectIndex) onSelectIndex (k);
-                return;
-            }
 }

@@ -118,7 +118,10 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
     const double elapsed = std::chrono::duration<double>(t1 - t0).count();
     const double period = sampleRate_ > 0 ? (double)numSamples / sampleRate_ : 0.0;
     if (period > 0.0) cpuLoad_.store((float)(elapsed / period), std::memory_order_relaxed);
-    blockCount_.fetch_add(1, std::memory_order_relaxed);
+    // RELEASE: setModel's acquire load of blockCount_ must observe every
+    // memory operation of this render before reclaiming a retired model —
+    // the block-gated free is only safe with this happens-before edge.
+    blockCount_.fetch_add(1, std::memory_order_release);
 }
 
 }   // namespace dsp

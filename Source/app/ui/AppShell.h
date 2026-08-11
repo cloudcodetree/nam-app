@@ -231,9 +231,13 @@ private:
     void pushFilterGroups ();
     int favGear_ = -1;   // -1 all · 0 amps · 1 cabs
     juce::StringArray favTags_, favMakes_;
-    int browseGear_ = 0;   // gear dropdown index (0 = all)
-    int browsePage_ = 1;   // TONE3000 results page (1-based)
-    int deckWindow_ = 0;   // local decks: 25-card dots window
+    int browseGear_ = 0;             // gear dropdown index (0 = all)
+    int browsePage_ = 1;             // last TONE3000 page fetched (1-based)
+    bool browseFetching_ = false;    // an append fetch is in flight
+    bool browseExhausted_ = false;   // a short page came back: no more results
+    void fetchMoreBrowse ();         // append the next page (infinite scroll)
+    nam::SearchParams buildBrowseParams () const;
+    static constexpr int kBrowseDeckCap = 300;   // bounded (house rule)
     std::vector<PlayScreen::FilterGroup> browseGroups_;
     void showFavCard (int index, bool loadIntoEngine);
     void showBrowseCard (int index);

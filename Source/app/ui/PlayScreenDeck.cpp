@@ -1,4 +1,5 @@
 #include "app/ui/PlayScreen.h"
+#include "app/ui/DemoTrackCatalog.h"
 #include "app/ui/NamLookAndFeel.h"
 
 // PlayScreen's non-card deck layouts (detail list / 2-col grid / 4-col
@@ -9,6 +10,7 @@ using namespace nam::ui;
 
 void PlayScreen::setDeckItems (std::vector<DeckItem> items) {
     deckItems_ = std::move (items);
+    if (deckExpanded_ >= (int)deckItems_.size ()) deckExpanded_ = -1;
     deckScroll_ = juce::jlimit (
         0.0f, (float)juce::jmax (0, deckContentHeight () - artRect_.getHeight () + 20),
         deckScroll_);
@@ -27,8 +29,12 @@ juce::Rectangle<int> PlayScreen::deckItemRect (int i) const {
     const auto area = artRect_.reduced (10, 10);
     if (layoutMode_ == 1) {
         constexpr int rowH = 68, gap = 6;
-        return { area.getX (), area.getY () + i * (rowH + gap) - (int)deckScroll_, area.getWidth (),
-                 rowH };
+        // The expanded row is taller; rows after it shift down by the same.
+        const bool hasExp = deckExpanded_ >= 0 && deckExpanded_ < (int)deckItems_.size ();
+        const int shift = (hasExp && i > deckExpanded_) ? kDeckExpandH : 0;
+        const int h = (hasExp && i == deckExpanded_) ? rowH + kDeckExpandH : rowH;
+        return { area.getX (), area.getY () + i * (rowH + gap) + shift - (int)deckScroll_,
+                 area.getWidth (), h };
     }
     const int cols = layoutMode_ == 2 ? 2 : 4;
     const int gap = layoutMode_ == 2 ? 8 : 6;
@@ -98,14 +104,16 @@ void PlayScreen::paintDeckPanel (juce::Graphics& g) {
         const bool active = (i == activeIdx_);
 
         if (layoutMode_ == 1) {
-            // Detail row: thumb / title + sub / heart state.
+            // Detail row: thumb / title + sub / heart state. When expanded,
+            // the base content keeps the top strip and the dropdowns follow.
+            const bool expanded = (i == deckExpanded_);
             g.setColour (active ? col::accentA (0.10f) : col::inkA (0.04f));
             g.fillRoundedRectangle (rr.toFloat (), 10.0f);
             if (active) {
                 g.setColour (col::accentA (0.55f));
                 g.drawRoundedRectangle (rr.toFloat ().reduced (0.5f), 10.0f, 1.0f);
             }
-            auto in = rr.reduced (10, 10);
+            auto in = rr.withHeight (68).reduced (10, 10);
             thumbOrInitial (it, in.removeFromLeft (in.getHeight ()), 8.0f, 22.0f);
             in.removeFromLeft (12);
             if (it.kept) {
@@ -132,6 +140,51 @@ void PlayScreen::paintDeckPanel (juce::Graphics& g) {
             g.setFont (uiFontTracked (8.0f, true));
             g.setColour (col::inkA (0.4f));
             g.drawText (it.sub, in, juce::Justification::topLeft, false);
+
+            if (expanded) {
+                // DEMO AUDIO + PAIR dropdown rows (mirror the card back;
+                // the PAIR label/choices already track this row's type).
+                auto ex = rr.withTrimmedTop (68).reduced (12, 4);
+                auto ddRow = [&g] (juce::Rectangle<int> r2, const juce::String& label,
+                                   const juce::String& value) {
+                    g.setColour (col::inkA (0.05f));
+                    g.fillRoundedRectangle (r2.toFloat (), 9.0f);
+                    g.setColour (col::inkA (0.16f));
+                    g.drawRoundedRectangle (r2.toFloat ().reduced (0.5f), 9.0f, 1.0f);
+                    auto r3 = r2.reduced (12, 3);
+                    g.setFont (uiFontTracked (7.5f, true));
+                    g.setColour (col::inkA (0.4f));
+                    g.drawText (label, r3.removeFromTop (12), juce::Justification::centredLeft,
+                                false);
+                    g.setFont (uiFont (10.0f, false));
+                    g.setColour (col::inkA (0.5f));
+                    g.drawText (juce::String::fromUTF8 ("\xE2\x96\xBE"), r3.removeFromRight (14),
+                                juce::Justification::centred, false);
+                    g.setFont (uiFont (11.0f, true));
+                    g.setColour (col::ink);
+                    g.drawText (value, r3, juce::Justification::centredLeft, false);
+                };
+                auto demoRow = ex.removeFromTop (44);
+                deckPlayR_ = demoRow.removeFromRight (40).withSizeKeepingCentre (34, 34);
+                deckDemoRowR_ = demoRow.withTrimmedRight (6);
+                ddRow (deckDemoRowR_, "DEMO AUDIO",
+                       juce::String (
+                           nam::demo::kTracks[juce::jlimit (0, nam::demo::kNumTracks - 1, demoSel_)]
+                               .display));
+                g.setColour (demoPlaying_ ? col::accent : juce::Colours::transparentBlack);
+                g.fillEllipse (deckPlayR_.toFloat ().reduced (2.0f));
+                g.setColour (demoPlaying_ ? col::accent : col::inkA (0.3f));
+                g.drawEllipse (deckPlayR_.toFloat ().reduced (2.5f), 1.0f);
+                g.setFont (uiFont (11.0f, false));
+                g.setColour (demoPlaying_ ? col::inkOnAccent : col::inkA (0.8f));
+                g.drawText (juce::String::fromUTF8 (demoPlaying_ ? "\xE2\x97\xBC" : "\xE2\x96\xB6"),
+                            deckPlayR_, juce::Justification::centred, false);
+                ex.removeFromTop (6);
+                deckPairRowR_ = ex.removeFromTop (44);
+                if (!pairNames_.isEmpty ())
+                    ddRow (deckPairRowR_, pairLabel_,
+                           pairNames_[juce::jlimit (0, pairNames_.size () - 1, pairSel_)]);
+            }
         } else {
             // Grid cell: cover thumb, bottom scrim + one-line title.
             thumbOrInitial (it, rr, 10.0f, layoutMode_ == 2 ? 34.0f : 20.0f);

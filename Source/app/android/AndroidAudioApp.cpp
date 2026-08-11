@@ -335,10 +335,12 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     if (demoOn && demoLive_.load(std::memory_order_relaxed)) {
         // Live audition (real device): feed the DRY DI loop into the engine
         // as if it were the guitar input — real-time inference, no waiting.
-        // Take our OWN reference: a concurrent re-publish (track fetched on
-        // the message thread) must not pull the buffer out from under us.
-        const auto loopPtr =
-            std::atomic_load(&demoTracks_[(size_t)demoTrackRT_.load(std::memory_order_relaxed)]);
+        // Raw atomic pointer read (lock-free; shared_ptr atomics take a
+        // mutex on libc++). The owner side keeps the buffer alive until two
+        // device blocks complete after a re-publish (retiredDemos_).
+        const auto* loopPtr =
+            demoTracksRT_[(size_t)demoTrackRT_.load(std::memory_order_relaxed)].load(
+                std::memory_order_acquire);
         if (loopPtr != nullptr && !loopPtr->empty()) {
             const auto& loop = *loopPtr;
             size_t pos = demoPos_.load(std::memory_order_relaxed);
@@ -352,12 +354,13 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         } else {
             for (int i = 0; i < n && i < cap; ++i) mono_[(size_t)i] = 0.0f;
         }
-    } else if (const auto slotPtr = (demoOn && slot >= 0)
-                                        ? std::atomic_load(&demoSlots_[(size_t)slot])
-                                        : std::shared_ptr<const std::vector<float>>();
+    } else if (const auto* slotPtr =
+                   (demoOn && slot >= 0)
+                       ? demoSlotsRT_[(size_t)slot].load(std::memory_order_acquire)
+                       : nullptr;
                slotPtr != nullptr && !slotPtr->empty()) {
         // Audition: play back the offline-rendered (model-processed) riff.
-        // No inference on the audio thread. Own reference held for the block.
+        // No inference on the audio thread; lock-free raw pointer read.
         const auto& loop = *slotPtr;
         size_t pos = demoPos_.load(std::memory_order_relaxed);
         for (int i = 0; i < n && i < cap; ++i) {
@@ -440,6 +443,10 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         outPk = juce::jmax(outPk, 0.16f * testEnv_);
     }
     outPeak_.store(outPk, std::memory_order_relaxed);
+
+    // RELEASE: the message thread's acquire load gates freeing retired demo
+    // buffers on this counter — the edge is what makes that free safe.
+    appBlocks_.fetch_add(1, std::memory_order_release);
 }
 
 void AndroidAudioApp::releaseResources() {}
@@ -1036,19 +1043,25 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
     // Bundled tracks decode from BinaryData; fetched tracks reload lazily
     // (ensureDemoTrack) from the disk cache at the current rate. Clear
     // everything first — a device-rate change invalidates old buffers.
+    // prepare-time: audio is stopped, so plain publishes + a full retire
+    // flush are safe here.
+    retiredDemos_.clear();
     bool allDecoded = true;
     for (int t = 0; t < nam::demo::kNumTracks; ++t) {
-        demoTracks_[(size_t)t] = nullptr;   // prepare-time: audio is stopped
+        publishTrack(t, nullptr);
         const char* res = nam::demo::kTracks[t].binaryResource;
         if (res == nullptr) continue;
         int size = 0;
         const char* data = BinaryData::getNamedResource(res, size);
         std::vector<float> decoded;
         if (data != nullptr && size > 0 && decodeDiWav(data, (size_t)size, sr, decoded))
-            demoTracks_[(size_t)t] = std::make_shared<const std::vector<float>>(std::move(decoded));
+            publishTrack(t, std::make_shared<const std::vector<float>>(std::move(decoded)));
         else allDecoded = false;
     }
-    if (allDecoded) return;
+    if (allDecoded) {
+        retiredDemos_.clear();   // nothing can be in flight while stopped
+        return;
+    }
 
     // 0: open chords in E minor (the original riff).
     static const DemoNote chords[] = {
@@ -1079,10 +1092,39 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
     buildKsLoop(ks0, sr, 3.2, chords, std::size(chords));
     buildKsLoop(ks1, sr, 3.2, lead, std::size(lead));
     buildKsLoop(ks2, sr, 3.2, chugs, std::size(chugs));
-    demoTracks_[0] = std::make_shared<const std::vector<float>>(std::move(ks0));
-    demoTracks_[1] = std::make_shared<const std::vector<float>>(std::move(ks1));
-    demoTracks_[2] = std::make_shared<const std::vector<float>>(std::move(ks2));
-    demoTracks_[3] = demoTracks_[0];   // bass fallback: reuse chords synth
+    publishTrack(0, std::make_shared<const std::vector<float>>(std::move(ks0)));
+    publishTrack(1, std::make_shared<const std::vector<float>>(std::move(ks1)));
+    publishTrack(2, std::make_shared<const std::vector<float>>(std::move(ks2)));
+    publishTrack(3, demoTracks_[0]);   // bass fallback: reuse chords synth
+    retiredDemos_.clear();             // audio stopped: nothing in flight
+}
+
+// --- Demo-buffer publish-then-retire (message thread only) ----------------
+void AndroidAudioApp::reclaimRetiredDemos() {
+    const auto now = appBlocks_.load(std::memory_order_acquire);
+    retiredDemos_.erase(std::remove_if(retiredDemos_.begin(), retiredDemos_.end(),
+                                       [now](const auto& r) { return now >= r.second + 2; }),
+                        retiredDemos_.end());
+}
+
+void AndroidAudioApp::publishTrack(int index, std::shared_ptr<const std::vector<float>> buf) {
+    reclaimRetiredDemos();
+    const auto stamp = appBlocks_.load(std::memory_order_acquire);
+    auto& owner = demoTracks_[(size_t)index];
+    if (owner != nullptr) retiredDemos_.push_back({ std::move(owner), stamp });
+    owner = std::move(buf);
+    demoTracksRT_[(size_t)index].store(owner != nullptr ? owner.get() : nullptr,
+                                       std::memory_order_release);
+}
+
+void AndroidAudioApp::publishSlot(int index, std::shared_ptr<const std::vector<float>> buf) {
+    reclaimRetiredDemos();
+    const auto stamp = appBlocks_.load(std::memory_order_acquire);
+    auto& owner = demoSlots_[(size_t)index];
+    if (owner != nullptr) retiredDemos_.push_back({ std::move(owner), stamp });
+    owner = std::move(buf);
+    demoSlotsRT_[(size_t)index].store(owner != nullptr ? owner.get() : nullptr,
+                                      std::memory_order_release);
 }
 
 void AndroidAudioApp::setDemoTrack(int index) {
@@ -1102,8 +1144,7 @@ void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done)
         done(false);
         return;
     }
-    if (const auto cur = std::atomic_load(&demoTracks_[(size_t)index]);
-        cur != nullptr && !cur->empty()) {
+    if (const auto& cur = demoTracks_[(size_t)index]; cur != nullptr && !cur->empty()) {
         done(true);
         return;
     }
@@ -1146,10 +1187,8 @@ void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done)
             demoFetching_[(size_t)index] = false;
             // Publish a fresh immutable buffer; any audio block still holding
             // the old shared_ptr keeps a valid reference (no in-place write).
-            if (ok)
-                std::atomic_store(&demoTracks_[(size_t)index],
-                                  std::shared_ptr<const std::vector<float>>(mono));
-            const auto cur = std::atomic_load(&demoTracks_[(size_t)index]);
+            if (ok) publishTrack(index, mono);
+            const auto& cur = demoTracks_[(size_t)index];
             done(ok && cur != nullptr && !cur->empty());
         });
     });
@@ -1169,9 +1208,7 @@ void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered, bool pres
     const int next = (demoSlot_.load(std::memory_order_relaxed) + 1) & 1;
     const size_t len = rendered.size();
     // Publish, never mutate: a reader holding the old buffer keeps it alive.
-    std::atomic_store(&demoSlots_[(size_t)next],
-                      std::shared_ptr<const std::vector<float>>(
-                          std::make_shared<const std::vector<float>>(std::move(rendered))));
+    publishSlot(next, std::make_shared<const std::vector<float>>(std::move(rendered)));
     // Model/cab switches keep the demo rolling from the same spot (the DI
     // timeline is identical); anything else starts from the top.
     const bool wasPlaying = demoOn_.load(std::memory_order_relaxed);
@@ -1260,7 +1297,7 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
     const double sr = sampleRate_;
     const int liveBlock = blockSize_;
     const bool forcePre = preRenderAuditions_;
-    const auto src = std::atomic_load(&demoTracks_[(size_t)demoTrack_]);
+    const auto src = demoTracks_[(size_t)demoTrack_];   // owner read, message thread
     auto dry = std::make_shared<std::vector<float>>(src != nullptr ? *src : std::vector<float>());
     auto cabIr = overrideIr != nullptr ? overrideIr : (cab_ > 0) ? cabIrs_[(size_t)cab_] : nullptr;
 

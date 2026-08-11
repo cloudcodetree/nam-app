@@ -149,13 +149,23 @@ private:
     static juce::File modelCacheFile(const std::string& scope);
     static void pruneModelCache();
     // One slot per catalog track; fixed size (audio thread indexes into it).
-    // Buffers are IMMUTABLE once published: writers publish a NEW shared_ptr
-    // (message thread) and the audio thread takes its own reference at block
-    // start, so a re-publish can never mutate a vector mid-read (the race
-    // the adversarial review flagged). Same pattern as cabIrs_.
+    // Publish-then-retire WITHOUT shared_ptr atomics (libc++'s atomic_load
+    // on shared_ptr takes a mutex — forbidden on the audio thread): the
+    // message thread owns the buffers (demoTracks_/demoSlots_ shared_ptrs +
+    // retiredDemos_), the audio thread reads raw atomic pointers, and a
+    // retired buffer frees only after two device blocks complete
+    // (appBlocks_ release/acquire, mirroring ToneEngine's model retire).
     std::array<std::shared_ptr<const std::vector<float>>, (size_t)nam::demo::kNumTracks>
-        demoTracks_;
+        demoTracks_;   // owners (msg thread)
+    std::array<std::atomic<const std::vector<float>*>, (size_t)nam::demo::kNumTracks>
+        demoTracksRT_{};   // audio thread reads
     std::array<bool, (size_t)nam::demo::kNumTracks> demoFetching_{};   // msg thread
+    std::vector<std::pair<std::shared_ptr<const std::vector<float>>, uint64_t>>
+        retiredDemos_;                       // msg thread
+    std::atomic<uint64_t> appBlocks_{ 0 };   // completed device blocks (release)
+    void publishTrack(int index, std::shared_ptr<const std::vector<float>> buf);
+    void publishSlot(int index, std::shared_ptr<const std::vector<float>> buf);
+    void reclaimRetiredDemos();   // msg thread, block-gated
     int demoTrack_ = 0;
     // Bundled cab IRs (loaded at prepare; shared_ptr swap is RT-safe).
     std::array<std::shared_ptr<const std::vector<float>>, (size_t)nam::demo::kNumCabs> cabIrs_;
@@ -167,10 +177,10 @@ private:
     // riff. Re-tapping a tone plays instantly instead of re-downloading and
     // re-rendering. ~600 KB per entry; capped.
     std::vector<std::pair<std::string, std::vector<float>>> auditionCache_;
-    // Rendered-audition slots: published as immutable shared_ptrs so an
-    // audio block holding a reference survives back-to-back installs that
-    // overwrite both slots (the two-slot flip alone was not enough).
-    std::array<std::shared_ptr<const std::vector<float>>, 2> demoSlots_;
+    // Rendered-audition slots: same publish-then-retire scheme (owners here,
+    // raw atomics in demoSlotsRT_, retirement through retiredDemos_).
+    std::array<std::shared_ptr<const std::vector<float>>, 2> demoSlots_;   // owners (msg thread)
+    std::array<std::atomic<const std::vector<float>*>, 2> demoSlotsRT_ {};
     std::atomic<int> demoSlot_{ -1 };
     std::atomic<size_t> demoPos_{ 0 };
     std::atomic<bool> demoOn_{ false };

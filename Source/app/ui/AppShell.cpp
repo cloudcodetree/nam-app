@@ -68,11 +68,6 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_->onLive = [this] { show (Screen::Live); };
     play_->onPrev = [this] { stepCollection (-1); };
     play_->onNext = [this] { stepCollection (+1); };
-    play_->onSelectIndex = [this] (int k) {
-        if (deckMode_ == 2) showBrowseCard (k);
-        else showFavCard (deckWindow_ * 25 + k, true);   // dots are windowed
-    };
-
     play_->onSelectAbsolute = [this] (int i) {   // list/grid rows: full-deck index
         if (deckMode_ == 2) showBrowseCard (i);
         else showFavCard (i, true);
@@ -80,29 +75,20 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
 
     play_->onViewChange = [this] (int v) { setDeckMode (v); };
 
-    play_->onPageDelta = [this] (int d) {
-        if (deckMode_ == 2) {
-            browsePage_ = juce::jmax (1, browsePage_ + d);
-            runPlayBrowse ();
-        } else {
-            const int n = (int)favDeck ().size ();
-            const int target = (deckWindow_ + d) * 25;
-            if (target >= 0 && target < n) showFavCard (target, true);
-        }
-    };
+    // Infinite browse: nearing the deck's end (scroll or swipe) appends the
+    // next TONE3000 results page. Local decks already hold everything.
+    play_->onDeckEndReached = [this] { fetchMoreBrowse (); };
 
     play_->onGearSelect = [this] (int idx) {
         if (deckMode_ != 2) return;
         browseGear_ = idx;
-        browsePage_ = 1;   // fresh query, fresh pages
-        runPlayBrowse ();
+        runPlayBrowse ();   // fresh query restarts the infinite deck
     };
 
     play_->onFilterGroupsChanged = [this] (const std::vector<PlayScreen::FilterGroup>& groups) {
         if (deckMode_ == 2) {
             browseGroups_ = groups;
-            browsePage_ = 1;   // fresh query, fresh pages
-            runPlayBrowse ();
+            runPlayBrowse ();   // fresh query restarts the infinite deck
         } else {
             favTags_.clear ();
             favMakes_.clear ();
@@ -654,12 +640,10 @@ void AppShell::showFavCard (int index, bool loadIntoEngine) {
     const auto deck = favDeck ();
     if (deck.empty ()) {
         collectionIndex_ = -1;
-        deckWindow_ = 0;
         play_->setNowPlaying ("Nothing kept yet", "NAM PLAYER", {});
         play_->setArtwork ({});
         play_->setKept (false);
         play_->setPosition (-1, 0);
-        play_->setPageNav (false, false);
         pushDeckItems ();
         play_->setActiveDeckIndex (-1);
         return;
@@ -694,11 +678,7 @@ void AppShell::showFavCard (int index, bool loadIntoEngine) {
         curCardIsCab_ = isIr;
         pushPairChoices ();
     }
-    // Dots show a 25-card window into big decks; ‹ › shifts the window.
-    deckWindow_ = index / 25;
-    const int wStart = deckWindow_ * 25;
-    play_->setPosition (index - wStart, juce::jmin (25, n - wStart));
-    play_->setPageNav (deckWindow_ > 0, wStart + 25 < n);
+    play_->setPosition (index, n);
     pushDeckItems ();
     play_->setActiveDeckIndex (index);
 }
@@ -710,7 +690,6 @@ void AppShell::showBrowseCard (int index) {
         play_->setArtwork ({});
         play_->setKept (false);
         play_->setPosition (-1, 0);
-        play_->setPageNav (browsePage_ > 1, false);   // back out of an empty page
         pushDeckItems ();
         play_->setActiveDeckIndex (-1);
         return;
@@ -734,18 +713,40 @@ void AppShell::showBrowseCard (int index) {
         pushPairChoices ();
     }
     play_->setPosition (index, n);
-    // A full page implies more pages upstream (TONE3000 pages are 25).
-    play_->setPageNav (browsePage_ > 1, n >= 25);
     pushDeckItems ();
     play_->setActiveDeckIndex (index);
+    // Swiping into the last few cards appends the next page (infinite).
+    if (index >= n - 3) fetchMoreBrowse ();
 }
 
-void AppShell::runPlayBrowse () {
-    if (!svc_.searchEx) return;
-    // Build real /tones/search params from the strip + flyout state.
+void AppShell::fetchMoreBrowse () {
+    // Append the NEXT TONE3000 page to the live deck. Guarded: one fetch in
+    // flight, stop once the server runs dry, and cap the deck (house rule:
+    // nothing unbounded). No SSE/streaming exists on the API — it is plain
+    // page-numbered REST, so "get them all" = fetch pages as needed.
+    if (deckMode_ != 2 || browseFetching_ || browseExhausted_ || !svc_.searchEx) return;
+    if ((int)playDeck_.size () >= kBrowseDeckCap) return;
+    browseFetching_ = true;
+    auto p = buildBrowseParams ();
+    p.page = browsePage_ + 1;
+    svc_.searchEx (p,
+                   [this, page = p.page] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
+                       browseFetching_ = false;
+                       if (!ok || deckMode_ != 2) return;
+                       browsePage_ = page;
+                       if ((int)tones.size () < 25)
+                           browseExhausted_ = true;   // short page = the end
+                       for (auto& t : tones) playDeck_.push_back (std::move (t));
+                       pushDeckItems ();
+                       if (playDeckIndex_ >= 0)
+                           play_->setPosition (playDeckIndex_, (int)playDeck_.size ());
+                   });
+}
+
+nam::SearchParams AppShell::buildBrowseParams () const {
+    // Real /tones/search params from the strip + flyout state.
     nam::SearchParams p;
     p.sort = "trending";
-    p.page = browsePage_;
     const int gi = browseGear_ - 1;   // dropdown index 0 = All Gear
     if (gi >= 0 && gi < (int)(sizeof (kGearVocab) / sizeof (kGearVocab[0])))
         p.gears.push_back (kGearVocab[gi].api);
@@ -761,6 +762,16 @@ void AppShell::runPlayBrowse () {
                 if (gp.selected[0] == sd.display) p.sort = sd.api;
         }
     }
+    return p;
+}
+
+void AppShell::runPlayBrowse () {
+    if (!svc_.searchEx) return;
+    // A fresh query restarts the infinite deck at page 1.
+    browsePage_ = 1;
+    browseExhausted_ = false;
+    auto p = buildBrowseParams ();
+    p.page = 1;
     svc_.searchEx (p, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
         if (!ok) return;
         playDeck_ = std::move (tones);
@@ -810,8 +821,6 @@ void AppShell::setDeckMode (int v) {
     favTags_.clear ();
     favMakes_.clear ();
     browseGear_ = 0;
-    browsePage_ = 1;
-    deckWindow_ = 0;
     pushFilterGroups ();
     if (svc_.stopDemo) svc_.stopDemo ();
     play_->setDemoPlaying (false);

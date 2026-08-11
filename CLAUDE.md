@@ -76,8 +76,19 @@ growth, god functions, unregistered sources) are MAJOR.
   in the hook (bugprone/concurrency/performance/function-size).
 - Android native builds use **RelWithDebInfo** (a -O0 NAM is 5–15× too slow
   for real time).
-- The JUCE-free core (`Source/dsp`, `Source/model`, `Source/net`) keeps its
-  headless tests green; behavior changes there come with test changes.
+- **TDD in the JUCE-free core** (`Source/dsp`, `Source/model`, `Source/net`):
+  write the failing test FIRST, then the code that makes it pass. Every
+  behavior change lands with its test in the same commit; the headless suite
+  (`tests/`, both CMake targets) stays green. Bug fixes start with a test
+  that reproduces the bug.
+- **E2E for user-visible flows**: a feature isn't done until it's exercised
+  on a real target — emulator screenshots for UI flows, the phone for
+  audio-path/latency changes. The JUCE UI layer has no unit harness, so
+  device verification IS its test; record what was verified in the commit.
+- **The wiki rolls with the code**: `docs/wiki/` (hub `HOME.md` + topic
+  spokes). When a decision lands, dated line in `docs/wiki/decisions.md`;
+  when hard-won knowledge surfaces (reviewer finding, device-only bug, API
+  surprise), update the relevant spoke — in the same commit as the change.
 - Commits: `feat:`/`fix:`/`chore:`/`docs:` prefix, body says why. **No AI
   attribution** — no "Co-Authored-By: Claude", "Generated with ...", or
   similar jargon (the commit-msg hook strips it regardless). Every commit

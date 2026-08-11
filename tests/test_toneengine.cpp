@@ -67,6 +67,42 @@ TEST_CASE("ToneEngine handles numSamples greater than maxBlock and reclaims reti
     for (float v : out) REQUIRE(std::isfinite(v));
 }
 
+TEST_CASE("ToneEngine frees retired models only after two completed blocks") {
+    // setModel's block-gated reclamation: a retired model may still be in use
+    // by an in-flight render(), and several setModel calls can flush in ONE
+    // message-loop drain with no block boundary between them. A retiree must
+    // therefore survive until at least two blocks COMPLETE after retirement,
+    // and must be freed on the next swap after that (no mobile OOM ratchet).
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
+
+    std::shared_ptr<nam::NamModel> m1 = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m1 != nullptr);
+    std::weak_ptr<nam::NamModel> w1 = m1;
+    e.setModel(std::move(m1));
+    m1.reset();   // the engine holds the only reference now
+
+    // Two swaps with NO render between them: m1 must stay alive.
+    auto m2 = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m2 != nullptr);
+    e.setModel(std::move(m2));
+    REQUIRE_FALSE(w1.expired());
+    auto m3 = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m3 != nullptr);
+    e.setModel(std::move(m3));
+    REQUIRE_FALSE(w1.expired());
+
+    // Two completed blocks later, the next swap reclaims it.
+    std::vector<float> in(128), out(128);
+    for (int i = 0; i < 128; ++i) in[i] = 0.05f * std::sin(i * 0.2f);
+    e.render(in.data(), out.data(), 128);
+    e.render(in.data(), out.data(), 128);
+    auto m4 = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
+    REQUIRE(m4 != nullptr);
+    e.setModel(std::move(m4));
+    REQUIRE(w1.expired());
+}
+
 TEST_CASE("ToneEngine clamps render to the active model's max block during a buffer-size increase") {
     // Reproduces the hazardous window: prepare() resizes scratch_ for a new
     // (larger) device buffer size immediately, but the model reload is
