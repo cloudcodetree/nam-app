@@ -91,6 +91,8 @@ if(NAM_BUILD_APP)
         target_sources(NamPlayer PRIVATE
             Source/app/android/AndroidMain.cpp
             Source/app/android/AndroidAudioApp.cpp
+            Source/app/android/AndroidToneServices.cpp
+            Source/app/android/AndroidAudioAudition.cpp
             Source/app/ui/NamLookAndFeel.cpp
             Source/app/ui/PlayScreen.cpp
             Source/app/ui/PlayScreenDeck.cpp
@@ -98,6 +100,7 @@ if(NAM_BUILD_APP)
             Source/app/ui/StacksScreen.cpp
             Source/app/ui/TunerScreen.cpp
             Source/app/ui/AppShell.cpp
+            Source/app/ui/AppShellChrome.cpp
             Source/dsp/ToneEngine.cpp
             Source/dsp/PitchDetector.cpp
             Source/dsp/IrCab.cpp
