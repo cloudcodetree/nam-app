@@ -169,7 +169,7 @@ private:
     void handleIoPanelTap (juce::Point<int> p);
     // I/O device picker inside the orb panel (tap a device name to change
     // it in place; scrollable, height-capped per the overlay rule).
-    int  ioPicker_ = 0;                    // 0 none · 1 input · 2 output
+    int  ioPicker_ = 0;                    // 0 none · 1 input · 2 output · 3 rate · 4 buffer
     juce::StringArray ioPickerItems_;
     juce::String ioPickerCurrent_;
     juce::Rectangle<int> ioPickerRect_;
@@ -197,7 +197,9 @@ private:
     juce::Rectangle<int> navBar_, orbRect_,
                          navBrowseRect_, navFavRect_, navSavedRect_, navStacksRect_;
     void setDeckMode (int mode);              // nav deck buttons (0 fav · 1 saved · 2 browse)
-    juce::Rectangle<int> ioPanelRect_, ioInRow_, ioOutRow_;
+    juce::Rectangle<int> ioPanelRect_, ioEngRow_, ioInRow_, ioOutRow_;
+    juce::Rectangle<int> ioRatePill_, ioBufPill_;   // ENGINE row dropdowns
+    void openEnginePicker (bool buffer);            // rate / buffer chooser
     bool  ioPanelOpen_ = false;
     std::array<juce::Rectangle<int>, 5> navRects_;
     int   activeTab_ = 0;   // 0 Play · 1 Edit · 2 Tones · 3 Live · 4 Setup (-1 none)

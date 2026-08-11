@@ -130,6 +130,7 @@ private:
                          heartRect_,     // card-footer keep toggle
                          saveRect_,      // card-footer download/save toggle
                          viewRow_, favViewRect_, savedViewRect_, browseViewRect_,
+                         viewTitleRect_,   // current-view title (strip, left)
                          filterBtnRect_,
                          flyRect_,       // filters flyout panel
                          pairRowRect_, demoRowRect_, demoPlayRect_;

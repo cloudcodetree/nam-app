@@ -1100,13 +1100,20 @@ void AppShell::resized() {
         navStacksRect_ = right;
     }
 
-    // I/O mute panel floats above the nav, centred on the orb (a breath of
-    // padding between the INPUT and OUTPUT rows).
+    // I/O panel floats above the nav, centred on the orb: ENGINE row
+    // (rate/buffer pickers) on top, then INPUT and OUTPUT with padding.
     const int pw = juce::jmin (380, getWidth() - 48);
-    ioPanelRect_ = { getWidth() / 2 - pw / 2, navBar_.getY() - 142 - 10, pw, 142 };
+    ioPanelRect_ = { getWidth() / 2 - pw / 2, navBar_.getY() - 204 - 10, pw, 204 };
     auto rows = ioPanelRect_.reduced (14, 12);
+    ioEngRow_ = rows.removeFromTop (52);
+    rows.removeFromTop (8);
     ioInRow_  = rows.removeFromTop (52);
     ioOutRow_ = rows.removeFromBottom (52);
+    {
+        auto pills = ioEngRow_.reduced (14, 6).removeFromRight (150).withTrimmedTop (10);
+        ioRatePill_ = pills.removeFromLeft (70).withSizeKeepingCentre (70, 28);
+        ioBufPill_  = pills.removeFromRight (70).withSizeKeepingCentre (70, 28);
+    }
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) browse_.get(), (juce::Component*) library_.get(),
@@ -1274,7 +1281,8 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
         g.drawRoundedRectangle (ioPickerRect_.toFloat().reduced (0.5f), 14.0f, 1.0f);
         g.setFont (nam::ui::uiFontTracked (9.0f, true));
         g.setColour (nam::ui::col::inkA (0.4f));
-        g.drawText (ioPicker_ == 2 ? "OUTPUT DEVICE" : "INPUT DEVICE",
+        g.drawText (ioPicker_ == 2 ? "OUTPUT DEVICE" : ioPicker_ == 1 ? "INPUT DEVICE"
+                    : ioPicker_ == 3 ? "SAMPLE RATE" : "BUFFER SIZE",
                     ioPickerRect_.getX() + 18, ioPickerRect_.getY() + 10,
                     ioPickerRect_.getWidth() - 36, 16, juce::Justification::centredLeft, false);
         g.saveState();
@@ -1332,11 +1340,50 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
                     .replace ("System Default (Input)", "System Default")
                     .replace ("System Default (Output)", "System Default").trim();
         };
-        juce::String inName ("--"), outName ("--");
+        juce::String inName ("--"), outName ("--"), rate ("--"), buffer ("--");
         if (getDevices_) {
             const auto st = getDevices_();
             inName = shortName (st.currentInput);
             outName = shortName (st.currentOutput);
+            rate = st.currentRate.isNotEmpty() ? st.currentRate : juce::String ("--");
+            buffer = st.currentBuffer.isNotEmpty() ? st.currentBuffer : juce::String ("--");
+        }
+
+        // ENGINE row: sample rate + buffer as tap-to-pick pills.
+        {
+            g.setColour (nam::ui::col::inkA (0.04f));
+            g.fillRoundedRectangle (ioEngRow_.toFloat(), 10.0f);
+            auto inner = ioEngRow_.reduced (14, 6);
+            g.setFont (nam::ui::uiFontTracked (10.0f, true));
+            g.setColour (nam::ui::col::inkA (0.45f));
+            g.drawText ("ENGINE", inner.removeFromTop (inner.getHeight() / 2),
+                        juce::Justification::bottomLeft, false);
+            g.setFont (nam::ui::uiFont (11.0f, false));
+            g.setColour (nam::ui::col::inkA (0.55f));
+            g.drawText (latencyMs_ > 0.0
+                            ? juce::String ((int) std::round (latencyMs_)) + " ms round trip"
+                            : juce::String(),
+                        inner, juce::Justification::topLeft, false);
+            auto enginePill = [&] (juce::Rectangle<int> rr, const juce::String& value,
+                                   const char* caption) {
+                nam::ui::drawPill (g, rr.toFloat(), juce::Colours::transparentBlack,
+                                   nam::ui::col::inkA (0.2f));
+                auto in = rr.reduced (10, 0);
+                g.setFont (nam::ui::uiFont (10.0f, false));
+                g.setColour (nam::ui::col::inkA (0.5f));
+                g.drawText (juce::String::fromUTF8 ("\xE2\x96\xBE"),
+                            in.removeFromRight (12), juce::Justification::centred, false);
+                g.setFont (nam::ui::uiFont (12.0f, true));
+                g.setColour (nam::ui::col::ink);
+                g.drawText (value, in, juce::Justification::centred, false);
+                g.setFont (nam::ui::uiFontTracked (7.0f, true));
+                g.setColour (nam::ui::col::inkA (0.4f));
+                g.drawText (juce::String (caption),
+                            juce::Rectangle<int> (rr.getX(), rr.getY() - 12, rr.getWidth(), 10),
+                            juce::Justification::centred, false);
+            };
+            enginePill (ioRatePill_, rate, "RATE");
+            enginePill (ioBufPill_, buffer, "BUFFER");
         }
 
         auto row = [&] (juce::Rectangle<int> rr, const juce::String& label,
@@ -1406,6 +1453,22 @@ void AppShell::openIoPicker (bool output) {
     repaint();
 }
 
+void AppShell::openEnginePicker (bool buffer) {
+    if (! getDevices_) return;
+    const auto st = getDevices_();
+    ioPickerItems_ = buffer ? st.buffers : st.rates;
+    ioPickerCurrent_ = buffer ? st.currentBuffer : st.currentRate;
+    ioPicker_ = buffer ? 4 : 3;
+    ioPickerScroll_ = 0.0f;
+    constexpr int rowH = 44, titleH = 34, pad = 8;
+    ioPickerContentH_ = titleH + pad + rowH * ioPickerItems_.size() + pad;
+    const int pw = juce::jmin (380, getWidth() - 48);
+    const int maxH = contentBounds().getHeight() * 55 / 100;   // overlay rule
+    const int h = juce::jmin (ioPickerContentH_, maxH);
+    ioPickerRect_ = { getWidth() / 2 - pw / 2, navBar_.getY() - h - 10, pw, h };
+    repaint();
+}
+
 void AppShell::handleIoPanelTap (juce::Point<int> p) {
     if (ioPicker_ != 0) {
         if (ioPickerRect_.contains (p)) {
@@ -1419,7 +1482,11 @@ void AppShell::handleIoPanelTap (juce::Point<int> p) {
         }
         return;
     }
-    // Main panel: the toggle pill mutes; the device area opens the picker.
+    // Main panel: ENGINE pills open the rate/buffer pickers; the toggle
+    // pill mutes; the device area opens the device picker.
+    if (ioRatePill_.expanded (4).contains (p)) { openEnginePicker (false); return; }
+    if (ioBufPill_.expanded (4).contains (p))  { openEnginePicker (true);  return; }
+    if (ioEngRow_.contains (p)) return;   // row body: nothing to toggle
     if (ioInRow_.contains (p)) {
         if (p.x > ioInRow_.getRight() - 96) {
             inMuted_ = ! inMuted_;
@@ -1462,9 +1529,13 @@ void AppShell::handleIoUpAt (juce::Point<int> p) {
         const int i = (p.y - ioPickerRect_.getY() - titleH - pad + (int) ioPickerScroll_) / rowH;
         if (i >= 0 && i < ioPickerItems_.size()) {
             const auto name = ioPickerItems_[i];
-            if (ioPicker_ == 2) { if (selectOutput_) selectOutput_ (name); }
-            else                { if (selectInput_) selectInput_ (name); }
-            ioPicker_ = 0;   // back to the panel with the new device shown
+            switch (ioPicker_) {
+                case 2:  if (selectOutput_) selectOutput_ (name); break;
+                case 1:  if (selectInput_)  selectInput_ (name);  break;
+                case 3:  if (selectRate_)   selectRate_ (name);   break;
+                default: if (selectBuffer_) selectBuffer_ (name); break;
+            }
+            ioPicker_ = 0;   // back to the panel with the new pick shown
             repaint();
         }
     }

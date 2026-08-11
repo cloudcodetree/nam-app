@@ -183,45 +183,43 @@ void PlayScreen::resized() {
 
 void PlayScreen::layout() {
     auto r = getLocalBounds();
-    topBar_  = r.removeFromTop (juce::jmax (52, r.getHeight() / 15));
+    r.removeFromTop (10);   // breathing room under the status bar
     metersRow_ = r.removeFromBottom (juce::jmax (78, r.getHeight() / 9)).reduced (20, 6);
     hero_    = r;
 
-    // Top bar: NAM PLAYER wordmark left; edit / live / settings icons right.
-    libRect_ = {};
-    gearRect_    = { topBar_.getRight() - 58,  topBar_.getCentreY() - 21, 42, 42 };
-    liveTopRect_ = editTopRect_ = {};   // gear only (Hi-Fi design)
+    // No top bar (wordmark and settings gear retired — audio config lives
+    // in the status-orb flyout now).
+    topBar_ = libRect_ = gearRect_ = liveTopRect_ = editTopRect_ = {};
 
-    // Filters strip above the card. Browse: gear-type dropdown to the left
-    // of a Filters pill. Favorites: Filters pill alone, shown only when the
-    // deck offers any chips. Pills hug their content.
+    // Strip above the card: the current view's title on the left; the
+    // Filters pill (and, on browse, the gear-type dropdown) pushed right.
+    // Pills hug their content.
     gearDdRect_ = {};
     bool anyFilterChips = false;
     for (const auto& gp : filterGroups_)
         if (! gp.options.isEmpty()) { anyFilterChips = true; break; }
-    if (view_ == 2 || anyFilterChips) {
+    {
         auto fs = hero_.removeFromTop (46);
-        const int n = activeFilterCount();
-        const juce::String label = n > 0
-            ? "Filters " + juce::String::fromUTF8 ("\xC2\xB7") + " " + juce::String (n)
-            : juce::String ("Filters");
-        const int tw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
-                           uiFont (12.0f, true), label));
-        const int fw = 14 + 16 + 10 + tw + 16;   // pad · icon · gap · label · pad
-        if (view_ == 2 && ! gearNames_.isEmpty()) {
-            const auto gearLabel = gearNames_[juce::jlimit (0, gearNames_.size() - 1, gearSel_)];
-            const int gtw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
-                                uiFont (12.0f, true), gearLabel));
-            const int gw = 16 + gtw + 10 + 12 + 12;   // pad · label · gap · chevron · pad
-            const int total = gw + 8 + fw;
-            int x = fs.getCentreX() - total / 2;
-            gearDdRect_ = { x, fs.getY() + 3, gw, 38 };
-            filterBtnRect_ = { x + gw + 8, fs.getY() + 3, fw, 38 };
+        viewTitleRect_ = fs.reduced (30, 3);
+        if (view_ == 2 || anyFilterChips) {
+            const int n = activeFilterCount();
+            const juce::String label = n > 0
+                ? "Filters " + juce::String::fromUTF8 ("\xC2\xB7") + " " + juce::String (n)
+                : juce::String ("Filters");
+            const int tw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
+                               uiFont (12.0f, true), label));
+            const int fw = 14 + 16 + 10 + tw + 16;   // pad · icon · gap · label · pad
+            filterBtnRect_ = { fs.getRight() - 30 - fw, fs.getY() + 3, fw, 38 };
+            if (view_ == 2 && ! gearNames_.isEmpty()) {
+                const auto gearLabel = gearNames_[juce::jlimit (0, gearNames_.size() - 1, gearSel_)];
+                const int gtw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
+                                    uiFont (12.0f, true), gearLabel));
+                const int gw = 16 + gtw + 10 + 12 + 12;   // pad · label · gap · chevron · pad
+                gearDdRect_ = { filterBtnRect_.getX() - 8 - gw, fs.getY() + 3, gw, 38 };
+            }
         } else {
-            filterBtnRect_ = { fs.getCentreX() - fw / 2, fs.getY() + 3, fw, 38 };
+            filterBtnRect_ = {};
         }
-    } else {
-        filterBtnRect_ = {};
     }
 
     // Filters flyout: chips anchored under the filter button, grouped under
@@ -376,23 +374,11 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.setFont (f); g.setColour (c); g.drawText (s, rr, j, false);
     };
 
-    // --- Top bar: wordmark + settings gear (Hi-Fi design) ----------------
+    // --- Strip above the card: view title left, filter pills right --------
     {
-        auto brand = topBar_.reduced (20, 0);
-        g.setFont (uiFontTracked (11.0f, true));
-        g.setColour (col::inkA (0.55f));
-        const juce::String namPart ("NAM ");
-        g.drawText (namPart, brand, juce::Justification::centredLeft, false);
-        const int nw = (int) std::ceil (juce::GlyphArrangement::getStringWidth (
-                           uiFontTracked (11.0f, true), namPart));
-        g.setColour (col::accent);
-        g.drawText ("PLAYER", brand.withTrimmedLeft (nw), juce::Justification::centredLeft, false);
-        text (juce::String::fromUTF8 ("\xE2\x9A\x99"), uiFont (22.0f, false),
-              col::inkA (0.6f), gearRect_, juce::Justification::centred);
-    }
-
-    // --- Browse strip (gear dropdown; deck switching lives in the nav) ---
-    {
+        text (view_ == 2 ? "BROWSE" : view_ == 1 ? "DOWNLOADED" : "FAVORITES",
+              uiFontTracked (11.0f, true), col::inkA (0.5f),
+              viewTitleRect_, juce::Justification::centredLeft);
         // Gear-type dropdown (browse strip).
         if (! gearDdRect_.isEmpty()) {
             const bool hot = gearSel_ > 0;
@@ -944,8 +930,6 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
         repaint();
         return;   // outside tap just closes
     }
-
-    if (gearRect_.expanded (4).contains (p)) { if (onSettings) onSettings(); return; }
 
     if (! gearDdRect_.isEmpty() && gearDdRect_.contains (p)) {
         openMenu (Menu::Gear, gearDdRect_, gearNames_, gearSel_);
