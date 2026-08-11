@@ -161,8 +161,9 @@ private:
         demoTracksRT_{};                                               // audio thread reads
     std::array<bool, (size_t)nam::demo::kNumTracks> demoFetching_{};   // msg thread
     std::vector<std::pair<std::shared_ptr<const std::vector<float>>, uint64_t>>
-        retiredDemos_;                       // msg thread
-    std::atomic<uint64_t> appBlocks_{ 0 };   // completed device blocks (release)
+        retiredDemos_;                        // msg thread
+    std::atomic<uint64_t> appBlocks_{ 0 };    // completed device blocks (release)
+    std::atomic<bool> inCallback_{ false };   // true while getNextAudioBlock runs
     void publishTrack(int index, std::shared_ptr<const std::vector<float>> buf);
     void publishSlot(int index, std::shared_ptr<const std::vector<float>> buf);
     void reclaimRetiredDemos();   // msg thread, block-gated

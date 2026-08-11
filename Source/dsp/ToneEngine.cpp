@@ -45,11 +45,15 @@ void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
     retired_.erase(std::remove_if(retired_.begin(), retired_.end(),
                                   [nowBlocks](const auto& r) { return nowBlocks >= r.second + 2; }),
                    retired_.end());
-    // Stagnation fallback: if the counter hasn't moved since the OLDEST
-    // retiree was stamped and the list keeps growing, no render has run for
-    // that entire span — the device is stopped, so freeing the oldest is
-    // safe and stops audio-stopped swaps from accumulating until prepare().
-    while (retired_.size() > 8 && nowBlocks == retired_.front().second)
+    // Stagnation fallback for a STOPPED device (the counter never advances,
+    // so the block gate can never fire): freeing a zero-completed-blocks
+    // retiree is only safe when no render is in flight RIGHT NOW — the
+    // inRender_ acquire proves the last render fully finished, and any
+    // render starting after this check reads the current active_ pointer,
+    // never a retiree. A counter compare alone shows completion, not
+    // absence (twelve swaps can drain while one render is mid-block).
+    while (retired_.size() > 8 && nowBlocks == retired_.front().second &&
+           !inRender_.load(std::memory_order_acquire))
         retired_.erase(retired_.begin());
     if (current_) retired_.push_back({ std::move(current_), nowBlocks });
     current_ = m;
@@ -62,6 +66,7 @@ void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
 }
 
 void ToneEngine::render(const float* in, float* out, int numSamples) {
+    inRender_.store(true, std::memory_order_relaxed);
     // RT-safe timing: a steady_clock read is a non-blocking, allocation-free
     // counter read (mach_absolute_time on macOS). Used only to report load.
     const auto t0 = std::chrono::steady_clock::now();
@@ -128,6 +133,9 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
     // memory operation of this render before reclaiming a retired model —
     // the block-gated free is only safe with this happens-before edge.
     blockCount_.fetch_add(1, std::memory_order_release);
+    // RELEASE: a control-thread acquire that observes false knows every
+    // memory op of this render (including its model reads) is finished.
+    inRender_.store(false, std::memory_order_release);
 }
 
 }   // namespace dsp

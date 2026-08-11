@@ -725,6 +725,7 @@ void AppShell::fetchMoreBrowse () {
     // nothing unbounded). No SSE/streaming exists on the API — it is plain
     // page-numbered REST, so "get them all" = fetch pages as needed.
     if (deckMode_ != 2 || browseFetching_ || browseExhausted_ || !svc_.searchEx) return;
+    if (!browseLoaded_) return;   // page 1 of THIS query hasn't landed yet
     if ((int)playDeck_.size () >= kBrowseDeckCap) return;
     browseFetching_ = true;
     auto p = buildBrowseParams ();
@@ -771,12 +772,14 @@ void AppShell::runPlayBrowse () {
     // any in-flight append (generation token).
     browsePage_ = 1;
     browseExhausted_ = false;
+    browseLoaded_ = false;   // appends hold off until page 1 replaces the deck
     ++browseGen_;
     auto p = buildBrowseParams ();
     p.page = 1;
     svc_.searchEx (
         p, [this, gen = browseGen_] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
             if (!ok || gen != browseGen_) return;   // superseded by a newer query
+            browseLoaded_ = true;
             playDeck_ = std::move (tones);
             playDeckIndex_ = playDeck_.empty () ? -1 : 0;
             if (deckMode_ == 2) showBrowseCard (0);

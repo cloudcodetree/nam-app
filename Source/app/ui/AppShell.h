@@ -236,6 +236,7 @@ private:
     bool browseFetching_ = false;    // an append fetch is in flight
     bool browseExhausted_ = false;   // a short page came back: no more results
     int browseGen_ = 0;              // bumped per fresh query; stale fetches drop
+    bool browseLoaded_ = false;      // page 1 of the current query has landed
     void fetchMoreBrowse ();         // append the next page (infinite scroll)
     nam::SearchParams buildBrowseParams () const;
     static constexpr int kBrowseDeckCap = 300;   // bounded (house rule)

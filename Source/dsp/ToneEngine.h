@@ -100,5 +100,9 @@ private:
     std::atomic<float> cpuLoad_{ 0.0f };
     std::atomic<uint32_t> overCap_{ 0 };
     std::atomic<uint64_t> blockCount_{ 0 };
+    // True while render() is executing. The stagnation-reclaim path may only
+    // free a zero-completed-blocks retiree when NO render is in flight — a
+    // completed-block count alone proves completion, not absence.
+    std::atomic<bool> inRender_{ false };
 };
 }   // namespace dsp

@@ -308,6 +308,7 @@ void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRa
 }
 
 void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info) {
+    inCallback_.store(true, std::memory_order_relaxed);
     auto* buf = info.buffer;
     const int n = info.numSamples;
     const int cap = (int)mono_.size();
@@ -446,6 +447,7 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     // RELEASE: the message thread's acquire load gates freeing retired demo
     // buffers on this counter — the edge is what makes that free safe.
     appBlocks_.fetch_add(1, std::memory_order_release);
+    inCallback_.store(false, std::memory_order_release);
 }
 
 void AndroidAudioApp::releaseResources() {}
@@ -1105,9 +1107,12 @@ void AndroidAudioApp::reclaimRetiredDemos() {
                                        [now](const auto& r) { return now >= r.second + 2; }),
                         retiredDemos_.end());
     // Stagnation fallback (device stopped: the counter never advances, so
-    // the block gate can never fire): no callback has run since the OLDEST
-    // retiree was stamped, so freeing it is safe. Mirrors ToneEngine.
-    while (retiredDemos_.size() > 8 && now == retiredDemos_.front().second)
+    // the block gate can never fire): only safe when no callback is in
+    // flight RIGHT NOW — the acquire on inCallback_ proves the last one
+    // fully finished, and a callback starting after this check reads the
+    // current published pointers, never a retiree. Mirrors ToneEngine.
+    while (retiredDemos_.size() > 8 && now == retiredDemos_.front().second &&
+           !inCallback_.load(std::memory_order_acquire))
         retiredDemos_.erase(retiredDemos_.begin());
 }
 
