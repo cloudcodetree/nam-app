@@ -85,6 +85,7 @@ private:
 
     juce::String name_ { "Bundled Tone" }, family_ { "NAM PLAYER" }, author_;
     juce::Image  art_;
+    juce::Image  artBlur_;           // tiny copy, upscaled as the blurred fill
     bool  kept_ = false;
     bool  saved_ = false;
     bool  demoPlaying_ = false;

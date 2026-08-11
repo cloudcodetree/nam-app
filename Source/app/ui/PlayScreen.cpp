@@ -42,6 +42,13 @@ void PlayScreen::setPosition (int index, int count) {
 
 void PlayScreen::setArtwork (juce::Image art) {
     art_ = std::move (art);
+    // Cheap blur for the cover-fill behind the aspect-fit photo: crush the
+    // image tiny, then let high-quality upsampling smear it at draw time.
+    artBlur_ = {};
+    if (art_.isValid())
+        artBlur_ = art_.rescaled (juce::jmax (6, art_.getWidth() / 24),
+                                  juce::jmax (6, art_.getHeight() / 24),
+                                  juce::Graphics::mediumResamplingQuality);
     repaint (artRect_);
 }
 
@@ -492,14 +499,34 @@ void PlayScreen::paint (juce::Graphics& g) {
                 }
             }
         } else if (art_.isValid()) {
-            // Cover-fit the TONE3000 photo (centre crop, preserve aspect).
-            const float scale = juce::jmax ((float) artRect_.getWidth()  / (float) art_.getWidth(),
+            // Whole photo aspect-FIT on black, floating over a half-opacity
+            // blurred cover-fill of itself (tiny artBlur_ smeared upscaled).
+            g.setColour (juce::Colours::black);
+            g.fillRect (artRect_);
+            g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
+            if (artBlur_.isValid()) {
+                const float bs = juce::jmax (
+                    (float) artRect_.getWidth()  / (float) artBlur_.getWidth(),
+                    (float) artRect_.getHeight() / (float) artBlur_.getHeight());
+                const float bw = artBlur_.getWidth() * bs, bh = artBlur_.getHeight() * bs;
+                g.setOpacity (0.5f);
+                g.drawImageTransformed (artBlur_,
+                    juce::AffineTransform::scale (bs)
+                        .translated (artRect_.getCentreX() - bw * 0.5f,
+                                     artRect_.getCentreY() - bh * 0.5f));
+                g.setOpacity (1.0f);
+            }
+            const float scale = juce::jmin ((float) artRect_.getWidth()  / (float) art_.getWidth(),
                                             (float) artRect_.getHeight() / (float) art_.getHeight());
             const float w = art_.getWidth() * scale, h = art_.getHeight() * scale;
-            g.drawImageTransformed (art_,
-                juce::AffineTransform::scale (scale)
-                    .translated (artRect_.getCentreX() - w * 0.5f,
-                                 artRect_.getCentreY() - h * 0.5f));
+            const float fx = artRect_.getCentreX() - w * 0.5f;
+            const float fy = artRect_.getCentreY() - h * 0.5f;
+            // Opaque backing under the photo: the blurred fill must never
+            // show through it (e.g. artwork with an alpha channel).
+            g.setColour (juce::Colours::black);
+            g.fillRect (juce::Rectangle<float> (fx, fy, w, h));
+            g.drawImageTransformed (art_, juce::AffineTransform::scale (scale)
+                                              .translated (fx, fy));
             // Footer scrim keeps the in-card text readable over bright photos.
             juce::ColourGradient scrim (col::bg.withAlpha (0.88f), (float) artRect_.getCentreX(),
                                         (float) artRect_.getBottom(), col::bg.withAlpha (0.0f),
