@@ -3,6 +3,13 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-11** Structure cleanup: dead screens deleted (~2,400 lines —
+  Edit/Browse/Library/Live/AudioSettings/Placeholder had no nav entry);
+  god files split into purpose-named TUs (AppShellChrome, AndroidTone-
+  Services, AndroidAudioAudition); service lambdas take const&. Why: the
+  codebase should satisfy its own CLAUDE.md rules, and every RT BLOCKER
+  had been hiding in the two biggest files. Next step when desktop parity
+  matters: promote the Android service TUs into shared classes.
 - **2026-08-11** Async snapshots re-validate against live truth: browse
   appends carry a generation token; expanded-row tap rects recompute from
   current scroll; retire lists get a stagnation fallback for the stopped-
