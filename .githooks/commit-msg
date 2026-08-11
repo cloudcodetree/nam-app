@@ -1,0 +1,20 @@
+#!/bin/bash
+# Sanitize commit messages: strip AI-attribution jargon ("Co-Authored-By:
+# Claude ...", "Generated with Claude Code", "Created with ...", robot-emoji
+# banners). The history should read as the project's, not the tooling's.
+set -u
+
+msgfile="$1"
+[ -f "$msgfile" ] || exit 0
+
+sed -E \
+    -e '/[Cc]o-[Aa]uthored-[Bb]y:.*([Cc]laude|[Aa]nthropic)/d' \
+    -e '/[Gg]enerated (with|by).*([Cc]laude|[Aa]nthropic|AI)/d' \
+    -e '/[Cc]reated (with|by).*([Cc]laude|[Aa]nthropic|AI)/d' \
+    -e '/noreply@anthropic\.com/d' \
+    -e '/🤖/d' \
+    "$msgfile" > "$msgfile.sanitized" && mv "$msgfile.sanitized" "$msgfile"
+
+# Trim trailing blank lines left behind by stripped trailers.
+printf '%s\n' "$(cat "$msgfile")" > "$msgfile.sanitized" && mv "$msgfile.sanitized" "$msgfile"
+exit 0

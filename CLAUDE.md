@@ -78,6 +78,8 @@ growth, god functions, unregistered sources) are MAJOR.
   for real time).
 - The JUCE-free core (`Source/dsp`, `Source/model`, `Source/net`) keeps its
   headless tests green; behavior changes there come with test changes.
-- Commits: `feat:`/`fix:`/`chore:`/`docs:` prefix, body says why. Every
-  commit auto-pushes through the adversarial review gate (`.githooks/`) —
-  check `.git/autopush.log` if a push seems missing.
+- Commits: `feat:`/`fix:`/`chore:`/`docs:` prefix, body says why. **No AI
+  attribution** — no "Co-Authored-By: Claude", "Generated with ...", or
+  similar jargon (the commit-msg hook strips it regardless). Every commit
+  auto-pushes through the adversarial review gate (`.githooks/`) — check
+  `.git/autopush.log` if a push seems missing.
