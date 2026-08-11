@@ -39,8 +39,11 @@ public:
     //
     // Calling this again while a download is already in progress cancels
     // the prior one first (its `done` is dropped, never invoked).
+    // `preferSmallest` picks the smallest model variant by file size instead
+    // (used by the audition/demo flow: fastest download, cheapest to run).
     void downloadToneModel(const std::string& toneId, juce::File destDir,
-                           std::function<void(bool, juce::File, juce::String)> done);
+                           std::function<void(bool, juce::File, juce::String)> done,
+                           bool preferSmallest = false);
 
     // Runs an authenticated TONE3000 tone search (`nam::buildSearchUrl`) on a
     // background thread and delivers the parsed results.
@@ -52,16 +55,37 @@ public:
     // prior one first (its `done` is dropped, never invoked). Independent of
     // downloadToneModel(): a search and a download may be in flight at the
     // same time.
+    void search(const nam::SearchParams& params,
+                std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
     void search(const std::string& query, int page,
                 std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done);
+
+    // Fetches the model variants for one tone (A2 first, A1 fallback).
+    // `done` runs exactly once on the message thread. Superseding cancels.
+    void listToneModels(const std::string& toneId,
+                        std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done);
+
+    // Downloads one specific model (no list lookup). Same contract as
+    // downloadToneModel; shares (and supersedes) its download slot.
+    void downloadModel(const nam::ModelInfo& model, juce::File destDir,
+                       std::function<void(bool, juce::File, juce::String)> done);
+
+    // Keep/library download: identical to downloadToneModel (best quality)
+    // but runs on its OWN slot, so keeping a pack never cancels an in-flight
+    // audition download (and vice versa).
+    void downloadToneModelForKeep(const std::string& toneId, juce::File destDir,
+                                  std::function<void(bool, juce::File, juce::String)> done);
 
 private:
     class DownloadThread;
     class SearchThread;
+    class ListModelsThread;
 
     std::string accessToken_;
-    std::unique_ptr<DownloadThread> downloadThread_;
+    std::unique_ptr<DownloadThread> downloadThread_;   // audition slot
+    std::unique_ptr<DownloadThread> keepThread_;       // keep/library slot
     std::unique_ptr<SearchThread> searchThread_;
+    std::unique_ptr<ListModelsThread> listThread_;
 };
 
 } // namespace nam

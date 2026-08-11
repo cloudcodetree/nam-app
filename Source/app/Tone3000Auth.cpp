@@ -31,6 +31,8 @@ constexpr int kCandidatePorts[] = {49222, 49223, 49224, 49225, 49226};
 // window closes the loopback port before a real pick arrives (ERR_CONNECTION_REFUSED).
 constexpr int kAcceptTimeoutMs = 600000; // 10 minutes
 constexpr int kAcceptPollMs = 250;       // poll granularity (also cancellation latency)
+constexpr int kPostCallbackGraceMs = 1500; // linger after capturing the code so the
+                                           // browser's follow-up navigation gets served
 constexpr int kRequestReadTimeoutMs = 5000;
 constexpr int kMaxRequestLineBytes = 8192;
 constexpr int kTokenConnectTimeoutMs = 15000;
@@ -128,16 +130,38 @@ std::string readHttpRequestLine(juce::StreamingSocket& conn) {
 }
 
 // Writes a minimal 200 OK HTML response so the browser tab shows something
-// sensible, then the caller closes the connection.
+// sensible, then the caller closes the connection. Includes permissive CORS +
+// Private-Network-Access headers: modern OAuth providers (TONE3000's Next.js
+// app) reach this loopback via a browser fetch() from an https origin, which
+// Chrome treats as a public->private request needing these headers.
 void writeRedirectLandingResponse(juce::StreamingSocket& conn) {
     static const char kBody[] =
         "<html><body>You can return to NAM Player.</body></html>";
     std::ostringstream response;
     response << "HTTP/1.1 200 OK\r\n"
              << "Content-Type: text/html; charset=utf-8\r\n"
+             << "Access-Control-Allow-Origin: *\r\n"
+             << "Access-Control-Allow-Private-Network: true\r\n"
              << "Content-Length: " << (sizeof(kBody) - 1) << "\r\n"
              << "Connection: close\r\n\r\n"
              << kBody;
+    const std::string bytes = response.str();
+    conn.write(bytes.data(), static_cast<int>(bytes.size()));
+}
+
+// Answers a CORS + Private-Network-Access preflight (OPTIONS) so the browser
+// will then send the real callback request to our loopback server. Chrome
+// requires Access-Control-Allow-Private-Network:true for https->127.0.0.1.
+void writeCorsPreflightResponse(juce::StreamingSocket& conn) {
+    std::ostringstream response;
+    response << "HTTP/1.1 204 No Content\r\n"
+             << "Access-Control-Allow-Origin: *\r\n"
+             << "Access-Control-Allow-Methods: GET, OPTIONS\r\n"
+             << "Access-Control-Allow-Headers: *\r\n"
+             << "Access-Control-Allow-Private-Network: true\r\n"
+             << "Access-Control-Max-Age: 600\r\n"
+             << "Content-Length: 0\r\n"
+             << "Connection: close\r\n\r\n";
     const std::string bytes = response.str();
     conn.write(bytes.data(), static_cast<int>(bytes.size()));
 }
@@ -294,48 +318,63 @@ Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const s
         return result;
     }
 
-    // Poll for the incoming connection instead of a single blocking accept()
-    // so we can honour both the overall timeout and thread cancellation
-    // (destructor / a superseding beginSelectToneFlow() call).
-    std::unique_ptr<juce::StreamingSocket> conn;
+    // Accept loop. TONE3000's login page reaches the loopback via a browser
+    // fetch(), so the browser sends a CORS + Private-Network-Access preflight
+    // (OPTIONS) before the real callback request, and a Next.js soft navigation
+    // may then hard-navigate to the same URL. So we (a) answer preflights with
+    // the CORS/PNA headers, (b) keep the listener open across several
+    // connections rather than closing after the first, and (c) once we've
+    // captured the code, linger briefly so the follow-up navigation gets a
+    // friendly landing page instead of a connection error.
+    std::map<std::string, std::string> query;
+    bool gotCallback = false;
     const auto acceptDeadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds(kAcceptTimeoutMs);
-    while (std::chrono::steady_clock::now() < acceptDeadline) {
+    auto graceDeadline = acceptDeadline;
+    while (std::chrono::steady_clock::now() < acceptDeadline
+           && std::chrono::steady_clock::now() < graceDeadline) {
         if (thread.threadShouldExit()) {
             listener.close();
             result.error = "cancelled";
             return result;
         }
         const int ready = listener.waitUntilReady(true, kAcceptPollMs);
-        if (ready == 1) {
-            conn.reset(listener.waitForNextConnection());
-            if (conn)
-                break;
-        } else if (ready < 0) {
+        if (ready < 0) {
             result.error = "redirect server socket error";
             listener.close();
             return result;
         }
+        if (ready != 1)
+            continue;
+
+        std::unique_ptr<juce::StreamingSocket> conn(listener.waitForNextConnection());
+        if (!conn)
+            continue;
+
+        const std::string requestLine = readHttpRequestLine(*conn);
+        std::string method, target;
+        if (parseRequestLine(requestLine, method, target)) {
+            if (method == "OPTIONS") {
+                writeCorsPreflightResponse(*conn);   // keep listening for the real request
+            } else {
+                if (!gotCallback) {
+                    auto q = parseQueryParams(target);
+                    if (q.count("code") > 0 || q.count("error") > 0) {
+                        query = std::move(q);
+                        gotCallback = true;
+                        graceDeadline = std::chrono::steady_clock::now()
+                            + std::chrono::milliseconds(kPostCallbackGraceMs);
+                    }
+                }
+                writeRedirectLandingResponse(*conn);
+            }
+        }
+        conn->close();
     }
     listener.close();
 
-    if (!conn) {
+    if (!gotCallback) {
         result.error = "timed out waiting for the browser redirect";
-        return result;
-    }
-
-    const std::string requestLine = readHttpRequestLine(*conn);
-    std::string method, target;
-    const bool parsedRequestLine = parseRequestLine(requestLine, method, target);
-    const auto query = parsedRequestLine ? parseQueryParams(target)
-                                          : std::map<std::string, std::string>{};
-
-    writeRedirectLandingResponse(*conn);
-    conn->close();
-    conn.reset();
-
-    if (!parsedRequestLine) {
-        result.error = "malformed redirect request";
         return result;
     }
 

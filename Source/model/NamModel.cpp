@@ -45,4 +45,8 @@ void NamModel::process(const float* input, float* output, int numSamples) {
         const_cast<float*>(input), output, static_cast<size_t>(numSamples));
 }
 
+float NamModel::recommendedOutputDbAdjustment() const {
+    return static_cast<NeuralModel*>(model_)->GetRecommendedOutputDBAdjustment();
+}
+
 } // namespace nam

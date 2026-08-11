@@ -11,6 +11,9 @@ void ToneEngine::prepare(int sampleRate, int maxBlock) {
     maxBlock_   = maxBlock;
     inGain_.reset(1.0f, sampleRate);
     outGain_.reset(1.0f, sampleRate);
+    normGain_.reset(1.0f, sampleRate);
+    if (current_)   // re-apply normalisation for the model that stays loaded
+        normGain_.setDb(current_->recommendedOutputDbAdjustment());
     scratch_.assign(maxBlock, 0.0f);
 
     // Safe point: audio is stopped/not yet started here, so no render() can
@@ -34,6 +37,11 @@ void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
     if (current_)
         retired_.push_back(std::move(current_));
     current_ = m;
+
+    // NAM loudness normalisation: land every model near the -18 dBFS
+    // reference so hot captures don't clip and quiet ones aren't buried.
+    normGain_.setDb(m ? m->recommendedOutputDbAdjustment() : 0.0f);
+
     active_.store(m ? m.get() : nullptr, std::memory_order_release);
 }
 
@@ -72,6 +80,8 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
             scratch_[i] = inGain_.applyNext(in[i]);
         gate_.process(scratch_.data(), scratch_.data(), n);   // gate before amp
         m->process(scratch_.data(), out, n);                  // amp
+        for (int i = 0; i < n; ++i)
+            out[i] = normGain_.applyNext(out[i]);             // loudness normalisation
         irCab_.process(out, out, n);                          // cab
         eq_.process(out, n);                                  // tone
         delay_.process(out, out, n);                          // time FX: delay

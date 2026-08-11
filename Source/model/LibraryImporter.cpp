@@ -67,7 +67,8 @@ void extractIrMetadata(const std::string& path, LibraryEntry& e) {
 } // namespace
 
 const LibraryEntry* importIntoLibrary(LibraryStore& store, const std::string& sourcePath,
-                                       LibraryType type, long long now) {
+                                       LibraryType type, long long now,
+                                       const std::string& displayName) {
     try {
         if (!fs::exists(sourcePath)) return nullptr;
 
@@ -86,7 +87,8 @@ const LibraryEntry* importIntoLibrary(LibraryStore& store, const std::string& so
         entry.fileName = destName;
         entry.type = type;
         entry.addedAt = now;
-        entry.displayName = fs::path(destName).stem().string();
+        entry.displayName = displayName.empty() ? fs::path(destName).stem().string()
+                                                : displayName;
 
         if (type == LibraryType::Model) {
             extractModelMetadata(destPath.string(), entry);

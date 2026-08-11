@@ -10,3 +10,12 @@ build-tsan/
 !.env.example
 build-ci/
 build-app/
+build-android-core/
+
+# Android / Gradle build artifacts
+Builds/Android/.gradle/
+Builds/Android/app/build/
+Builds/Android/app/.cxx/
+Builds/Android/local.properties
+Builds/Android/build/
+.gradle/
