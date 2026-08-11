@@ -309,6 +309,7 @@ void PlayScreen::layout() {
     tunerRect_ = metersRow_;
 
     backBtnRect_ = { artRect_.getRight() - 48, artRect_.getY() + 14, 34, 34 };
+    cardEqRect_  = backBtnRect_;   // front face: mixer icon in the same corner
 
     // Card-back settings rows (drawn/hit only while flipped), then the
     // PAIR-IR and DEMO AUDIO rows. Cab/IR cards show only what applies:
@@ -327,7 +328,10 @@ void PlayScreen::layout() {
         }
         // Demo audio first, pairing beneath it.
         auto demo = bottom.removeFromTop (46).reduced (0, 4);
-        demoPlayRect_ = demo.removeFromRight (44);
+        demoPlayRect_ = demo.removeFromRight (44);   // hit target stays wide
+        demoPlayRect_ = demoPlayRect_.withSizeKeepingCentre (   // drawn circle: square
+            juce::jmin (demoPlayRect_.getWidth(), demoPlayRect_.getHeight()),
+            juce::jmin (demoPlayRect_.getWidth(), demoPlayRect_.getHeight()));
         demoRowRect_ = demo.withTrimmedRight (8);
         pairRowRect_ = bottom.removeFromTop (46).reduced (0, 4);
     }
@@ -557,6 +561,23 @@ void PlayScreen::paint (juce::Graphics& g) {
 
         // Front footer: tone text + heart live INSIDE the card (Hi-Fi design).
         if (! backFace) {
+            // Flip affordance: circled mixer (3 vertical sliders), top-right.
+            g.setColour (col::bg.withAlpha (0.35f));
+            g.fillEllipse (cardEqRect_.toFloat());
+            g.setColour (col::inkA (0.3f));
+            g.drawEllipse (cardEqRect_.toFloat().reduced (0.5f), 1.0f);
+            {
+                const auto eb = cardEqRect_.toFloat().withSizeKeepingCentre (15.0f, 15.0f);
+                g.setColour (col::inkA (0.8f));
+                const float ky[3] = { 0.30f, 0.65f, 0.45f };   // staggered knobs
+                for (int i = 0; i < 3; ++i) {
+                    const float x = eb.getCentreX() + (float) (i - 1) * 5.5f;
+                    g.fillRoundedRectangle (x - 0.75f, eb.getY(), 1.5f, eb.getHeight(), 0.75f);
+                    g.fillEllipse (x - 2.75f, eb.getY() + eb.getHeight() * ky[i] - 2.75f,
+                                   5.5f, 5.5f);
+                }
+            }
+
             auto ft = face.reduced (18, 0).withTrimmedBottom (16);
             auto block = ft.removeFromBottom (author_.isNotEmpty() ? 84 : 62)
                            .withTrimmedRight (110);

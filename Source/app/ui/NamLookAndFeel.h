@@ -19,6 +19,7 @@ namespace col {
     const juce::Colour inkOnAccent  { 0xff100a06 }; // near-black text on orange
     const juce::Colour meterGreen   { 0xff3fae6a };
     const juce::Colour meterLime    { 0xffc8f051 };
+    const juce::Colour meterBlue    { 0xff4da3ff }; // output meters (vs lime input)
 
     inline juce::Colour inkA (float a) { return ink.withAlpha (a); }        // dimmed ink
     inline juce::Colour accentA (float a) { return accent.withAlpha (a); }  // orange washes

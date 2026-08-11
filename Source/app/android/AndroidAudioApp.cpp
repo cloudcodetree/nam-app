@@ -399,6 +399,15 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         for (int i = 0; i < n && i < cap; ++i)
             out[i] = outMuted ? 0.0f : mono_[(size_t) i];
     }
+
+    // Meter the signal actually leaving the app. The engine's own peak
+    // telemetry freezes whenever the engine is bypassed (demo playback,
+    // mutes), so the output arc must tap the device write instead.
+    float outPk = 0.0f;
+    if (! outMuted)
+        for (int i = 0; i < n && i < cap; ++i)
+            outPk = juce::jmax(outPk, std::fabs(mono_[(size_t) i]));
+    outPeak_.store(outPk, std::memory_order_relaxed);
 }
 
 void AndroidAudioApp::releaseResources() {}
@@ -406,7 +415,7 @@ void AndroidAudioApp::releaseResources() {}
 void AndroidAudioApp::timerCallback() {
     if (shell_ != nullptr) {
         shell_->setLevels(inPeak_.load(std::memory_order_relaxed),
-                          engine_.outputPeak());
+                          outPeak_.load(std::memory_order_relaxed));
         // Orb reflects the user's mute toggles (the feedback guard is a
         // monitoring-path protection, not a user state).
         shell_->setIoMuted(inputMutedUser_.load(std::memory_order_relaxed),
@@ -1499,6 +1508,12 @@ void AndroidAudioApp::doToggleKeep(nam::ToneInfo tone,
     if (! id.empty()) {
         const auto* e = library_.find(id);
         library_.setFavorite(id, ! (e != nullptr && e->favorite));
+        // Heal pre-fix entries whose name is still the raw cache stem
+        // ("ir_79857"): we know the real title now, so keep it.
+        if (e != nullptr && ! tone.title.empty()
+            && (e->displayName.rfind("ir_", 0) == 0
+                || e->displayName.rfind("keep_", 0) == 0))
+            library_.setDisplayName(id, tone.title);
         library_.save();
         done(true, juce::String(tone.title));
         return;
@@ -1525,7 +1540,7 @@ void AndroidAudioApp::doDownload(nam::ToneInfo tone,
     if (localFile.existsAsFile()) {
         auto* entry = nam::importIntoLibrary(library_, localFile.getFullPathName().toStdString(),
                                              isIr ? nam::LibraryType::Ir : nam::LibraryType::Model,
-                                             nowSeconds());
+                                             nowSeconds(), tone.title);
         if (entry == nullptr) { done(false, "import failed"); return; }
         library_.save();
         done(true, juce::String(entry->displayName));

@@ -123,6 +123,7 @@ private:
     juce::Rectangle<int> libRect_, prevRect_, nextRect_, dotsRect_, tunerRect_,
                          gearRect_, editTopRect_, liveTopRect_,
                          backBtnRect_,   // card-back return button
+                         cardEqRect_,    // card-front flip affordance (mixer icon)
                          heartRect_,     // card-footer keep toggle
                          saveRect_,      // card-footer download/save toggle
                          viewRow_, favViewRect_, savedViewRect_, browseViewRect_,

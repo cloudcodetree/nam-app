@@ -175,6 +175,14 @@ bool LibraryStore::setFavorite(const std::string& id, bool fav) {
     return true;
 }
 
+bool LibraryStore::setDisplayName(const std::string& id, const std::string& name) {
+    auto it = std::find_if(entries_.begin(), entries_.end(),
+                            [&](const LibraryEntry& e) { return e.id == id; });
+    if (it == entries_.end() || name.empty()) return false;
+    it->displayName = name;
+    return true;
+}
+
 bool LibraryStore::markUsed(const std::string& id, long long now) {
     auto it = std::find_if(entries_.begin(), entries_.end(),
                             [&](const LibraryEntry& e) { return e.id == id; });

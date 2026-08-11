@@ -974,7 +974,7 @@ void AppShell::paint (juce::Graphics& g) {
             const float f = levelFrac (meterOutPeak_);
             if (f > 0.01f)
                 arc (0.5f * pi - f * 0.5f * pi, 0.5f * pi + f * 0.5f * pi,
-                     nam::ui::col::accentAlt, 3.5f);   // design: output = orange
+                     nam::ui::col::meterBlue, 3.5f);   // output = blue (vs lime input)
         }
 
         // Centre: latency, or MUTE when the output is silenced.
@@ -1106,7 +1106,7 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
             g.drawText (muted ? "MUTED" : "MUTE", toggle, juce::Justification::centred, false);
         };
         row (ioInRow_,  "INPUT",  inName,  inMuted_,  meterInPeak_,  nam::ui::col::meterLime);
-        row (ioOutRow_, "OUTPUT", outName, outMuted_, meterOutPeak_, nam::ui::col::accentAlt);
+        row (ioOutRow_, "OUTPUT", outName, outMuted_, meterOutPeak_, nam::ui::col::meterBlue);
     }
 }
 

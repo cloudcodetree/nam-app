@@ -20,6 +20,7 @@ public:
     const LibraryEntry* add(const LibraryEntry& e);  // insert/replace by id; returns stored
     bool remove(const std::string& id);              // removes entry AND deletes its file
     bool setFavorite(const std::string& id, bool fav);
+    bool setDisplayName(const std::string& id, const std::string& name);
     bool markUsed(const std::string& id, long long now);
     const LibraryEntry* find(const std::string& id) const;
 

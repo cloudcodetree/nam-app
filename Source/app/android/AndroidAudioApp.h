@@ -130,6 +130,7 @@ private:
     int    blockSize_  = 256;
     std::vector<float> mono_;
     std::atomic<float> inPeak_ { 0.0f };
+    std::atomic<float> outPeak_ { 0.0f };   // metered at the device write, not the engine
     bool modelLoaded_ = false;
 
     // Demo riff (audition mode). demoLoop_ is the DRY riff, built at prepare
