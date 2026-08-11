@@ -354,10 +354,9 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         } else {
             for (int i = 0; i < n && i < cap; ++i) mono_[(size_t)i] = 0.0f;
         }
-    } else if (const auto* slotPtr =
-                   (demoOn && slot >= 0)
-                       ? demoSlotsRT_[(size_t)slot].load(std::memory_order_acquire)
-                       : nullptr;
+    } else if (const auto* slotPtr = (demoOn && slot >= 0) ? demoSlotsRT_[(size_t)slot].load(
+                                                                 std::memory_order_acquire)
+                                                           : nullptr;
                slotPtr != nullptr && !slotPtr->empty()) {
         // Audition: play back the offline-rendered (model-processed) riff.
         // No inference on the audio thread; lock-free raw pointer read.

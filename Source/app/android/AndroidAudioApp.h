@@ -158,7 +158,7 @@ private:
     std::array<std::shared_ptr<const std::vector<float>>, (size_t)nam::demo::kNumTracks>
         demoTracks_;   // owners (msg thread)
     std::array<std::atomic<const std::vector<float>*>, (size_t)nam::demo::kNumTracks>
-        demoTracksRT_{};   // audio thread reads
+        demoTracksRT_{};                                               // audio thread reads
     std::array<bool, (size_t)nam::demo::kNumTracks> demoFetching_{};   // msg thread
     std::vector<std::pair<std::shared_ptr<const std::vector<float>>, uint64_t>>
         retiredDemos_;                       // msg thread
@@ -180,7 +180,7 @@ private:
     // Rendered-audition slots: same publish-then-retire scheme (owners here,
     // raw atomics in demoSlotsRT_, retirement through retiredDemos_).
     std::array<std::shared_ptr<const std::vector<float>>, 2> demoSlots_;   // owners (msg thread)
-    std::array<std::atomic<const std::vector<float>*>, 2> demoSlotsRT_ {};
+    std::array<std::atomic<const std::vector<float>*>, 2> demoSlotsRT_{};
     std::atomic<int> demoSlot_{ -1 };
     std::atomic<size_t> demoPos_{ 0 };
     std::atomic<bool> demoOn_{ false };

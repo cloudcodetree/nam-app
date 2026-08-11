@@ -9,24 +9,29 @@
 using Catch::Approx;
 
 TEST_CASE("ToneEngine passes audio through when no model") {
-    dsp::ToneEngine e; e.prepare(48000, 128);
-    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
+    e.setInputDb(0.0f);
+    e.setOutputDb(0.0f);
     std::vector<float> in(128), out(128);
     for (int i = 0; i < 128; ++i) in[i] = 0.25f;
-    for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128); // settle
+    for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128);   // settle
     for (int i = 0; i < 128; ++i) REQUIRE(out[i] == Approx(0.25f).epsilon(0.01));
 }
 
 TEST_CASE("ToneEngine applies output gain when no model") {
-    dsp::ToneEngine e; e.prepare(48000, 128);
-    e.setInputDb(0.0f); e.setOutputDb(6.0206f);
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
+    e.setInputDb(0.0f);
+    e.setOutputDb(6.0206f);
     std::vector<float> in(128, 0.1f), out(128);
     for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128);
     REQUIRE(out[64] == Approx(0.2f).epsilon(0.02));
 }
 
 TEST_CASE("ToneEngine runs a real model without NaNs") {
-    dsp::ToneEngine e; e.prepare(48000, 128);
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
     auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
     REQUIRE(m != nullptr);
     e.setModel(std::move(m));
@@ -103,7 +108,8 @@ TEST_CASE("ToneEngine frees retired models only after two completed blocks") {
     REQUIRE(w1.expired());
 }
 
-TEST_CASE("ToneEngine clamps render to the active model's max block during a buffer-size increase") {
+TEST_CASE(
+    "ToneEngine clamps render to the active model's max block during a buffer-size increase") {
     // Reproduces the hazardous window: prepare() resizes scratch_ for a new
     // (larger) device buffer size immediately, but the model reload is
     // asynchronous, so the OLD model - still prepared/asserting on the
@@ -132,11 +138,12 @@ TEST_CASE("ToneEngine clamps render to the active model's max block during a buf
 TEST_CASE("ToneEngine reports lock-free telemetry") {
     dsp::ToneEngine e;
     e.prepare(48000, 128);
-    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    e.setInputDb(0.0f);
+    e.setOutputDb(0.0f);
 
     // Peak reflects the output level; blockCount increments; load is sane.
     std::vector<float> in(128, 0.5f), out(128);
-    for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128); // settle gains
+    for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128);   // settle gains
     REQUIRE(e.blockCount() == 40u);
     REQUIRE(e.outputPeak() == Approx(0.5f).epsilon(0.02));
     REQUIRE(e.cpuLoad() >= 0.0f);
@@ -148,7 +155,7 @@ TEST_CASE("ToneEngine reports lock-free telemetry") {
     auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
     REQUIRE(m != nullptr);
     e.setModel(std::move(m));
-    e.prepare(48000, 512);                 // grow scratch_, keep old 128-cap model
+    e.prepare(48000, 512);   // grow scratch_, keep old 128-cap model
     std::vector<float> big_in(512, 0.1f), big_out(512);
     const uint32_t before = e.overCapacityCount();
     e.render(big_in.data(), big_out.data(), 512);
@@ -156,8 +163,10 @@ TEST_CASE("ToneEngine reports lock-free telemetry") {
 }
 
 TEST_CASE("ToneEngine chain: gate+IR+EQ all bypassed equals Phase-1 behavior") {
-    dsp::ToneEngine e; e.prepare(48000, 128);
-    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
+    e.setInputDb(0.0f);
+    e.setOutputDb(0.0f);
     // all stages default-disabled; passthrough with no model
     std::vector<float> in(128, 0.25f), out(128);
     for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128);
@@ -165,10 +174,12 @@ TEST_CASE("ToneEngine chain: gate+IR+EQ all bypassed equals Phase-1 behavior") {
 }
 
 TEST_CASE("ToneEngine chain with a unit-impulse IR is transparent") {
-    dsp::ToneEngine e; e.prepare(48000, 128);
-    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
+    e.setInputDb(0.0f);
+    e.setOutputDb(0.0f);
     e.setIrEnabled(true);
-    e.setImpulse(std::make_shared<std::vector<float>>(std::vector<float>{1.0f}));
+    e.setImpulse(std::make_shared<std::vector<float>>(std::vector<float>{ 1.0f }));
     std::vector<float> in(128, 0.2f), out(128);
     for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128);
     for (int i = 0; i < 128; ++i) REQUIRE(std::isfinite(out[i]));
@@ -176,12 +187,16 @@ TEST_CASE("ToneEngine chain with a unit-impulse IR is transparent") {
 }
 
 TEST_CASE("ToneEngine chain with a real model + gate + EQ stays finite") {
-    dsp::ToneEngine e; e.prepare(48000, 128);
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
     auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
     REQUIRE(m != nullptr);
     e.setModel(std::move(m));
-    e.setGateEnabled(true); e.setGateThresholdDb(-50.0f);
-    e.setEqEnabled(true); e.setHighDb(6.0f); e.setLowDb(3.0f);
+    e.setGateEnabled(true);
+    e.setGateThresholdDb(-50.0f);
+    e.setEqEnabled(true);
+    e.setHighDb(6.0f);
+    e.setLowDb(3.0f);
     std::vector<float> in(128), out(128);
     for (int i = 0; i < 128; ++i) in[i] = 0.05f * std::sin(i * 0.2f);
     for (int b = 0; b < 8; ++b) e.render(in.data(), out.data(), 128);
@@ -192,14 +207,19 @@ TEST_CASE("ToneEngine full chain: model + gate + IR cab + EQ all active stays fi
     // The exact end-to-end integration Phase 2 delivers: every stage on, with
     // a real A2 model. Guards against a regression where two stages interact
     // badly (buffer sizing, ordering) that single-stage tests would miss.
-    dsp::ToneEngine e; e.prepare(48000, 128);
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
     auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
     REQUIRE(m != nullptr);
     e.setModel(std::move(m));
-    e.setGateEnabled(true);  e.setGateThresholdDb(-55.0f);
-    e.setIrEnabled(true);    e.setImpulse(std::make_shared<std::vector<float>>(
-                                 std::vector<float>{0.5f, 0.3f, 0.2f}));
-    e.setEqEnabled(true);    e.setLowDb(3.0f); e.setMidDb(-2.0f); e.setHighDb(4.0f);
+    e.setGateEnabled(true);
+    e.setGateThresholdDb(-55.0f);
+    e.setIrEnabled(true);
+    e.setImpulse(std::make_shared<std::vector<float>>(std::vector<float>{ 0.5f, 0.3f, 0.2f }));
+    e.setEqEnabled(true);
+    e.setLowDb(3.0f);
+    e.setMidDb(-2.0f);
+    e.setHighDb(4.0f);
     std::vector<float> in(128), out(128);
     for (int i = 0; i < 128; ++i) in[i] = 0.1f * std::sin(i * 0.15f);
     for (int b = 0; b < 16; ++b) e.render(in.data(), out.data(), 128);
@@ -211,8 +231,10 @@ TEST_CASE("ToneEngine delay + reverb bypassed matches pre-6a passthrough") {
     // The new time-FX stages default to disabled, so a no-model chain with
     // everything off must still be a bit-clean passthrough (no level change,
     // no tail) -- proving Phase 6a didn't alter the existing signal path.
-    dsp::ToneEngine e; e.prepare(48000, 128);
-    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
+    e.setInputDb(0.0f);
+    e.setOutputDb(0.0f);
     std::vector<float> in(128, 0.25f), out(128);
     for (int b = 0; b < 40; ++b) e.render(in.data(), out.data(), 128);
     for (int i = 0; i < 128; ++i) REQUIRE(out[i] == Approx(0.25f).epsilon(0.01));
@@ -222,17 +244,21 @@ TEST_CASE("ToneEngine delay stage produces an echo in the chain") {
     // Sanity: with delay enabled (no model), a single impulse block should
     // yield a delayed copy ~10 ms later -- confirms the stage is actually
     // wired into render(), not just present.
-    dsp::ToneEngine e; e.prepare(48000, 4096);
-    e.setInputDb(0.0f); e.setOutputDb(0.0f);
+    dsp::ToneEngine e;
+    e.prepare(48000, 4096);
+    e.setInputDb(0.0f);
+    e.setOutputDb(0.0f);
     e.setDelayEnabled(true);
-    e.setDelayTimeMs(10.0f); e.setDelayFeedback(0.0f); e.setDelayMix(1.0f);
+    e.setDelayTimeMs(10.0f);
+    e.setDelayFeedback(0.0f);
+    e.setDelayMix(1.0f);
 
     const int n = 4096;
     std::vector<float> in(n, 0.0f), out(n, 0.0f);
     in[0] = 1.0f;
     e.render(in.data(), out.data(), n);
 
-    const int expected = (int) std::round(0.010 * 48000.0); // 480
+    const int expected = (int)std::round(0.010 * 48000.0);   // 480
     for (float v : out) REQUIRE(std::isfinite(v));
     REQUIRE(out[expected] == Approx(1.0f).margin(0.02f));
 }
@@ -241,16 +267,27 @@ TEST_CASE("ToneEngine full chain: model + gate + IR + EQ + delay + reverb stays 
     // The Phase 6a end-to-end: every stage on, including the two new time FX,
     // with a real A2 model. Guards against cross-stage interaction regressions
     // (buffer sizing, ordering, in-place aliasing) that single-node tests miss.
-    dsp::ToneEngine e; e.prepare(48000, 128);
+    dsp::ToneEngine e;
+    e.prepare(48000, 128);
     auto m = nam::NamModel::load(NAM_FIXTURE_A2, 48000, 128);
     REQUIRE(m != nullptr);
     e.setModel(std::move(m));
-    e.setGateEnabled(true);   e.setGateThresholdDb(-55.0f);
-    e.setIrEnabled(true);     e.setImpulse(std::make_shared<std::vector<float>>(
-                                  std::vector<float>{0.5f, 0.3f, 0.2f}));
-    e.setEqEnabled(true);     e.setLowDb(3.0f); e.setMidDb(-2.0f); e.setHighDb(4.0f);
-    e.setDelayEnabled(true);  e.setDelayTimeMs(120.0f); e.setDelayFeedback(0.4f); e.setDelayMix(0.35f);
-    e.setReverbEnabled(true); e.setReverbRoomSize(0.7f); e.setReverbDamping(0.4f); e.setReverbMix(0.3f);
+    e.setGateEnabled(true);
+    e.setGateThresholdDb(-55.0f);
+    e.setIrEnabled(true);
+    e.setImpulse(std::make_shared<std::vector<float>>(std::vector<float>{ 0.5f, 0.3f, 0.2f }));
+    e.setEqEnabled(true);
+    e.setLowDb(3.0f);
+    e.setMidDb(-2.0f);
+    e.setHighDb(4.0f);
+    e.setDelayEnabled(true);
+    e.setDelayTimeMs(120.0f);
+    e.setDelayFeedback(0.4f);
+    e.setDelayMix(0.35f);
+    e.setReverbEnabled(true);
+    e.setReverbRoomSize(0.7f);
+    e.setReverbDamping(0.4f);
+    e.setReverbMix(0.3f);
     std::vector<float> in(128), out(128);
     for (int i = 0; i < 128; ++i) in[i] = 0.1f * std::sin(i * 0.15f);
     for (int b = 0; b < 32; ++b) e.render(in.data(), out.data(), 128);
