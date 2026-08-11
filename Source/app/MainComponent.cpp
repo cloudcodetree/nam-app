@@ -13,7 +13,7 @@ MainComponent::MainComponent() {
     adapter_.onDeviceChanged = [this](int sr, int mb) {
         // Message-thread reload so the model is re-baked at the device sample rate.
         juce::Component::SafePointer<MainComponent> safe(this);
-        juce::MessageManager::callAsync([safe, sr, mb]{
+        juce::MessageManager::callAsync([safe, sr, mb] {
             if (auto* self = safe.getComponent()) {
                 self->reloadCurrentModelAt(sr, mb);
                 self->reloadCurrentIrAt(sr);
@@ -34,79 +34,101 @@ MainComponent::MainComponent() {
 
     for (auto* s : { &inGain_, &outGain_ }) {
         s->setSliderStyle(juce::Slider::LinearHorizontal);
-        s->setRange(-24.0, 24.0, 0.1); s->setValue(0.0);
+        s->setRange(-24.0, 24.0, 0.1);
+        s->setValue(0.0);
         s->setTextValueSuffix(" dB");
         addAndMakeVisible(*s);
     }
-    inGain_.onValueChange  = [this]{ engine_.setInputDb((float) inGain_.getValue()); };
-    outGain_.onValueChange = [this]{ engine_.setOutputDb((float) outGain_.getValue()); };
+    inGain_.onValueChange = [this] { engine_.setInputDb((float)inGain_.getValue()); };
+    outGain_.onValueChange = [this] { engine_.setOutputDb((float)outGain_.getValue()); };
 
-    loadButton_.onClick = [this]{ loadButtonClicked(); };
+    loadButton_.onClick = [this] { loadButtonClicked(); };
 
     // Noise gate.
-    addAndMakeVisible(gateEnable_); gateEnable_.setButtonText("Gate");
-    gateEnable_.onClick = [this]{ engine_.setGateEnabled(gateEnable_.getToggleState()); };
+    addAndMakeVisible(gateEnable_);
+    gateEnable_.setButtonText("Gate");
+    gateEnable_.onClick = [this] { engine_.setGateEnabled(gateEnable_.getToggleState()); };
     gateThresh_.setSliderStyle(juce::Slider::LinearHorizontal);
-    gateThresh_.setRange(-80.0, 0.0, 0.5); gateThresh_.setValue(-60.0);
-    gateThresh_.setTextValueSuffix(" dB"); addAndMakeVisible(gateThresh_);
-    gateThresh_.onValueChange = [this]{ engine_.setGateThresholdDb((float) gateThresh_.getValue()); };
+    gateThresh_.setRange(-80.0, 0.0, 0.5);
+    gateThresh_.setValue(-60.0);
+    gateThresh_.setTextValueSuffix(" dB");
+    addAndMakeVisible(gateThresh_);
+    gateThresh_.onValueChange = [this] {
+        engine_.setGateThresholdDb((float)gateThresh_.getValue());
+    };
 
     // 3-band EQ.
-    addAndMakeVisible(eqEnable_); eqEnable_.setButtonText("EQ");
-    eqEnable_.onClick = [this]{ engine_.setEqEnabled(eqEnable_.getToggleState()); };
+    addAndMakeVisible(eqEnable_);
+    eqEnable_.setButtonText("EQ");
+    eqEnable_.onClick = [this] { engine_.setEqEnabled(eqEnable_.getToggleState()); };
     for (auto* s : { &eqLow_, &eqMid_, &eqHigh_ }) {
         s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        s->setRange(-12.0, 12.0, 0.1); s->setValue(0.0);
+        s->setRange(-12.0, 12.0, 0.1);
+        s->setValue(0.0);
         s->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 48, 16);
         addAndMakeVisible(*s);
     }
-    eqLow_.onValueChange  = [this]{ engine_.setLowDb((float) eqLow_.getValue()); };
-    eqMid_.onValueChange  = [this]{ engine_.setMidDb((float) eqMid_.getValue()); };
-    eqHigh_.onValueChange = [this]{ engine_.setHighDb((float) eqHigh_.getValue()); };
+    eqLow_.onValueChange = [this] { engine_.setLowDb((float)eqLow_.getValue()); };
+    eqMid_.onValueChange = [this] { engine_.setMidDb((float)eqMid_.getValue()); };
+    eqHigh_.onValueChange = [this] { engine_.setHighDb((float)eqHigh_.getValue()); };
 
     // Delay (time FX): enable + time / feedback / mix rotary knobs.
-    addAndMakeVisible(delayEnable_); delayEnable_.setButtonText("Delay");
-    delayEnable_.onClick = [this]{ engine_.setDelayEnabled(delayEnable_.getToggleState()); };
-    delayTime_.setRange(1.0, 2000.0, 1.0);   delayTime_.setValue(250.0);
+    addAndMakeVisible(delayEnable_);
+    delayEnable_.setButtonText("Delay");
+    delayEnable_.onClick = [this] { engine_.setDelayEnabled(delayEnable_.getToggleState()); };
+    delayTime_.setRange(1.0, 2000.0, 1.0);
+    delayTime_.setValue(250.0);
     delayTime_.setTextValueSuffix(" ms");
-    delayFeedback_.setRange(0.0, 0.95, 0.01); delayFeedback_.setValue(0.3);
-    delayMix_.setRange(0.0, 1.0, 0.01);       delayMix_.setValue(0.3);
+    delayFeedback_.setRange(0.0, 0.95, 0.01);
+    delayFeedback_.setValue(0.3);
+    delayMix_.setRange(0.0, 1.0, 0.01);
+    delayMix_.setValue(0.3);
     for (auto* s : { &delayTime_, &delayFeedback_, &delayMix_ }) {
         s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         s->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 56, 16);
         addAndMakeVisible(*s);
     }
-    delayTime_.onValueChange     = [this]{ engine_.setDelayTimeMs((float) delayTime_.getValue()); };
-    delayFeedback_.onValueChange = [this]{ engine_.setDelayFeedback((float) delayFeedback_.getValue()); };
-    delayMix_.onValueChange      = [this]{ engine_.setDelayMix((float) delayMix_.getValue()); };
+    delayTime_.onValueChange = [this] { engine_.setDelayTimeMs((float)delayTime_.getValue()); };
+    delayFeedback_.onValueChange = [this] {
+        engine_.setDelayFeedback((float)delayFeedback_.getValue());
+    };
+    delayMix_.onValueChange = [this] { engine_.setDelayMix((float)delayMix_.getValue()); };
     // Push initial slider values so the engine matches the UI at startup.
-    engine_.setDelayTimeMs((float) delayTime_.getValue());
-    engine_.setDelayFeedback((float) delayFeedback_.getValue());
-    engine_.setDelayMix((float) delayMix_.getValue());
+    engine_.setDelayTimeMs((float)delayTime_.getValue());
+    engine_.setDelayFeedback((float)delayFeedback_.getValue());
+    engine_.setDelayMix((float)delayMix_.getValue());
 
     // Reverb (time FX): enable + room / damping / mix rotary knobs.
-    addAndMakeVisible(reverbEnable_); reverbEnable_.setButtonText("Reverb");
-    reverbEnable_.onClick = [this]{ engine_.setReverbEnabled(reverbEnable_.getToggleState()); };
-    reverbRoom_.setRange(0.0, 1.0, 0.01); reverbRoom_.setValue(0.5);
-    reverbDamp_.setRange(0.0, 1.0, 0.01); reverbDamp_.setValue(0.5);
-    reverbMix_.setRange(0.0, 1.0, 0.01);  reverbMix_.setValue(0.3);
+    addAndMakeVisible(reverbEnable_);
+    reverbEnable_.setButtonText("Reverb");
+    reverbEnable_.onClick = [this] { engine_.setReverbEnabled(reverbEnable_.getToggleState()); };
+    reverbRoom_.setRange(0.0, 1.0, 0.01);
+    reverbRoom_.setValue(0.5);
+    reverbDamp_.setRange(0.0, 1.0, 0.01);
+    reverbDamp_.setValue(0.5);
+    reverbMix_.setRange(0.0, 1.0, 0.01);
+    reverbMix_.setValue(0.3);
     for (auto* s : { &reverbRoom_, &reverbDamp_, &reverbMix_ }) {
         s->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         s->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 56, 16);
         addAndMakeVisible(*s);
     }
-    reverbRoom_.onValueChange = [this]{ engine_.setReverbRoomSize((float) reverbRoom_.getValue()); };
-    reverbDamp_.onValueChange = [this]{ engine_.setReverbDamping((float) reverbDamp_.getValue()); };
-    reverbMix_.onValueChange  = [this]{ engine_.setReverbMix((float) reverbMix_.getValue()); };
-    engine_.setReverbRoomSize((float) reverbRoom_.getValue());
-    engine_.setReverbDamping((float) reverbDamp_.getValue());
-    engine_.setReverbMix((float) reverbMix_.getValue());
+    reverbRoom_.onValueChange = [this] {
+        engine_.setReverbRoomSize((float)reverbRoom_.getValue());
+    };
+    reverbDamp_.onValueChange = [this] { engine_.setReverbDamping((float)reverbDamp_.getValue()); };
+    reverbMix_.onValueChange = [this] { engine_.setReverbMix((float)reverbMix_.getValue()); };
+    engine_.setReverbRoomSize((float)reverbRoom_.getValue());
+    engine_.setReverbDamping((float)reverbDamp_.getValue());
+    engine_.setReverbMix((float)reverbMix_.getValue());
 
     // IR cab.
-    addAndMakeVisible(irEnable_); irEnable_.setButtonText("Cab IR");
-    irEnable_.onClick = [this]{ engine_.setIrEnabled(irEnable_.getToggleState()); };
-    addAndMakeVisible(loadIrButton_); addAndMakeVisible(irLabel_);
-    loadIrButton_.onClick = [this]{ loadIrClicked(); };
+    addAndMakeVisible(irEnable_);
+    irEnable_.setButtonText("Cab IR");
+    irEnable_.onClick = [this] { engine_.setIrEnabled(irEnable_.getToggleState()); };
+    addAndMakeVisible(loadIrButton_);
+    addAndMakeVisible(irLabel_);
+    loadIrButton_.onClick = [this] { loadIrClicked(); };
 
     // Library panel: favorites/recents list for models + IRs, click-to-load.
     addAndMakeVisible(libraryPanel_);
@@ -127,9 +149,7 @@ MainComponent::MainComponent() {
     // above): query -> results -> pick -> download, reusing t3kAuth_ /
     // t3kSession_ / the Phase 4a download path.
     addAndMakeVisible(searchPanel_);
-    if (!t3kAuth_.isConfigured()) {
-        searchPanel_.setStatus("TONE3000 not configured (.env)");
-    }
+    if (!t3kAuth_.isConfigured()) { searchPanel_.setStatus("TONE3000 not configured (.env)"); }
     searchPanel_.onSearch = [this](const juce::String& query) { doTone3000Search(query); };
     searchPanel_.onPick = [this](const nam::ToneInfo& tone) { downloadPickedTone(tone); };
 
@@ -143,11 +163,10 @@ MainComponent::~MainComponent() {
 }
 
 void MainComponent::loadButtonClicked() {
-    chooser_ = std::make_unique<juce::FileChooser>(
-        "Select a NAM model", juce::File{}, "*.nam");
+    chooser_ = std::make_unique<juce::FileChooser>("Select a NAM model", juce::File{}, "*.nam");
     juce::Component::SafePointer<MainComponent> safe(this);
-    chooser_->launchAsync(juce::FileBrowserComponent::openMode
-                        | juce::FileBrowserComponent::canSelectFiles,
+    chooser_->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
         [safe](const juce::FileChooser& fc) {
             auto* self = safe.getComponent();
             if (self == nullptr) return;
@@ -157,8 +176,9 @@ void MainComponent::loadButtonClicked() {
 
             // Copy the picked file into the local library (best-effort; the
             // immediate load below still uses the original path).
-            auto* entry = nam::importIntoLibrary(self->library_, self->currentModelPath_.toStdString(),
-                                    nam::LibraryType::Model, MainComponent::nowSeconds());
+            auto* entry =
+                nam::importIntoLibrary(self->library_, self->currentModelPath_.toStdString(),
+                                       nam::LibraryType::Model, MainComponent::nowSeconds());
             if (entry != nullptr) {
                 self->library_.markUsed(entry->id, MainComponent::nowSeconds());
                 self->library_.save();
@@ -166,18 +186,19 @@ void MainComponent::loadButtonClicked() {
             self->libraryPanel_.refresh();
 
             auto* dev = self->deviceManager_.getCurrentAudioDevice();
-            self->host_.configure(dev ? (int) dev->getCurrentSampleRate() : 48000,
-                            dev ? dev->getCurrentBufferSizeSamples() : 128);
+            self->host_.configure(dev ? (int)dev->getCurrentSampleRate() : 48000,
+                                  dev ? dev->getCurrentBufferSizeSamples() : 128);
             self->modelLabel_.setText("Loading " + f.getFileName() + "...",
-                                juce::dontSendNotification);
-            self->host_.requestLoad(self->currentModelPath_.toStdString(),
+                                      juce::dontSendNotification);
+            self->host_.requestLoad(
+                self->currentModelPath_.toStdString(),
                 [safe, name = f.getFileName()](std::shared_ptr<nam::NamModel> m) {
-                    juce::MessageManager::callAsync([safe, m, name]{
+                    juce::MessageManager::callAsync([safe, m, name] {
                         if (auto* self = safe.getComponent()) {
                             self->engine_.setModel(m);
                             self->modelLabel_.setText(m ? ("Loaded: " + name)
-                                                  : ("Failed to load " + name),
-                                                juce::dontSendNotification);
+                                                        : ("Failed to load " + name),
+                                                      juce::dontSendNotification);
                         }
                     });
                 });
@@ -185,11 +206,10 @@ void MainComponent::loadButtonClicked() {
 }
 
 void MainComponent::loadIrClicked() {
-    irChooser_ = std::make_unique<juce::FileChooser>(
-        "Select a cab IR", juce::File{}, "*.wav");
+    irChooser_ = std::make_unique<juce::FileChooser>("Select a cab IR", juce::File{}, "*.wav");
     juce::Component::SafePointer<MainComponent> safe(this);
-    irChooser_->launchAsync(juce::FileBrowserComponent::openMode
-                        | juce::FileBrowserComponent::canSelectFiles,
+    irChooser_->launchAsync(
+        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
         [safe](const juce::FileChooser& fc) {
             auto* self = safe.getComponent();
             if (self == nullptr) return;
@@ -200,7 +220,7 @@ void MainComponent::loadIrClicked() {
             // Copy the picked file into the local library (best-effort; the
             // immediate load below still uses the original path).
             auto* entry = nam::importIntoLibrary(self->library_, self->currentIrPath_.toStdString(),
-                                    nam::LibraryType::Ir, MainComponent::nowSeconds());
+                                                 nam::LibraryType::Ir, MainComponent::nowSeconds());
             if (entry != nullptr) {
                 self->library_.markUsed(entry->id, MainComponent::nowSeconds());
                 self->library_.save();
@@ -208,18 +228,18 @@ void MainComponent::loadIrClicked() {
             self->libraryPanel_.refresh();
 
             auto* dev = self->deviceManager_.getCurrentAudioDevice();
-            const int sr = dev ? (int) dev->getCurrentSampleRate() : 48000;
+            const int sr = dev ? (int)dev->getCurrentSampleRate() : 48000;
 
             // IR files are tiny, so loading synchronously here (already off
             // the UI paint path, inside the async chooser callback) is fine.
-            auto ir = nam::loadImpulseResponse(self->currentIrPath_.toStdString(), sr, dsp::kMaxIrTaps);
+            auto ir =
+                nam::loadImpulseResponse(self->currentIrPath_.toStdString(), sr, dsp::kMaxIrTaps);
 
-            juce::MessageManager::callAsync([safe, ir, name = f.getFileName()]{
+            juce::MessageManager::callAsync([safe, ir, name = f.getFileName()] {
                 if (auto* self2 = safe.getComponent()) {
                     self2->engine_.setImpulse(ir);
-                    self2->irLabel_.setText(ir ? ("Loaded: " + name)
-                                          : ("Failed to load " + name),
-                                        juce::dontSendNotification);
+                    self2->irLabel_.setText(ir ? ("Loaded: " + name) : ("Failed to load " + name),
+                                            juce::dontSendNotification);
                 }
             });
         });
@@ -241,7 +261,7 @@ void MainComponent::browseT3kButtonClicked() {
         if (!result.ok) {
             // result.error never contains the token/code (see Tone3000Auth).
             self->t3kStatus_.setText("TONE3000: " + juce::String(result.error),
-                                      juce::dontSendNotification);
+                                     juce::dontSendNotification);
             self->browseT3kButton_.setEnabled(true);
             return;
         }
@@ -255,8 +275,8 @@ void MainComponent::browseT3kButtonClicked() {
         self->t3kSession_ = std::make_unique<nam::Tone3000Session>(self->t3kAuth_.accessToken());
 
         const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
-        self->t3kSession_->downloadToneModel(result.toneId, tempDir,
-            [safe](bool ok, juce::File file, juce::String nameOrError) {
+        self->t3kSession_->downloadToneModel(
+            result.toneId, tempDir, [safe](bool ok, juce::File file, juce::String nameOrError) {
                 auto* self2 = safe.getComponent();
                 if (self2 == nullptr) return;
 
@@ -264,18 +284,20 @@ void MainComponent::browseT3kButtonClicked() {
                     // nameOrError is Tone3000Session's error message, which
                     // never contains the access token.
                     self2->t3kStatus_.setText("TONE3000 download failed: " + nameOrError,
-                                               juce::dontSendNotification);
+                                              juce::dontSendNotification);
                     self2->browseT3kButton_.setEnabled(true);
                     return;
                 }
 
-                auto* entry = nam::importIntoLibrary(self2->library_, file.getFullPathName().toStdString(),
-                                    nam::LibraryType::Model, MainComponent::nowSeconds());
-                file.deleteFile(); // best-effort cleanup of the temp download
+                auto* entry =
+                    nam::importIntoLibrary(self2->library_, file.getFullPathName().toStdString(),
+                                           nam::LibraryType::Model, MainComponent::nowSeconds());
+                file.deleteFile();   // best-effort cleanup of the temp download
 
                 if (entry == nullptr) {
-                    self2->t3kStatus_.setText("Failed to import the downloaded model into the library",
-                                               juce::dontSendNotification);
+                    self2->t3kStatus_.setText(
+                        "Failed to import the downloaded model into the library",
+                        juce::dontSendNotification);
                     self2->browseT3kButton_.setEnabled(true);
                     return;
                 }
@@ -284,8 +306,9 @@ void MainComponent::browseT3kButtonClicked() {
                 // the library panel, and loads it -- the same path the
                 // library panel's click-to-load uses.
                 self2->handleLibraryEntryLoad(*entry);
-                self2->t3kStatus_.setText("Loaded from TONE3000: " + juce::String(entry->displayName),
-                                           juce::dontSendNotification);
+                self2->t3kStatus_.setText("Loaded from TONE3000: " +
+                                              juce::String(entry->displayName),
+                                          juce::dontSendNotification);
                 self2->browseT3kButton_.setEnabled(true);
             });
     });
@@ -310,7 +333,7 @@ void MainComponent::doTone3000Search(const juce::String& query) {
             self->searchPanel_.setStatus("TONE3000 search failed: " + error);
             return;
         }
-        const int n = (int) tones.size();
+        const int n = (int)tones.size();
         self->searchPanel_.setResults(std::move(tones));
         self->searchPanel_.setStatus(juce::String(n) + (n == 1 ? " result" : " results"));
     };
@@ -330,7 +353,8 @@ void MainComponent::doTone3000Search(const juce::String& query) {
         if (self == nullptr) return;
 
         if (refreshed) {
-            self->t3kSession_ = std::make_unique<nam::Tone3000Session>(self->t3kAuth_.accessToken());
+            self->t3kSession_ =
+                std::make_unique<nam::Tone3000Session>(self->t3kAuth_.accessToken());
             self->t3kSession_->search(query.toStdString(), 1, searchDone);
             return;
         }
@@ -338,19 +362,21 @@ void MainComponent::doTone3000Search(const juce::String& query) {
         // Refresh wasn't possible (no refresh token) or failed: authenticate
         // via the browser (token-only, no select_tone prompt), then run the
         // search once connected.
-        self->t3kAuth_.beginConnectFlow([safe, query, searchDone](nam::Tone3000Auth::Result result) {
-            auto* self2 = safe.getComponent();
-            if (self2 == nullptr) return;
+        self->t3kAuth_.beginConnectFlow(
+            [safe, query, searchDone](nam::Tone3000Auth::Result result) {
+                auto* self2 = safe.getComponent();
+                if (self2 == nullptr) return;
 
-            if (!result.ok) {
-                // result.error never contains the token/code (see Tone3000Auth).
-                self2->searchPanel_.setStatus("TONE3000: " + juce::String(result.error));
-                return;
-            }
+                if (!result.ok) {
+                    // result.error never contains the token/code (see Tone3000Auth).
+                    self2->searchPanel_.setStatus("TONE3000: " + juce::String(result.error));
+                    return;
+                }
 
-            self2->t3kSession_ = std::make_unique<nam::Tone3000Session>(self2->t3kAuth_.accessToken());
-            self2->t3kSession_->search(query.toStdString(), 1, searchDone);
-        });
+                self2->t3kSession_ =
+                    std::make_unique<nam::Tone3000Session>(self2->t3kAuth_.accessToken());
+                self2->t3kSession_->search(query.toStdString(), 1, searchDone);
+            });
     });
 }
 
@@ -366,8 +392,8 @@ void MainComponent::downloadPickedTone(const nam::ToneInfo& tone) {
 
     const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
     juce::Component::SafePointer<MainComponent> safe(this);
-    t3kSession_->downloadToneModel(tone.id, tempDir,
-        [safe](bool ok, juce::File file, juce::String nameOrError) {
+    t3kSession_->downloadToneModel(
+        tone.id, tempDir, [safe](bool ok, juce::File file, juce::String nameOrError) {
             auto* self = safe.getComponent();
             if (self == nullptr) return;
 
@@ -378,12 +404,14 @@ void MainComponent::downloadPickedTone(const nam::ToneInfo& tone) {
                 return;
             }
 
-            auto* entry = nam::importIntoLibrary(self->library_, file.getFullPathName().toStdString(),
-                                nam::LibraryType::Model, MainComponent::nowSeconds());
-            file.deleteFile(); // best-effort cleanup of the temp download
+            auto* entry =
+                nam::importIntoLibrary(self->library_, file.getFullPathName().toStdString(),
+                                       nam::LibraryType::Model, MainComponent::nowSeconds());
+            file.deleteFile();   // best-effort cleanup of the temp download
 
             if (entry == nullptr) {
-                self->searchPanel_.setStatus("Failed to import the downloaded model into the library");
+                self->searchPanel_.setStatus(
+                    "Failed to import the downloaded model into the library");
                 return;
             }
 
@@ -398,14 +426,12 @@ void MainComponent::downloadPickedTone(const nam::ToneInfo& tone) {
 void MainComponent::reloadCurrentModelAt(int sampleRate, int maxBlock) {
     if (currentModelPath_.isEmpty()) return;
     host_.configure(sampleRate, maxBlock);
-    host_.requestLoad(currentModelPath_.toStdString(),
-        [this](std::shared_ptr<nam::NamModel> m) {
-            juce::Component::SafePointer<MainComponent> safe(this);
-            juce::MessageManager::callAsync([safe, m]{
-                if (auto* self = safe.getComponent())
-                    self->engine_.setModel(m);
-            });
+    host_.requestLoad(currentModelPath_.toStdString(), [this](std::shared_ptr<nam::NamModel> m) {
+        juce::Component::SafePointer<MainComponent> safe(this);
+        juce::MessageManager::callAsync([safe, m] {
+            if (auto* self = safe.getComponent()) self->engine_.setModel(m);
         });
+    });
 }
 
 void MainComponent::reloadCurrentIrAt(int sampleRate) {
@@ -416,12 +442,14 @@ void MainComponent::reloadCurrentIrAt(int sampleRate) {
 
 std::string MainComponent::defaultLibraryDir() {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("NAM Player/library").getFullPathName().toStdString();
+        .getChildFile("NAM Player/library")
+        .getFullPathName()
+        .toStdString();
 }
 
 long long MainComponent::nowSeconds() {
     using namespace std::chrono;
-    return (long long) duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    return (long long)duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
 }
 
 void MainComponent::handleLibraryEntryLoad(const nam::LibraryEntry& e) {
@@ -430,31 +458,30 @@ void MainComponent::handleLibraryEntryLoad(const nam::LibraryEntry& e) {
     if (e.type == nam::LibraryType::Model) {
         currentModelPath_ = juce::String(absolutePath);
         auto* dev = deviceManager_.getCurrentAudioDevice();
-        host_.configure(dev ? (int) dev->getCurrentSampleRate() : 48000,
+        host_.configure(dev ? (int)dev->getCurrentSampleRate() : 48000,
                         dev ? dev->getCurrentBufferSizeSamples() : 128);
         modelLabel_.setText("Loading " + juce::String(e.displayName) + "...",
                             juce::dontSendNotification);
         juce::Component::SafePointer<MainComponent> safe(this);
-        host_.requestLoad(absolutePath,
-            [safe, name = juce::String(e.displayName)](std::shared_ptr<nam::NamModel> m) {
-                juce::MessageManager::callAsync([safe, m, name]{
-                    if (auto* self = safe.getComponent()) {
-                        self->engine_.setModel(m);
-                        self->modelLabel_.setText(m ? ("Loaded: " + name)
-                                              : ("Failed to load " + name),
-                                            juce::dontSendNotification);
-                    }
-                });
+        host_.requestLoad(absolutePath, [safe, name = juce::String(e.displayName)](
+                                            std::shared_ptr<nam::NamModel> m) {
+            juce::MessageManager::callAsync([safe, m, name] {
+                if (auto* self = safe.getComponent()) {
+                    self->engine_.setModel(m);
+                    self->modelLabel_.setText(m ? ("Loaded: " + name) : ("Failed to load " + name),
+                                              juce::dontSendNotification);
+                }
             });
+        });
     } else {
         currentIrPath_ = juce::String(absolutePath);
         auto* dev = deviceManager_.getCurrentAudioDevice();
-        const int sr = dev ? (int) dev->getCurrentSampleRate() : 48000;
+        const int sr = dev ? (int)dev->getCurrentSampleRate() : 48000;
         auto ir = nam::loadImpulseResponse(absolutePath, sr, dsp::kMaxIrTaps);
         engine_.setImpulse(ir);
         irLabel_.setText(ir ? ("Loaded: " + juce::String(e.displayName))
-                             : ("Failed to load " + juce::String(e.displayName)),
-                          juce::dontSendNotification);
+                            : ("Failed to load " + juce::String(e.displayName)),
+                         juce::dontSendNotification);
         irEnable_.setToggleState(true, juce::sendNotification);
         engine_.setIrEnabled(true);
     }
@@ -467,28 +494,28 @@ void MainComponent::handleLibraryEntryLoad(const nam::LibraryEntry& e) {
 void MainComponent::timerCallback() {
     if (auto* dev = deviceManager_.getCurrentAudioDevice()) {
         const double sr = dev->getCurrentSampleRate();
-        const int    bs = dev->getCurrentBufferSizeSamples();
+        const int bs = dev->getCurrentBufferSizeSamples();
         const double ms = sr > 0 ? (bs / sr) * 1000.0 : 0.0;
         juce::String warn = (sr > 0 && bs / sr > 0.02) ? "  (high latency)" : "";
-        latencyLabel_.setText(juce::String(bs) + " smp @ " + juce::String((int) sr)
-            + " Hz  ~" + juce::String(ms, 1) + " ms/dir" + warn,
-            juce::dontSendNotification);
+        latencyLabel_.setText(juce::String(bs) + " smp @ " + juce::String((int)sr) + " Hz  ~" +
+                                  juce::String(ms, 1) + " ms/dir" + warn,
+                              juce::dontSendNotification);
     }
 
     // Read lock-free telemetry the audio thread published (no lock/no stall).
-    const float    peak   = engine_.outputPeak();
-    const float    load   = engine_.cpuLoad();
+    const float peak = engine_.outputPeak();
+    const float load = engine_.cpuLoad();
     const uint64_t blocks = engine_.blockCount();
-    const uint32_t xruns  = engine_.overCapacityCount();
+    const uint32_t xruns = engine_.overCapacityCount();
 
     // Peak meter with a decay so it reads like an analog meter.
     const float peakDb = peak > 1.0e-6f ? juce::Decibels::gainToDecibels(peak) : -100.0f;
     meterDb_ = juce::jmax(peakDb, meterDb_ - 3.0f);   // ~fast attack, decay 3 dB/tick
 
-    statsLabel_.setText("load " + juce::String(load * 100.0f, 0) + "%   "
-        + "blocks " + juce::String((juce::int64) blocks) + "   "
-        + "xruns " + juce::String((int) xruns),
-        juce::dontSendNotification);
+    statsLabel_.setText("load " + juce::String(load * 100.0f, 0) + "%   " + "blocks " +
+                            juce::String((juce::int64)blocks) + "   " + "xruns " +
+                            juce::String((int)xruns),
+                        juce::dontSendNotification);
 
     repaint(meterBounds_);
 }
@@ -497,21 +524,20 @@ void MainComponent::paint(juce::Graphics& g) {
     g.fillAll(juce::Colours::black);
 
     // Output level meter: -60..0 dB mapped across meterBounds_.
-    if (! meterBounds_.isEmpty()) {
+    if (!meterBounds_.isEmpty()) {
         auto r = meterBounds_.toFloat();
         g.setColour(juce::Colours::darkgrey.darker());
         g.fillRoundedRectangle(r, 3.0f);
         const float norm = juce::jlimit(0.0f, 1.0f, (meterDb_ + 60.0f) / 60.0f);
         auto fill = r.withWidth(r.getWidth() * norm);
-        const juce::Colour c = meterDb_ > -3.0f ? juce::Colours::red
-                             : meterDb_ > -12.0f ? juce::Colours::yellow
-                                                 : juce::Colours::limegreen;
+        const juce::Colour c = meterDb_ > -3.0f    ? juce::Colours::red
+                               : meterDb_ > -12.0f ? juce::Colours::yellow
+                                                   : juce::Colours::limegreen;
         g.setColour(c);
         g.fillRoundedRectangle(fill, 3.0f);
         g.setColour(juce::Colours::white.withAlpha(0.7f));
         g.setFont(12.0f);
-        g.drawText(juce::String(meterDb_, 1) + " dB", meterBounds_,
-                   juce::Justification::centred);
+        g.drawText(juce::String(meterDb_, 1) + " dB", meterBounds_, juce::Justification::centred);
     }
 }
 

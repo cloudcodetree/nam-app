@@ -56,19 +56,19 @@ void extractIrMetadata(const std::string& path, LibraryEntry& e) {
     try {
         drwav wav;
         if (!drwav_init_file(&wav, path.c_str(), nullptr)) return;
-        e.frames = (int) wav.totalPCMFrameCount;
-        e.sampleRate = (int) wav.sampleRate;
+        e.frames = (int)wav.totalPCMFrameCount;
+        e.sampleRate = (int)wav.sampleRate;
         drwav_uninit(&wav);
     } catch (const std::exception&) {
         // Best-effort: leave fields at their defaults.
     }
 }
 
-} // namespace
+}   // namespace
 
 const LibraryEntry* importIntoLibrary(LibraryStore& store, const std::string& sourcePath,
-                                       LibraryType type, long long now,
-                                       const std::string& displayName) {
+                                      LibraryType type, long long now,
+                                      const std::string& displayName) {
     try {
         if (!fs::exists(sourcePath)) return nullptr;
 
@@ -87,8 +87,7 @@ const LibraryEntry* importIntoLibrary(LibraryStore& store, const std::string& so
         entry.fileName = destName;
         entry.type = type;
         entry.addedAt = now;
-        entry.displayName = displayName.empty() ? fs::path(destName).stem().string()
-                                                : displayName;
+        entry.displayName = displayName.empty() ? fs::path(destName).stem().string() : displayName;
 
         if (type == LibraryType::Model) {
             extractModelMetadata(destPath.string(), entry);
@@ -99,9 +98,7 @@ const LibraryEntry* importIntoLibrary(LibraryStore& store, const std::string& so
         store.add(entry);
         store.save();
         return store.find(entry.id);
-    } catch (const std::exception&) {
-        return nullptr;
-    }
+    } catch (const std::exception&) { return nullptr; }
 }
 
-} // namespace nam
+}   // namespace nam

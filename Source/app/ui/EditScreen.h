@@ -11,12 +11,12 @@
 class EditScreen : public juce::Component {
 public:
     explicit EditScreen (dsp::ToneEngine& engine);
-    ~EditScreen() override;
+    ~EditScreen () override;
 
-    std::function<void()> onDone;   // DONE -> back to Play
+    std::function<void ()> onDone;   // DONE -> back to Play
 
     void paint (juce::Graphics&) override;
-    void resized() override;
+    void resized () override;
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
@@ -26,24 +26,24 @@ private:
         std::function<juce::String (double)> fmt;   // value -> display string
     };
     struct Stage {
-        juce::String key;                 // GATE / AMP / CAB / EQ / DELAY / REVERB
+        juce::String key;   // GATE / AMP / CAB / EQ / DELAY / REVERB
         bool open = false;
-        bool lockable = false;            // CAB
+        bool lockable = false;   // CAB
         std::vector<Fader> faders;
-        std::function<juce::String()> summary;   // collapsed summary text
-        juce::Rectangle<int> headerRect;  // hit region
+        std::function<juce::String ()> summary;   // collapsed summary text
+        juce::Rectangle<int> headerRect;          // hit region
     };
 
     dsp::ToneEngine& engine_;
     std::vector<Stage> stages_;
     bool cabLocked_ = true;
-    int  changed_ = 0;
+    int changed_ = 0;
 
     juce::Rectangle<int> header_, doneRect_, list_, footer_, resetRect_, lockRect_;
 
     void openOnly (int idx);
-    void relayout();
-    int  headerHeight() const { return 56; }
+    void relayout ();
+    int headerHeight () const { return 56; }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EditScreen)
 };

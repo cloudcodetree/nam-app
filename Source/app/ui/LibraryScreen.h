@@ -9,15 +9,15 @@
 // filter. Cross-platform (depends only on the shared nam::LibraryEntry).
 class LibraryScreen : public juce::Component {
 public:
-    LibraryScreen();
+    LibraryScreen ();
 
-    std::function<void()> onBack;
+    std::function<void ()> onBack;
     std::function<void (nam::LibraryEntry)> onLoad;
 
     void setEntries (std::vector<nam::LibraryEntry> entries);
 
     void paint (juce::Graphics&) override;
-    void resized() override;
+    void resized () override;
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
@@ -26,7 +26,7 @@ private:
     juce::Rectangle<int> backRect_, filterRow_;
     std::vector<juce::Rectangle<int>> filterRects_, cardRects_;
 
-    void applyFilter();
-    void relayout();
+    void applyFilter ();
+    void relayout ();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LibraryScreen)
 };

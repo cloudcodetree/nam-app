@@ -45,7 +45,7 @@ private:
 
         int getNumRows() override;
         void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height,
-                               bool rowIsSelected) override;
+                              bool rowIsSelected) override;
         void listBoxItemClicked(int row, const juce::MouseEvent& e) override;
 
     private:
@@ -55,10 +55,10 @@ private:
 
     void fireSearch();
 
-    juce::Label       titleLabel_ { {}, "Search TONE3000" };
-    juce::TextEditor   searchBox_;
-    juce::TextButton   searchButton_ { "Search" };
-    juce::Label        statusLabel_;
-    ResultListModel     resultsModel_;
-    juce::ListBox       resultsList_;
+    juce::Label titleLabel_{ {}, "Search TONE3000" };
+    juce::TextEditor searchBox_;
+    juce::TextButton searchButton_{ "Search" };
+    juce::Label statusLabel_;
+    ResultListModel resultsModel_;
+    juce::ListBox resultsList_;
 };

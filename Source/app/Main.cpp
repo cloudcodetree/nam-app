@@ -5,14 +5,14 @@ class NamPlayerApp : public juce::JUCEApplication {
 public:
     const juce::String getApplicationName() override { return "NAM Player"; }
     const juce::String getApplicationVersion() override { return "0.1.0"; }
-    void initialise(const juce::String&) override {
-        window_ = std::make_unique<Window>();
-    }
+    void initialise(const juce::String&) override { window_ = std::make_unique<Window>(); }
     void shutdown() override { window_ = nullptr; }
+
 private:
     struct Window : juce::DocumentWindow {
-        Window() : juce::DocumentWindow("NAM Player",
-            juce::Colours::black, juce::DocumentWindow::allButtons) {
+        Window()
+            : juce::DocumentWindow("NAM Player", juce::Colours::black,
+                                   juce::DocumentWindow::allButtons) {
             setUsingNativeTitleBar(true);
             setContentOwned(new MainComponent(), true);
             setResizable(true, true);

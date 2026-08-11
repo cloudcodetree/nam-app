@@ -79,8 +79,7 @@ private:
     static std::string toneIdFromEntry(const nam::LibraryEntry& e);
     void fetchArtwork(nam::ToneInfo tone);   // async download+downscale (no-op if cached)
     void auditionFromFile(juce::File file, bool deleteAfter, const std::string& cacheKey,
-                          juce::String displayName,
-                          std::function<void(bool, juce::String)> done,
+                          juce::String displayName, std::function<void(bool, juce::String)> done,
                           std::shared_ptr<const std::vector<float>> overrideIr = nullptr);
     // IR tones: audition = load the .wav as the cab impulse under the current
     // amp model (the demo keeps rolling — gapless cab A/B).
@@ -91,13 +90,12 @@ private:
     void doAudition(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
     void doAuditionModel(const std::string& toneId, const nam::ModelInfo& model, bool isIr,
                          std::function<void(bool, juce::String)> done);
-    void applyIrAudition(juce::File irWav, const std::string& cacheKey,
-                         juce::String displayName,
+    void applyIrAudition(juce::File irWav, const std::string& cacheKey, juce::String displayName,
                          std::function<void(bool, juce::String)> done);
     void doListModels(const std::string& toneId,
                       std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done);
-    void setDemoTrack(int index);         // index into nam::demo::kTracks
-    void setCab(int index);               // index into nam::demo::kCabs (0 = none)
+    void setDemoTrack(int index);   // index into nam::demo::kTracks
+    void setCab(int index);         // index into nam::demo::kCabs (0 = none)
     // Makes sure a DI track's audio is in memory (bundled, disk cache, or
     // downloaded from TONE3000's repo), then done(true) on the msg thread.
     void ensureDemoTrack(int index, std::function<void(bool)> done);
@@ -126,16 +124,16 @@ private:
     std::unique_ptr<AppShell> shell_;
 
     // TONE3000 (constructed before shell_ so setTone3000 can capture them).
-    nam::LibraryStore library_ { defaultLibraryDir() };
-    nam::Tone3000Auth t3kAuth_ { tokenStoreFile() };
+    nam::LibraryStore library_{ defaultLibraryDir() };
+    nam::Tone3000Auth t3kAuth_{ tokenStoreFile() };
     std::unique_ptr<nam::Tone3000Session> t3kSession_;
     std::string sessionToken_;   // token the session was built with (never logged)
 
     double sampleRate_ = 48000.0;
-    int    blockSize_  = 256;
+    int blockSize_ = 256;
     std::vector<float> mono_;
-    std::atomic<float> inPeak_ { 0.0f };
-    std::atomic<float> outPeak_ { 0.0f };   // metered at the device write, not the engine
+    std::atomic<float> inPeak_{ 0.0f };
+    std::atomic<float> outPeak_{ 0.0f };   // metered at the device write, not the engine
     bool modelLoaded_ = false;
 
     // Demo riff (audition mode). demoLoop_ is the DRY riff, built at prepare
@@ -155,16 +153,15 @@ private:
     // (message thread) and the audio thread takes its own reference at block
     // start, so a re-publish can never mutate a vector mid-read (the race
     // the adversarial review flagged). Same pattern as cabIrs_.
-    std::array<std::shared_ptr<const std::vector<float>>,
-               (size_t) nam::demo::kNumTracks> demoTracks_;
-    std::array<bool, (size_t) nam::demo::kNumTracks> demoFetching_ {};   // msg thread
+    std::array<std::shared_ptr<const std::vector<float>>, (size_t)nam::demo::kNumTracks>
+        demoTracks_;
+    std::array<bool, (size_t)nam::demo::kNumTracks> demoFetching_{};   // msg thread
     int demoTrack_ = 0;
     // Bundled cab IRs (loaded at prepare; shared_ptr swap is RT-safe).
-    std::array<std::shared_ptr<const std::vector<float>>,
-               (size_t) nam::demo::kNumCabs> cabIrs_;
+    std::array<std::shared_ptr<const std::vector<float>>, (size_t)nam::demo::kNumCabs> cabIrs_;
     int cab_ = 0;
-    std::atomic<int>  demoTrackRT_ { 0 };   // audio-thread copy of demoTrack_
-    std::atomic<bool> demoLive_ { false };  // live mode: dry DI -> engine in RT
+    std::atomic<int> demoTrackRT_{ 0 };     // audio-thread copy of demoTrack_
+    std::atomic<bool> demoLive_{ false };   // live mode: dry DI -> engine in RT
     bool preRenderAuditions_ = false;       // emulator: can't run NAM in RT
     // Rendered-audition cache (message thread only): tone id -> processed
     // riff. Re-tapping a tone plays instantly instead of re-downloading and
@@ -174,36 +171,36 @@ private:
     // audio block holding a reference survives back-to-back installs that
     // overwrite both slots (the two-slot flip alone was not enough).
     std::array<std::shared_ptr<const std::vector<float>>, 2> demoSlots_;
-    std::atomic<int>    demoSlot_ { -1 };
-    std::atomic<size_t> demoPos_ { 0 };
-    std::atomic<bool>   demoOn_ { false };
-    std::atomic<bool>   liveMuted_ { false };
+    std::atomic<int> demoSlot_{ -1 };
+    std::atomic<size_t> demoPos_{ 0 };
+    std::atomic<bool> demoOn_{ false };
+    std::atomic<bool> liveMuted_{ false };
     bool alwaysMuteLive_ = false;   // emulator: synthetic mic, never unmute
     // Feedback guard: with no USB interface the live path is phone mic ->
     // amp sim -> speaker = howl. Mutes the OUTPUT automatically (input
     // meter/tuner stay live); manual device picks in SETUP override.
-    std::atomic<bool> feedbackGuard_ { false };
+    std::atomic<bool> feedbackGuard_{ false };
     void updateFeedbackGuard();
     // Status-orb toggles (UI-driven, independent of the guard).
-    std::atomic<bool> inputMutedUser_ { false };
-    std::atomic<bool> outputMutedUser_ { false };
+    std::atomic<bool> inputMutedUser_{ false };
+    std::atomic<bool> outputMutedUser_{ false };
     // Output-check tone (orb panel TEST TONE): 440 Hz sine, click-free via a
     // short envelope. Phase/env live on the audio thread only.
-    std::atomic<bool> testTone_ { false };
+    std::atomic<bool> testTone_{ false };
     double testPhase_ = 0.0;
-    float  testEnv_ = 0.0f;
+    float testEnv_ = 0.0f;
 
     // Tuner: the audio thread mirrors the RAW live input into a ring; the
     // UI timer analyzes the latest window (guitar only — demos don't tune).
     static constexpr int kTunerRingSize = 4096;   // power of two
-    std::array<float, (size_t) kTunerRingSize> tunerRing_ {};
-    std::atomic<int> tunerWrite_ { 0 };
+    std::array<float, (size_t)kTunerRingSize> tunerRing_{};
+    std::atomic<int> tunerWrite_{ 0 };
     int tunerTick_ = 0;
 
-    bool applyingDeviceChange_ = false;  // re-entrancy guard for setAudioDeviceSetup
-    bool userChoseInput_ = false;        // manual pick disables USB auto-select
-    bool userChoseOutput_ = false;       // manual pick disables USB output auto-claim
-    bool userChoseBuffer_ = false;       // manual pick disables the low-latency clamp
-    int  rescanTick_ = 0;                // slow hot-plug poll (timer runs at 30 Hz)
-    int  engineDeadTicks_ = 0;           // watchdog: device stopped this many ticks
+    bool applyingDeviceChange_ = false;   // re-entrancy guard for setAudioDeviceSetup
+    bool userChoseInput_ = false;         // manual pick disables USB auto-select
+    bool userChoseOutput_ = false;        // manual pick disables USB output auto-claim
+    bool userChoseBuffer_ = false;        // manual pick disables the low-latency clamp
+    int rescanTick_ = 0;                  // slow hot-plug poll (timer runs at 30 Hz)
+    int engineDeadTicks_ = 0;             // watchdog: device stopped this many ticks
 };

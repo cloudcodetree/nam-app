@@ -109,7 +109,7 @@ private:
     // tokenResponse.refreshToken (server didn't rotate) to the refresh token
     // that was just used, so a refresh never strands us without one.
     void storeTokensResolved(const std::string& accessToken, const std::string& refreshToken,
-                              long long expiresIn);
+                             long long expiresIn);
 
     // Publishable key from the TONE3000_PUBLISHABLE_KEY build def; "" if
     // unset. NEVER the client secret (t3k_cs_...) -- a native PKCE client
@@ -126,4 +126,4 @@ private:
     std::unique_ptr<RefreshThread> refreshThread_;
 };
 
-} // namespace nam
+}   // namespace nam

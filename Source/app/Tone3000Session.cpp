@@ -20,19 +20,19 @@ constexpr int kMaxRedirects = 5;
 // never be sent to a host that isn't TONE3000 itself.
 bool isTone3000Host(const std::string& url) {
     const auto schemeEnd = url.find("://");
-    const std::string afterScheme = (schemeEnd == std::string::npos) ? url : url.substr(schemeEnd + 3);
+    const std::string afterScheme =
+        (schemeEnd == std::string::npos) ? url : url.substr(schemeEnd + 3);
     const auto slashPos = afterScheme.find('/');
-    std::string host = (slashPos == std::string::npos) ? afterScheme : afterScheme.substr(0, slashPos);
-    const auto colonPos = host.find(':'); // strip a port, if any
-    if (colonPos != std::string::npos)
-        host = host.substr(0, colonPos);
+    std::string host =
+        (slashPos == std::string::npos) ? afterScheme : afterScheme.substr(0, slashPos);
+    const auto colonPos = host.find(':');   // strip a port, if any
+    if (colonPos != std::string::npos) host = host.substr(0, colonPos);
 
     std::transform(host.begin(), host.end(), host.begin(),
-                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
     const std::string domain = "tone3000.com";
-    if (host == domain)
-        return true;
+    if (host == domain) return true;
     const std::string dotSuffix = "." + domain;
     return host.size() > dotSuffix.size() &&
            host.compare(host.size() - dotSuffix.size(), dotSuffix.size(), dotSuffix) == 0;
@@ -42,20 +42,18 @@ bool isTone3000Host(const std::string& url) {
 // Returns an empty/invalid URL (toString() == "") if `location` is empty or
 // the base URL has no scheme to resolve a relative location against.
 juce::URL resolveRedirectLocation(const juce::URL& base, const juce::String& location) {
-    if (location.isEmpty())
-        return {};
+    if (location.isEmpty()) return {};
     if (location.startsWithIgnoreCase("http://") || location.startsWithIgnoreCase("https://"))
         return juce::URL(location);
 
     const juce::String scheme = base.getScheme();
-    if (scheme.isEmpty())
-        return {};
+    if (scheme.isEmpty()) return {};
 
-    if (location.startsWith("//")) // protocol-relative: //host/path
+    if (location.startsWith("//"))   // protocol-relative: //host/path
         return juce::URL(scheme + ":" + location);
 
-    const juce::String origin = base.getOrigin(); // scheme://domain[:port]
-    if (location.startsWithChar('/'))              // absolute path on the same origin
+    const juce::String origin = base.getOrigin();   // scheme://domain[:port]
+    if (location.startsWithChar('/'))               // absolute path on the same origin
         return juce::URL(origin + location);
 
     // Relative path: resolve against the base URL's directory (RFC 3986 merge).
@@ -73,19 +71,22 @@ std::string sanitizeFileName(const std::string& name) {
     out.reserve(name.size());
     for (const char c : name) {
         const unsigned char uc = static_cast<unsigned char>(c);
-        if (uc < 0x20) continue; // control characters
+        if (uc < 0x20) continue;   // control characters
         switch (c) {
-            case '/': case '\\': case ':': case '*': case '?':
-            case '"': case '<': case '>': case '|':
-                out.push_back('_');
-                break;
-            default:
-                out.push_back(c);
+            case '/':
+            case '\\':
+            case ':':
+            case '*':
+            case '?':
+            case '"':
+            case '<':
+            case '>':
+            case '|': out.push_back('_'); break;
+            default: out.push_back(c);
         }
     }
     const size_t begin = out.find_first_not_of(" \t.");
-    if (begin == std::string::npos)
-        return "model";
+    if (begin == std::string::npos) return "model";
     const size_t end = out.find_last_not_of(" \t.");
     out = out.substr(begin, end - begin + 1);
     return out.empty() ? "model" : out;
@@ -157,7 +158,7 @@ bool authenticatedGet(juce::Thread& thread, const std::string& accessToken, cons
     }
 }
 
-} // namespace
+}   // namespace
 
 // Runs entirely on a background thread; delivers its result to the
 // caller's `done` via juce::MessageManager::callAsync so UI code touched by
@@ -165,16 +166,11 @@ bool authenticatedGet(juce::Thread& thread, const std::string& accessToken, cons
 class Tone3000Session::DownloadThread : public juce::Thread {
 public:
     DownloadThread(std::string accessToken, std::string toneId, juce::File destDir,
-                    bool preferSmallest,
-                    std::function<void(bool, juce::File, juce::String)> done,
-                    nam::ModelInfo explicitModel = {})
-        : juce::Thread("Tone3000Download"),
-          accessToken_(std::move(accessToken)),
-          toneId_(std::move(toneId)),
-          destDir_(std::move(destDir)),
-          preferSmallest_(preferSmallest),
-          explicitModel_(std::move(explicitModel)),
-          done_(std::move(done)) {}
+                   bool preferSmallest, std::function<void(bool, juce::File, juce::String)> done,
+                   nam::ModelInfo explicitModel = {})
+        : juce::Thread("Tone3000Download"), accessToken_(std::move(accessToken)),
+          toneId_(std::move(toneId)), destDir_(std::move(destDir)), preferSmallest_(preferSmallest),
+          explicitModel_(std::move(explicitModel)), done_(std::move(done)) {}
 
     void run() override {
         juce::File resultFile;
@@ -200,34 +196,33 @@ private:
         // A caller that already knows exactly which model it wants (Browse:
         // per-variant audition) skips the list fetch entirely.
         std::vector<nam::ModelInfo> models;
-        if (!explicitModel_.modelUrl.empty())
-            models.push_back(explicitModel_);
+        if (!explicitModel_.modelUrl.empty()) models.push_back(explicitModel_);
 
         // --- Step 1: fetch the model list for this tone. TONE3000 returns
         // the legacy A1 list when no `architecture` param is given (empty
         // for A2-format tones), so ask for A2 ("2") first and only fall
         // back to A1 ("1") if that comes back empty. ---
         if (models.empty())
-        for (const char* architecture : {"2", "1"}) {
-            const juce::URL modelsUrl{juce::String(nam::modelsUrl(toneId_, architecture))};
-            juce::MemoryBlock listBytes;
-            juce::String listError;
-            if (!authenticatedGet(*this, accessToken_, modelsUrl, true, listBytes, listError)) {
-                outError = (listError == "401" || listError == "403")
-                    ? "TONE3000 authentication failed (please try Browse TONE3000 again)"
-                    : "could not reach TONE3000 to list models";
-                return false;
+            for (const char* architecture : { "2", "1" }) {
+                const juce::URL modelsUrl{ juce::String(nam::modelsUrl(toneId_, architecture)) };
+                juce::MemoryBlock listBytes;
+                juce::String listError;
+                if (!authenticatedGet(*this, accessToken_, modelsUrl, true, listBytes, listError)) {
+                    outError =
+                        (listError == "401" || listError == "403")
+                            ? "TONE3000 authentication failed (please try Browse TONE3000 again)"
+                            : "could not reach TONE3000 to list models";
+                    return false;
+                }
+                const juce::String body = juce::String::createStringFromData(
+                    listBytes.getData(), (int)listBytes.getSize());
+                models = nam::parseModelList(body.toStdString());
+                if (!models.empty()) break;
+                if (threadShouldExit()) {
+                    outError = "cancelled";
+                    return false;
+                }
             }
-            const juce::String body =
-                juce::String::createStringFromData(listBytes.getData(), (int) listBytes.getSize());
-            models = nam::parseModelList(body.toStdString());
-            if (!models.empty())
-                break;
-            if (threadShouldExit()) {
-                outError = "cancelled";
-                return false;
-            }
-        }
 
         // Audition wants the lightest variant (nano/feather) — quickest to
         // download and cheapest to run; Keep wants the default best quality.
@@ -235,7 +230,10 @@ private:
         bool picked = false;
         if (preferSmallest_) {
             for (const auto& m : models)
-                if (m.size > 0 && (!picked || m.size < best.size)) { best = m; picked = true; }
+                if (m.size > 0 && (!picked || m.size < best.size)) {
+                    best = m;
+                    picked = true;
+                }
         }
         if (!picked && !nam::pickBestModel(models, best)) {
             outError = "TONE3000 returned no models for this tone";
@@ -253,13 +251,15 @@ private:
         // actually tone3000.com, so the token is never leaked to a
         // third-party host. For the tone3000.com case, retry once without
         // the header if it's rejected (401/403). ---
-        const juce::URL modelUrl{juce::String(best.modelUrl)};
+        const juce::URL modelUrl{ juce::String(best.modelUrl) };
         const bool modelUrlIsT3k = isTone3000Host(best.modelUrl);
         juce::MemoryBlock bytes;
         juce::String downloadError;
-        bool downloaded = authenticatedGet(*this, accessToken_, modelUrl, modelUrlIsT3k, bytes, downloadError);
+        bool downloaded =
+            authenticatedGet(*this, accessToken_, modelUrl, modelUrlIsT3k, bytes, downloadError);
         if (!downloaded && modelUrlIsT3k && (downloadError == "401" || downloadError == "403"))
-            downloaded = authenticatedGet(*this, accessToken_, modelUrl, false, bytes, downloadError);
+            downloaded =
+                authenticatedGet(*this, accessToken_, modelUrl, false, bytes, downloadError);
         if (!downloaded) {
             outError = "failed to download the model file";
             return false;
@@ -306,10 +306,8 @@ class Tone3000Session::SearchThread : public juce::Thread {
 public:
     SearchThread(std::string accessToken, nam::SearchParams params,
                  std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done)
-        : juce::Thread("Tone3000Search"),
-          accessToken_(std::move(accessToken)),
-          params_(std::move(params)),
-          done_(std::move(done)) {}
+        : juce::Thread("Tone3000Search"), accessToken_(std::move(accessToken)),
+          params_(std::move(params)), done_(std::move(done)) {}
 
     void run() override {
         std::vector<nam::ToneInfo> resultTones;
@@ -318,9 +316,8 @@ public:
 
         auto callback = std::move(done_);
         if (callback) {
-            juce::MessageManager::callAsync([callback, ok, resultTones, error] {
-                callback(ok, resultTones, error);
-            });
+            juce::MessageManager::callAsync(
+                [callback, ok, resultTones, error] { callback(ok, resultTones, error); });
         }
     }
 
@@ -336,8 +333,8 @@ private:
         juce::String getError;
         if (!authenticatedGet(*this, accessToken_, searchUrl, true, bytes, getError)) {
             outError = (getError == "401" || getError == "403")
-                ? "TONE3000 authentication failed (please try Connect TONE3000 again)"
-                : "could not reach TONE3000 to search";
+                           ? "TONE3000 authentication failed (please try Connect TONE3000 again)"
+                           : "could not reach TONE3000 to search";
             return false;
         }
 
@@ -347,7 +344,7 @@ private:
         }
 
         const juce::String body =
-            juce::String::createStringFromData(bytes.getData(), (int) bytes.getSize());
+            juce::String::createStringFromData(bytes.getData(), (int)bytes.getSize());
         outTones = nam::parseToneList(body.toStdString());
         return true;
     }
@@ -363,19 +360,20 @@ class Tone3000Session::ListModelsThread : public juce::Thread {
 public:
     ListModelsThread(std::string accessToken, std::string toneId,
                      std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done)
-        : juce::Thread("Tone3000ListModels"),
-          accessToken_(std::move(accessToken)),
-          toneId_(std::move(toneId)),
-          done_(std::move(done)) {}
+        : juce::Thread("Tone3000ListModels"), accessToken_(std::move(accessToken)),
+          toneId_(std::move(toneId)), done_(std::move(done)) {}
 
     void run() override {
         // Merge BOTH architecture lists (deduped by id): the site shows every
         // file a tone has — A2 and A1 variants, and IR file sets.
         std::vector<nam::ModelInfo> models;
         juce::String error;
-        for (const char* architecture : {"2", "1", ""}) {
-            if (threadShouldExit()) { error = "cancelled"; break; }
-            const juce::URL url{juce::String(nam::modelsUrl(toneId_, architecture))};
+        for (const char* architecture : { "2", "1", "" }) {
+            if (threadShouldExit()) {
+                error = "cancelled";
+                break;
+            }
+            const juce::URL url{ juce::String(nam::modelsUrl(toneId_, architecture)) };
             juce::MemoryBlock bytes;
             juce::String getError;
             if (!authenticatedGet(*this, accessToken_, url, true, bytes, getError)) {
@@ -383,11 +381,14 @@ public:
                 continue;
             }
             const juce::String body =
-                juce::String::createStringFromData(bytes.getData(), (int) bytes.getSize());
+                juce::String::createStringFromData(bytes.getData(), (int)bytes.getSize());
             for (auto& m : nam::parseModelList(body.toStdString())) {
                 bool seen = false;
                 for (const auto& existing : models)
-                    if (existing.id == m.id) { seen = true; break; }
+                    if (existing.id == m.id) {
+                        seen = true;
+                        break;
+                    }
                 if (!seen) models.push_back(std::move(m));
             }
         }
@@ -397,9 +398,8 @@ public:
 
         auto callback = std::move(done_);
         if (callback) {
-            juce::MessageManager::callAsync([callback, ok, models, error] {
-                callback(ok, models, error);
-            });
+            juce::MessageManager::callAsync(
+                [callback, ok, models, error] { callback(ok, models, error); });
         }
     }
 
@@ -412,29 +412,27 @@ private:
 Tone3000Session::Tone3000Session(std::string accessToken) : accessToken_(std::move(accessToken)) {}
 
 Tone3000Session::~Tone3000Session() {
-    if (downloadThread_)
-        downloadThread_->stopThread(20000);
-    if (keepThread_)
-        keepThread_->stopThread(20000);
-    if (searchThread_)
-        searchThread_->stopThread(20000);
-    if (listThread_)
-        listThread_->stopThread(20000);
+    if (downloadThread_) downloadThread_->stopThread(20000);
+    if (keepThread_) keepThread_->stopThread(20000);
+    if (searchThread_) searchThread_->stopThread(20000);
+    if (listThread_) listThread_->stopThread(20000);
 }
 
-void Tone3000Session::downloadToneModelForKeep(const std::string& toneId, juce::File destDir,
-        std::function<void(bool, juce::File, juce::String)> done) {
+void Tone3000Session::downloadToneModelForKeep(
+    const std::string& toneId, juce::File destDir,
+    std::function<void(bool, juce::File, juce::String)> done) {
     if (keepThread_) {
         keepThread_->stopThread(20000);
         keepThread_.reset();
     }
-    keepThread_ = std::make_unique<DownloadThread>(accessToken_, toneId, std::move(destDir),
-                                                    false, std::move(done));
+    keepThread_ = std::make_unique<DownloadThread>(accessToken_, toneId, std::move(destDir), false,
+                                                   std::move(done));
     keepThread_->startThread();
 }
 
-void Tone3000Session::listToneModels(const std::string& toneId,
-        std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
+void Tone3000Session::listToneModels(
+    const std::string& toneId,
+    std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
     if (listThread_) {
         listThread_->stopThread(20000);
         listThread_.reset();
@@ -444,19 +442,19 @@ void Tone3000Session::listToneModels(const std::string& toneId,
 }
 
 void Tone3000Session::downloadModel(const nam::ModelInfo& model, juce::File destDir,
-        std::function<void(bool, juce::File, juce::String)> done) {
+                                    std::function<void(bool, juce::File, juce::String)> done) {
     if (downloadThread_) {
         downloadThread_->stopThread(20000);
         downloadThread_.reset();
     }
     downloadThread_ = std::make_unique<DownloadThread>(accessToken_, model.id, std::move(destDir),
-                                                        false, std::move(done), model);
+                                                       false, std::move(done), model);
     downloadThread_->startThread();
 }
 
 void Tone3000Session::downloadToneModel(const std::string& toneId, juce::File destDir,
-                                         std::function<void(bool, juce::File, juce::String)> done,
-                                         bool preferSmallest) {
+                                        std::function<void(bool, juce::File, juce::String)> done,
+                                        bool preferSmallest) {
     if (downloadThread_) {
         // A prior download is still in flight (or just finished): stop it
         // before starting a new one so we never have two DownloadThreads
@@ -466,12 +464,13 @@ void Tone3000Session::downloadToneModel(const std::string& toneId, juce::File de
         downloadThread_.reset();
     }
     downloadThread_ = std::make_unique<DownloadThread>(accessToken_, toneId, std::move(destDir),
-                                                        preferSmallest, std::move(done));
+                                                       preferSmallest, std::move(done));
     downloadThread_->startThread();
 }
 
-void Tone3000Session::search(const std::string& query, int page,
-                              std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+void Tone3000Session::search(
+    const std::string& query, int page,
+    std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
     nam::SearchParams p;
     p.query = query;
     p.page = page;
@@ -479,8 +478,9 @@ void Tone3000Session::search(const std::string& query, int page,
     search(p, std::move(done));
 }
 
-void Tone3000Session::search(const nam::SearchParams& params,
-                              std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+void Tone3000Session::search(
+    const nam::SearchParams& params,
+    std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
     if (searchThread_) {
         // A prior search is still in flight (or just finished): stop it
         // before starting a new one so we never have two SearchThreads (or a
@@ -492,4 +492,4 @@ void Tone3000Session::search(const nam::SearchParams& params,
     searchThread_->startThread();
 }
 
-} // namespace nam
+}   // namespace nam

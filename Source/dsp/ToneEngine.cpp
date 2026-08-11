@@ -8,7 +8,7 @@ namespace dsp {
 
 void ToneEngine::prepare(int sampleRate, int maxBlock) {
     sampleRate_ = sampleRate;
-    maxBlock_   = maxBlock;
+    maxBlock_ = maxBlock;
     inGain_.reset(1.0f, sampleRate);
     outGain_.reset(1.0f, sampleRate);
     normGain_.reset(1.0f, sampleRate);
@@ -34,14 +34,12 @@ void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
     // pointer) rather than freeing it here. Actual reclamation happens in
     // prepare(), at a safe point. Publish the new pointer with a release
     // store; render() acquires it, giving a genuinely lock-free hand-off.
-    if (current_)
-        retired_.push_back(std::move(current_));
+    if (current_) retired_.push_back(std::move(current_));
     // Bounded reclamation: only the most recent retirees can still be in a
     // running render() (a block lasts milliseconds; swaps are user-scale).
     // Without this, hot-swapping tones (card swipes, auditions) pins every
     // model ever loaded until the next prepare() — an OOM ratchet on mobile.
-    while (retired_.size() > 4)
-        retired_.erase(retired_.begin());   // frees on the control thread
+    while (retired_.size() > 4) retired_.erase(retired_.begin());   // frees on the control thread
     current_ = m;
 
     // NAM loudness normalisation: land every model near the -18 dBFS
@@ -73,56 +71,48 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
         // active. NAM-core (non-internal) models do not chunk internally
         // and will write out of bounds if fed more than their prepared
         // capacity, so scratch_'s size alone is not a sufficient bound.
-        const int n = std::min({numSamples, (int) scratch_.size(), m->maxBlock()});
+        const int n = std::min({ numSamples, (int)scratch_.size(), m->maxBlock() });
 
         // Telemetry: a block we had to clamp is a real problem signal
         // (the active model couldn't take the whole buffer) -- track it.
-        if (n < numSamples)
-            overCap_.fetch_add(1, std::memory_order_relaxed);
+        if (n < numSamples) overCap_.fetch_add(1, std::memory_order_relaxed);
 
         // Signal order: input gain -> gate -> model -> IR cab -> EQ ->
         //               delay -> reverb -> output gain.
-        for (int i = 0; i < n; ++i)
-            scratch_[i] = inGain_.applyNext(in[i]);
+        for (int i = 0; i < n; ++i) scratch_[i] = inGain_.applyNext(in[i]);
         gate_.process(scratch_.data(), scratch_.data(), n);   // gate before amp
         m->process(scratch_.data(), out, n);                  // amp
         for (int i = 0; i < n; ++i)
-            out[i] = normGain_.applyNext(out[i]);             // loudness normalisation
-        irCab_.process(out, out, n);                          // cab
-        eq_.process(out, n);                                  // tone
-        delay_.process(out, out, n);                          // time FX: delay
-        reverb_.process(out, out, n);                         // time FX: reverb
-        for (int i = 0; i < n; ++i)
-            out[i] = outGain_.applyNext(out[i]);
-        for (int i = n; i < numSamples; ++i)
-            out[i] = 0.0f;
+            out[i] = normGain_.applyNext(out[i]);   // loudness normalisation
+        irCab_.process(out, out, n);                // cab
+        eq_.process(out, n);                        // tone
+        delay_.process(out, out, n);                // time FX: delay
+        reverb_.process(out, out, n);               // time FX: reverb
+        for (int i = 0; i < n; ++i) out[i] = outGain_.applyNext(out[i]);
+        for (int i = n; i < numSamples; ++i) out[i] = 0.0f;
     } else {
         // No model: in-gain -> gate -> IR cab -> EQ -> delay -> reverb ->
         // out-gain. Reads `in`/writes `out` directly (not scratch_-backed),
         // so it is not bounds-limited here.
-        for (int i = 0; i < numSamples; ++i)
-            out[i] = inGain_.applyNext(in[i]);
+        for (int i = 0; i < numSamples; ++i) out[i] = inGain_.applyNext(in[i]);
         gate_.process(out, out, numSamples);
         irCab_.process(out, out, numSamples);
         eq_.process(out, numSamples);
         delay_.process(out, out, numSamples);
         reverb_.process(out, out, numSamples);
-        for (int i = 0; i < numSamples; ++i)
-            out[i] = outGain_.applyNext(out[i]);
+        for (int i = 0; i < numSamples; ++i) out[i] = outGain_.applyNext(out[i]);
     }
 
     // --- Lock-free telemetry tail (still on the audio thread, RT-safe) ------
     float peak = 0.0f;
-    for (int i = 0; i < numSamples; ++i)
-        peak = std::max(peak, std::fabs(out[i]));
+    for (int i = 0; i < numSamples; ++i) peak = std::max(peak, std::fabs(out[i]));
     outPeak_.store(peak, std::memory_order_relaxed);
 
     const auto t1 = std::chrono::steady_clock::now();
     const double elapsed = std::chrono::duration<double>(t1 - t0).count();
-    const double period  = sampleRate_ > 0 ? (double) numSamples / sampleRate_ : 0.0;
-    if (period > 0.0)
-        cpuLoad_.store((float) (elapsed / period), std::memory_order_relaxed);
+    const double period = sampleRate_ > 0 ? (double)numSamples / sampleRate_ : 0.0;
+    if (period > 0.0) cpuLoad_.store((float)(elapsed / period), std::memory_order_relaxed);
     blockCount_.fetch_add(1, std::memory_order_relaxed);
 }
 
-} // namespace dsp
+}   // namespace dsp

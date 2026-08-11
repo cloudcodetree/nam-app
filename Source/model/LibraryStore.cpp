@@ -17,13 +17,11 @@ namespace {
 std::string toLower(const std::string& s) {
     std::string out = s;
     std::transform(out.begin(), out.end(), out.begin(),
-                    [](unsigned char c) { return std::tolower(c); });
+                   [](unsigned char c) { return std::tolower(c); });
     return out;
 }
 
-std::string typeToString(LibraryType t) {
-    return t == LibraryType::Model ? "model" : "ir";
-}
+std::string typeToString(LibraryType t) { return t == LibraryType::Model ? "model" : "ir"; }
 
 LibraryType typeFromString(const std::string& s) {
     return s == "ir" ? LibraryType::Ir : LibraryType::Model;
@@ -61,7 +59,7 @@ LibraryEntry entryFromJson(const json& j) {
     return e;
 }
 
-} // namespace
+}   // namespace
 
 LibraryStore::LibraryStore(std::string libraryDir) : dir_(std::move(libraryDir)) {
     try {
@@ -99,9 +97,7 @@ bool LibraryStore::load() {
             return false;
         }
         std::list<LibraryEntry> loaded;
-        for (const auto& item : j) {
-            loaded.push_back(entryFromJson(item));
-        }
+        for (const auto& item : j) { loaded.push_back(entryFromJson(item)); }
         entries_ = std::move(loaded);
         return true;
     } catch (const std::exception&) {
@@ -113,9 +109,7 @@ bool LibraryStore::load() {
 bool LibraryStore::save() const {
     try {
         json arr = json::array();
-        for (const auto& e : entries_) {
-            arr.push_back(entryToJson(e));
-        }
+        for (const auto& e : entries_) { arr.push_back(entryToJson(e)); }
         fs::path tmpPath = fs::path(dir_) / "library.json.tmp";
         fs::path finalPath = fs::path(dir_) / "library.json";
         bool writeOk = false;
@@ -133,9 +127,7 @@ bool LibraryStore::save() const {
         }
         fs::rename(tmpPath, finalPath);
         return true;
-    } catch (const std::exception&) {
-        return false;
-    }
+    } catch (const std::exception&) { return false; }
 }
 
 const LibraryEntry* LibraryStore::add(const LibraryEntry& e) {
@@ -151,7 +143,7 @@ const LibraryEntry* LibraryStore::add(const LibraryEntry& e) {
 
 bool LibraryStore::remove(const std::string& id) {
     auto it = std::find_if(entries_.begin(), entries_.end(),
-                            [&](const LibraryEntry& e) { return e.id == id; });
+                           [&](const LibraryEntry& e) { return e.id == id; });
     if (it == entries_.end()) return false;
 
     try {
@@ -169,7 +161,7 @@ bool LibraryStore::remove(const std::string& id) {
 
 bool LibraryStore::setFavorite(const std::string& id, bool fav) {
     auto it = std::find_if(entries_.begin(), entries_.end(),
-                            [&](const LibraryEntry& e) { return e.id == id; });
+                           [&](const LibraryEntry& e) { return e.id == id; });
     if (it == entries_.end()) return false;
     it->favorite = fav;
     return true;
@@ -177,7 +169,7 @@ bool LibraryStore::setFavorite(const std::string& id, bool fav) {
 
 bool LibraryStore::setDisplayName(const std::string& id, const std::string& name) {
     auto it = std::find_if(entries_.begin(), entries_.end(),
-                            [&](const LibraryEntry& e) { return e.id == id; });
+                           [&](const LibraryEntry& e) { return e.id == id; });
     if (it == entries_.end() || name.empty()) return false;
     it->displayName = name;
     return true;
@@ -185,7 +177,7 @@ bool LibraryStore::setDisplayName(const std::string& id, const std::string& name
 
 bool LibraryStore::markUsed(const std::string& id, long long now) {
     auto it = std::find_if(entries_.begin(), entries_.end(),
-                            [&](const LibraryEntry& e) { return e.id == id; });
+                           [&](const LibraryEntry& e) { return e.id == id; });
     if (it == entries_.end()) return false;
     it->lastUsedAt = now;
     return true;
@@ -193,7 +185,7 @@ bool LibraryStore::markUsed(const std::string& id, long long now) {
 
 const LibraryEntry* LibraryStore::find(const std::string& id) const {
     auto it = std::find_if(entries_.begin(), entries_.end(),
-                            [&](const LibraryEntry& e) { return e.id == id; });
+                           [&](const LibraryEntry& e) { return e.id == id; });
     return it == entries_.end() ? nullptr : &(*it);
 }
 
@@ -211,7 +203,7 @@ std::vector<LibraryEntry> LibraryStore::all(LibraryType t) const {
 std::vector<LibraryEntry> LibraryStore::favorites(LibraryType t) const {
     auto result = all(t);
     result.erase(std::remove_if(result.begin(), result.end(),
-                                 [](const LibraryEntry& e) { return !e.favorite; }),
+                                [](const LibraryEntry& e) { return !e.favorite; }),
                  result.end());
     return result;
 }
@@ -225,10 +217,8 @@ std::vector<LibraryEntry> LibraryStore::recents(LibraryType t, int limit) const 
     std::sort(result.begin(), result.end(), [](const LibraryEntry& a, const LibraryEntry& b) {
         return a.lastUsedAt > b.lastUsedAt;
     });
-    if (static_cast<size_t>(limit) < result.size()) {
-        result.resize(static_cast<size_t>(limit));
-    }
+    if (static_cast<size_t>(limit) < result.size()) { result.resize(static_cast<size_t>(limit)); }
     return result;
 }
 
-} // namespace nam
+}   // namespace nam

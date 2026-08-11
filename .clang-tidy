@@ -1,0 +1,18 @@
+# NAM Player static analysis. Scoped to our own sources via HeaderFilterRegex
+# (JUCE / NeuralAudio / Eigen are not ours to lint). The check list mirrors
+# CLAUDE.md: async/lifetime bugs, audio-thread discipline, and function size.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-exception-escape,
+  concurrency-*,
+  performance-*,
+  -performance-enum-size,
+  readability-function-size
+WarningsAsErrors: ''
+HeaderFilterRegex: 'Source/.*'
+CheckOptions:
+  readability-function-size.LineThreshold: '80'
+  readability-function-size.StatementThreshold: '-1'

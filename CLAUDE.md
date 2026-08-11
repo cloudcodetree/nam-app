@@ -69,6 +69,11 @@ growth, god functions, unregistered sources) are MAJOR.
 
 ## Process
 
+- **clang-format is law**: `.clang-format` at the root (compact core style)
+  with a JUCE-spacing override in `Source/app/ui/.clang-format`. The
+  pre-push hook blocks unformatted `Source/` files — run
+  `clang-format -i <files>` before committing. `.clang-tidy` runs advisory
+  in the hook (bugprone/concurrency/performance/function-size).
 - Android native builds use **RelWithDebInfo** (a -O0 NAM is 5–15× too slow
   for real time).
 - The JUCE-free core (`Source/dsp`, `Source/model`, `Source/net`) keeps its

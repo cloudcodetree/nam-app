@@ -88,4 +88,4 @@ private:
     std::unique_ptr<ListModelsThread> listThread_;
 };
 
-} // namespace nam
+}   // namespace nam

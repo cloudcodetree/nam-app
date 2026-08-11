@@ -10,4 +10,4 @@ namespace dsp {
 // (silence, noise, or out of the guitar/bass range).
 float detectPitchHz(const float* samples, int numSamples, double sampleRate);
 
-} // namespace dsp
+}   // namespace dsp

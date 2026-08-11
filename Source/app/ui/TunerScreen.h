@@ -11,10 +11,10 @@
 // note/cents and smooths them for display.
 class TunerScreen : public juce::Component, private juce::Timer {
 public:
-    TunerScreen();
-    ~TunerScreen() override;
+    TunerScreen ();
+    ~TunerScreen () override;
 
-    std::function<void()> onBack;
+    std::function<void ()> onBack;
 
     void setPitch (float hz);   // 0 = no pitch
 
@@ -25,14 +25,14 @@ public:
     static constexpr int kPanelHeight = 470;
 
     void paint (juce::Graphics&) override;
-    void resized() override;
+    void resized () override;
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
-    void timerCallback() override;
+    void timerCallback () override;
     void paintStrobe (juce::Graphics&, bool inTune);
     void paintNeedle (juce::Graphics&, bool inTune);
-    void paintBars   (juce::Graphics&, bool inTune);
+    void paintBars (juce::Graphics&, bool inTune);
 
     enum class Mode { Strobe, Needle, Bars };
     Mode mode_ = Mode::Strobe;
@@ -40,11 +40,11 @@ private:
     std::array<juce::Rectangle<int>, 3> modeRects_;
 
     float hz_ = 0.0f;
-    float cents_ = 0.0f;        // smoothed deviation
+    float cents_ = 0.0f;   // smoothed deviation
     juce::String note_;
     bool active_ = false;
-    int  inactiveTicks_ = 0;
-    double phase_ = 0.0;        // strobe scroll phase (px)
+    int inactiveTicks_ = 0;
+    double phase_ = 0.0;   // strobe scroll phase (px)
 
     juce::Rectangle<int> backRect_, modeRow_, noteRect_, centsRect_, hzRect_, bandsRect_;
 

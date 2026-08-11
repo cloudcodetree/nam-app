@@ -38,7 +38,7 @@ private:
 
         int getNumRows() override;
         void paintListBoxItem(int rowNumber, juce::Graphics& g, int width, int height,
-                               bool rowIsSelected) override;
+                              bool rowIsSelected) override;
         void listBoxItemClicked(int row, const juce::MouseEvent& e) override;
         void listBoxItemDoubleClicked(int row, const juce::MouseEvent& e) override;
 
@@ -51,15 +51,16 @@ private:
         std::vector<nam::LibraryEntry> entries_;
     };
 
-    static std::vector<nam::LibraryEntry> sortedFavoritesFirst(std::vector<nam::LibraryEntry> entries);
+    static std::vector<nam::LibraryEntry>
+    sortedFavoritesFirst(std::vector<nam::LibraryEntry> entries);
 
     nam::LibraryStore& store_;
 
-    juce::Label modelsLabel_ { {}, "Models" };
+    juce::Label modelsLabel_{ {}, "Models" };
     EntryListModel modelsModel_;
     juce::ListBox modelsList_;
 
-    juce::Label irsLabel_ { {}, "Impulse Responses" };
+    juce::Label irsLabel_{ {}, "Impulse Responses" };
     EntryListModel irsModel_;
     juce::ListBox irsList_;
 };

@@ -18,8 +18,12 @@ public:
     void configure(int sampleRate, int maxBlock);
     void requestLoad(const std::string& path, Callback onDone);
     void loadNow(const std::string& path, Callback onDone);
+
 private:
-    struct Job { std::string path; Callback cb; };
+    struct Job {
+        std::string path;
+        Callback cb;
+    };
     void worker();
     int sampleRate_ = 48000, maxBlock_ = 128;
     // NOTE: mtx_/cv_/jobs_/stop_ MUST be declared (and thus constructed)
@@ -32,4 +36,4 @@ private:
     bool stop_ = false;
     std::thread th_;
 };
-} // namespace nam
+}   // namespace nam

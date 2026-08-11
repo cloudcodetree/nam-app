@@ -6,7 +6,7 @@ namespace dsp {
 void IrCab::prepare(int /*sampleRate*/, int /*maxBlock*/) {
     ring_.assign(kMaxIrTaps, 0.0f);
     writePos_ = 0;
-    retired_.clear();               // safe point: audio stopped
+    retired_.clear();   // safe point: audio stopped
 }
 
 void IrCab::setImpulse(std::shared_ptr<const std::vector<float>> ir) {
@@ -16,16 +16,17 @@ void IrCab::setImpulse(std::shared_ptr<const std::vector<float>> ir) {
 }
 
 void IrCab::process(const float* in, float* out, int numSamples) {
-    const std::vector<float>* ir =
-        enabled_.load(std::memory_order_relaxed)
-            ? active_.load(std::memory_order_acquire) : nullptr;
-    if (ir == nullptr || ir->empty()) {           // passthrough
-        if (in != out) for (int i = 0; i < numSamples; ++i) out[i] = in[i];
+    const std::vector<float>* ir = enabled_.load(std::memory_order_relaxed)
+                                       ? active_.load(std::memory_order_acquire)
+                                       : nullptr;
+    if (ir == nullptr || ir->empty()) {   // passthrough
+        if (in != out)
+            for (int i = 0; i < numSamples; ++i) out[i] = in[i];
         return;
     }
-    const int taps = std::min((int) ir->size(), kMaxIrTaps);
+    const int taps = std::min((int)ir->size(), kMaxIrTaps);
     const float* h = ir->data();
-    const int cap = (int) ring_.size();
+    const int cap = (int)ring_.size();
     for (int n = 0; n < numSamples; ++n) {
         ring_[writePos_] = in[n];
         float acc = 0.0f;
@@ -39,4 +40,4 @@ void IrCab::process(const float* in, float* out, int numSamples) {
     }
 }
 
-} // namespace dsp
+}   // namespace dsp

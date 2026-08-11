@@ -1,0 +1,4 @@
+# The shared Hi-Fi UI uses JUCE's house spacing: a space before EVERY paren
+# (calls and declarations alike), matching the JUCE framework sources.
+BasedOnStyle: InheritParentConfig
+SpaceBeforeParens: Always

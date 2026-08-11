@@ -10,11 +10,14 @@
 // Presentation only: data and actions are injected by the owner.
 class StacksScreen : public juce::Component {
 public:
-    StacksScreen();
+    StacksScreen ();
 
     static constexpr int kNumSlots = 6;
-    struct SlotDef { const char* label; const char* gearApi; };
-    static const std::array<SlotDef, kNumSlots>& slotDefs();
+    struct SlotDef {
+        const char* label;
+        const char* gearApi;
+    };
+    static const std::array<SlotDef, kNumSlots>& slotDefs ();
 
     struct Stack {
         juce::String name;
@@ -25,26 +28,27 @@ public:
 
     void setStacks (std::vector<Stack> stacks, int selected);
 
-    std::function<void()> onCreate;
-    std::function<void (int)> onDelete;                    // stack index
-    std::function<void (int)> onSelect;                    // expand a stack
-    std::function<void (int)> onApply;                     // load into the engine
+    std::function<void ()> onCreate;
+    std::function<void (int)> onDelete;   // stack index
+    std::function<void (int)> onSelect;   // expand a stack
+    std::function<void (int)> onApply;    // load into the engine
     // Fetch the live TONE3000 list for a slot's gear type. The callback
     // delivers parallel ids/titles.
-    std::function<void (int /*slot*/,
-        std::function<void (juce::StringArray, juce::StringArray,
-                            juce::StringArray)>)> onFetchSlotOptions;   // ids/titles/formats
+    std::function<void (int /*slot*/, std::function<void (juce::StringArray, juce::StringArray,
+                                                          juce::StringArray)>)>
+        onFetchSlotOptions;   // ids/titles/formats
     std::function<void (int /*stack*/, int /*slot*/, juce::String /*toneId*/,
-                        juce::String /*title*/, juce::String /*format*/)> onSlotPicked;
+                        juce::String /*title*/, juce::String /*format*/)>
+        onSlotPicked;
 
     void paint (juce::Graphics&) override;
-    void resized() override;
+    void resized () override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
     void mouseUp (const juce::MouseEvent&) override;
 
 private:
-    void layout();
+    void layout ();
     void openPicker (int slot);
 
     std::vector<Stack> stacks_;
@@ -52,7 +56,9 @@ private:
 
     // Layout rects.
     juce::Rectangle<int> newBtnRect_;
-    struct StackRow { juce::Rectangle<int> header, applyBtn, deleteBtn; };
+    struct StackRow {
+        juce::Rectangle<int> header, applyBtn, deleteBtn;
+    };
     std::vector<StackRow> rows_;
     std::array<juce::Rectangle<int>, kNumSlots> slotRects_;
     juce::Rectangle<int> listArea_;

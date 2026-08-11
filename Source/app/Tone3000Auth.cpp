@@ -24,15 +24,15 @@ using json = nlohmann::json;
 constexpr char kTokenUrl[] = "https://www.tone3000.com/api/v1/oauth/token";
 
 // A handful of loopback ports to try in turn in case one is already in use.
-constexpr int kCandidatePorts[] = {49222, 49223, 49224, 49225, 49226};
+constexpr int kCandidatePorts[] = { 49222, 49223, 49224, 49225, 49226 };
 
 // Overall wait for the browser redirect. Generous because the user logs into
 // TONE3000 and browses/picks a tone on their hosted site in between — a short
 // window closes the loopback port before a real pick arrives (ERR_CONNECTION_REFUSED).
-constexpr int kAcceptTimeoutMs = 600000; // 10 minutes
-constexpr int kAcceptPollMs = 250;       // poll granularity (also cancellation latency)
-constexpr int kPostCallbackGraceMs = 1500; // linger after capturing the code so the
-                                           // browser's follow-up navigation gets served
+constexpr int kAcceptTimeoutMs = 600000;     // 10 minutes
+constexpr int kAcceptPollMs = 250;           // poll granularity (also cancellation latency)
+constexpr int kPostCallbackGraceMs = 1500;   // linger after capturing the code so the
+                                             // browser's follow-up navigation gets served
 constexpr int kRequestReadTimeoutMs = 5000;
 constexpr int kMaxRequestLineBytes = 8192;
 constexpr int kTokenConnectTimeoutMs = 15000;
@@ -76,8 +76,7 @@ std::string urlDecode(const std::string& s) {
 std::map<std::string, std::string> parseQueryParams(const std::string& requestTarget) {
     std::map<std::string, std::string> result;
     const auto qpos = requestTarget.find('?');
-    if (qpos == std::string::npos)
-        return result;
+    if (qpos == std::string::npos) return result;
     const std::string query = requestTarget.substr(qpos + 1);
 
     size_t start = 0;
@@ -91,8 +90,7 @@ std::map<std::string, std::string> parseQueryParams(const std::string& requestTa
         } else if (!pair.empty()) {
             result[urlDecode(pair)] = "";
         }
-        if (amp == std::string::npos)
-            break;
+        if (amp == std::string::npos) break;
         start = amp + 1;
     }
     return result;
@@ -118,11 +116,9 @@ std::string readHttpRequestLine(juce::StreamingSocket& conn) {
            static_cast<int>(buffer.size()) < kMaxRequestLineBytes &&
            std::chrono::steady_clock::now() < deadline) {
         const int ready = conn.waitUntilReady(true, 250);
-        if (ready != 1)
-            continue;
+        if (ready != 1) continue;
         const int n = conn.read(chunk, static_cast<int>(sizeof(chunk)), false);
-        if (n <= 0)
-            break;
+        if (n <= 0) break;
         buffer.append(chunk, static_cast<size_t>(n));
     }
     const auto pos = buffer.find("\r\n");
@@ -135,8 +131,7 @@ std::string readHttpRequestLine(juce::StreamingSocket& conn) {
 // app) reach this loopback via a browser fetch() from an https origin, which
 // Chrome treats as a public->private request needing these headers.
 void writeRedirectLandingResponse(juce::StreamingSocket& conn) {
-    static const char kBody[] =
-        "<html><body>You can return to NAM Player.</body></html>";
+    static const char kBody[] = "<html><body>You can return to NAM Player.</body></html>";
     std::ostringstream response;
     response << "HTTP/1.1 200 OK\r\n"
              << "Content-Type: text/html; charset=utf-8\r\n"
@@ -166,7 +161,7 @@ void writeCorsPreflightResponse(juce::StreamingSocket& conn) {
     conn.write(bytes.data(), static_cast<int>(bytes.size()));
 }
 
-} // namespace
+}   // namespace
 
 // Runs entirely on the background FlowThread; delivers its Result to the
 // caller's `done` callback via juce::MessageManager::callAsync.
@@ -197,8 +192,8 @@ private:
 class Tone3000Auth::RefreshThread : public juce::Thread {
 public:
     RefreshThread(Tone3000Auth& owner, std::string refreshToken, std::function<void(bool)> done)
-        : juce::Thread("Tone3000AuthRefresh"), owner_(owner), refreshToken_(std::move(refreshToken)),
-          done_(std::move(done)) {}
+        : juce::Thread("Tone3000AuthRefresh"), owner_(owner),
+          refreshToken_(std::move(refreshToken)), done_(std::move(done)) {}
 
     void run() override {
         const bool ok = owner_.runRefreshOnThread(refreshToken_);
@@ -281,11 +276,13 @@ void Tone3000Auth::tryRefresh(std::function<void(bool ok)> done) {
         refreshThread_->stopThread(20000);
         refreshThread_.reset();
     }
-    refreshThread_ = std::make_unique<RefreshThread>(*this, std::move(refreshToken), std::move(done));
+    refreshThread_ =
+        std::make_unique<RefreshThread>(*this, std::move(refreshToken), std::move(done));
     refreshThread_->startThread();
 }
 
-Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const std::string& prompt) {
+Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread,
+                                                   const std::string& prompt) {
     Result result;
 
     if (publishableKey_.empty()) {
@@ -331,8 +328,8 @@ Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const s
     const auto acceptDeadline =
         std::chrono::steady_clock::now() + std::chrono::milliseconds(kAcceptTimeoutMs);
     auto graceDeadline = acceptDeadline;
-    while (std::chrono::steady_clock::now() < acceptDeadline
-           && std::chrono::steady_clock::now() < graceDeadline) {
+    while (std::chrono::steady_clock::now() < acceptDeadline &&
+           std::chrono::steady_clock::now() < graceDeadline) {
         if (thread.threadShouldExit()) {
             listener.close();
             result.error = "cancelled";
@@ -344,12 +341,10 @@ Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const s
             listener.close();
             return result;
         }
-        if (ready != 1)
-            continue;
+        if (ready != 1) continue;
 
         std::unique_ptr<juce::StreamingSocket> conn(listener.waitForNextConnection());
-        if (!conn)
-            continue;
+        if (!conn) continue;
 
         const std::string requestLine = readHttpRequestLine(*conn);
         std::string method, target;
@@ -362,8 +357,8 @@ Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const s
                     if (q.count("code") > 0 || q.count("error") > 0) {
                         query = std::move(q);
                         gotCallback = true;
-                        graceDeadline = std::chrono::steady_clock::now()
-                            + std::chrono::milliseconds(kPostCallbackGraceMs);
+                        graceDeadline = std::chrono::steady_clock::now() +
+                                        std::chrono::milliseconds(kPostCallbackGraceMs);
                     }
                 }
                 writeRedirectLandingResponse(*conn);
@@ -400,12 +395,13 @@ Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const s
     const std::string code = codeIt->second;
 
     std::string toneId;
-    if (const auto toneIt = query.find("tone_id"); toneIt != query.end())
-        toneId = toneIt->second;
+    if (const auto toneIt = query.find("tone_id"); toneIt != query.end()) toneId = toneIt->second;
 
     // --- Token exchange ---
-    const std::string formBody = buildTokenFormBody(publishableKey_, redirectUri, code, pkce.verifier);
-    const juce::URL tokenUrl = juce::URL(juce::String(kTokenUrl)).withPOSTData(juce::String(formBody));
+    const std::string formBody =
+        buildTokenFormBody(publishableKey_, redirectUri, code, pkce.verifier);
+    const juce::URL tokenUrl =
+        juce::URL(juce::String(kTokenUrl)).withPOSTData(juce::String(formBody));
 
     juce::WebInputStream tokenStream(tokenUrl, true);
     tokenStream.withExtraHeaders("Content-Type: application/x-www-form-urlencoded");
@@ -438,11 +434,11 @@ Tone3000Auth::Result Tone3000Auth::runFlowOnThread(juce::Thread& thread, const s
 }
 
 bool Tone3000Auth::runRefreshOnThread(const std::string& refreshToken) {
-    if (publishableKey_.empty() || refreshToken.empty())
-        return false;
+    if (publishableKey_.empty() || refreshToken.empty()) return false;
 
     const std::string formBody = buildRefreshFormBody(publishableKey_, refreshToken);
-    const juce::URL tokenUrl = juce::URL(juce::String(kTokenUrl)).withPOSTData(juce::String(formBody));
+    const juce::URL tokenUrl =
+        juce::URL(juce::String(kTokenUrl)).withPOSTData(juce::String(formBody));
 
     juce::WebInputStream tokenStream(tokenUrl, true);
     tokenStream.withExtraHeaders("Content-Type: application/x-www-form-urlencoded");
@@ -455,12 +451,10 @@ bool Tone3000Auth::runRefreshOnThread(const std::string& refreshToken) {
     }
     const int status = tokenStream.getStatusCode();
     const std::string responseBody = tokenStream.readEntireStreamAsString().toStdString();
-    if (status < 200 || status >= 300)
-        return false;
+    if (status < 200 || status >= 300) return false;
 
     const TokenResponse tokenResponse = parseTokenResponse(responseBody);
-    if (!tokenResponse.ok || tokenResponse.accessToken.empty())
-        return false;
+    if (!tokenResponse.ok || tokenResponse.accessToken.empty()) return false;
 
     // CRITICAL ROTATION GOTCHA: if the server didn't return a new refresh
     // token, keep the one we just used -- overwriting refreshToken_ with
@@ -473,11 +467,12 @@ bool Tone3000Auth::runRefreshOnThread(const std::string& refreshToken) {
 }
 
 void Tone3000Auth::storeTokens(const TokenResponse& tokenResponse) {
-    storeTokensResolved(tokenResponse.accessToken, tokenResponse.refreshToken, tokenResponse.expiresIn);
+    storeTokensResolved(tokenResponse.accessToken, tokenResponse.refreshToken,
+                        tokenResponse.expiresIn);
 }
 
-void Tone3000Auth::storeTokensResolved(const std::string& accessToken, const std::string& refreshToken,
-                                        long long expiresIn) {
+void Tone3000Auth::storeTokensResolved(const std::string& accessToken,
+                                       const std::string& refreshToken, long long expiresIn) {
     const long long expiry = nowEpochSeconds() + expiresIn;
 
     json j;
@@ -487,8 +482,7 @@ void Tone3000Auth::storeTokensResolved(const std::string& accessToken, const std
 
     const fs::path path(tokenStoreFile_.getFullPathName().toStdString());
     std::error_code ec;
-    if (path.has_parent_path())
-        fs::create_directories(path.parent_path(), ec);
+    if (path.has_parent_path()) fs::create_directories(path.parent_path(), ec);
 
     // Write to a temp file in the same directory, lock it down to 0600
     // while it is still empty, then write the token bytes -- this closes
@@ -504,7 +498,7 @@ void Tone3000Auth::storeTokensResolved(const std::string& accessToken, const std
         std::ofstream out(tmpPath, std::ios::trunc | std::ios::binary);
         if (out) {
             fs::permissions(tmpPath, fs::perms::owner_read | fs::perms::owner_write,
-                             fs::perm_options::replace, ec);
+                            fs::perm_options::replace, ec);
             const std::string body = j.dump();
             out << body;
             out.flush();
@@ -542,8 +536,7 @@ void Tone3000Auth::loadTokens() {
     }
 
     std::ifstream in(path, std::ios::binary);
-    if (!in)
-        return;
+    if (!in) return;
 
     try {
         json j;
@@ -571,8 +564,7 @@ void Tone3000Auth::clearTokens() {
     const fs::path path(tokenStoreFile_.getFullPathName().toStdString());
     std::error_code ec;
     fs::remove(path, ec);
-    if (!ec)
-        return;
+    if (!ec) return;
 
     // fs::remove failed (e.g. permissions weirdness): if the file is still
     // there, best-effort truncate it to empty so a later loadTokens() can't
@@ -588,13 +580,11 @@ void Tone3000Auth::clearTokens() {
 
 std::string Tone3000Auth::accessToken() const {
     std::lock_guard<std::mutex> lock(tokenMutex_);
-    if (accessToken_.empty())
-        return {};
-    if (nowEpochSeconds() >= expiryEpochSeconds_ - 60)
-        return {};
+    if (accessToken_.empty()) return {};
+    if (nowEpochSeconds() >= expiryEpochSeconds_ - 60) return {};
     return accessToken_;
 }
 
 bool Tone3000Auth::hasValidToken() const { return !accessToken().empty(); }
 
-} // namespace nam
+}   // namespace nam

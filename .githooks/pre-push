@@ -6,13 +6,50 @@ set -u
 
 [ "${SKIP_REVIEW:-0}" = "1" ] && { echo "[pre-push] SKIP_REVIEW=1 — review skipped"; exit 0; }
 
+zero=0000000000000000000000000000000000000000
+status=0
+
+# --- Stage 1: mechanical checks (cheap, deterministic) ---------------------
+# clang-format on our own changed sources; the AI review never runs on a
+# diff that fails formatting. Tools missing => skip with a note.
+TIDY_BIN="/opt/homebrew/opt/llvm/bin/clang-tidy"
+if command -v clang-format >/dev/null 2>&1; then
+    changed=$(git diff --name-only --diff-filter=ACMR origin/main...HEAD 2>/dev/null \
+                | grep -E '^Source/.*\.(cpp|h)$')
+    if [ -n "$changed" ]; then
+        fmt_bad=""
+        for f in $changed; do
+            [ -f "$f" ] || continue
+            clang-format --dry-run --Werror "$f" >/dev/null 2>&1 || fmt_bad="$fmt_bad $f"
+        done
+        if [ -n "$fmt_bad" ]; then
+            echo "[pre-push] BLOCKED: clang-format violations in:$fmt_bad"
+            echo "[pre-push] fix with: clang-format -i$fmt_bad"
+            exit 1
+        fi
+        echo "[pre-push] clang-format clean ($(echo "$changed" | wc -l | tr -d ' ') files)"
+        # clang-tidy (advisory for now): uses the Android compile database if
+        # one exists; findings print but do not block.
+        cdb=$(ls -d Builds/Android/app/.cxx/*/*/arm64-v8a 2>/dev/null | head -1)
+        if [ -x "$TIDY_BIN" ] && [ -n "$cdb" ] && [ -f "$cdb/compile_commands.json" ]; then
+            cpps=$(echo "$changed" | grep '\.cpp$' | head -8)
+            if [ -n "$cpps" ]; then
+                echo "[pre-push] clang-tidy (advisory) on changed sources..."
+                # shellcheck disable=SC2086
+                "$TIDY_BIN" -p "$cdb" --quiet $cpps 2>/dev/null \
+                    | grep -E "warning:|error:" | head -30 || true
+            fi
+        fi
+    fi
+else
+    echo "[pre-push] clang-format not installed — mechanical checks skipped"
+fi
+
+# --- Stage 2: adversarial review -------------------------------------------
 if ! command -v claude >/dev/null 2>&1; then
     echo "[pre-push] claude CLI not found — skipping adversarial review"
     exit 0
 fi
-
-zero=0000000000000000000000000000000000000000
-status=0
 
 while read -r local_ref local_sha remote_ref remote_sha; do
     [ "$local_sha" = "$zero" ] && continue   # branch deletion: nothing to review

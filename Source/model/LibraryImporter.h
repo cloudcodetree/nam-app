@@ -11,7 +11,7 @@ namespace nam {
 // no name metadata, so cache stems like "ir_79857" would otherwise show in
 // the UI); a model's own metadata.name still wins when present. Never throws.
 const LibraryEntry* importIntoLibrary(LibraryStore& store, const std::string& sourcePath,
-                                       LibraryType type, long long now,
-                                       const std::string& displayName = {});
+                                      LibraryType type, long long now,
+                                      const std::string& displayName = {});
 
-}
+}   // namespace nam

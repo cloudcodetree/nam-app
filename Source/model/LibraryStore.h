@@ -12,21 +12,21 @@ namespace nam {
 // never touches the clock. No public method throws.
 class LibraryStore {
 public:
-    explicit LibraryStore(std::string libraryDir);  // ensures dir + models/ + irs/ exist
+    explicit LibraryStore(std::string libraryDir);   // ensures dir + models/ + irs/ exist
 
-    bool load();                     // read library.json; true if loaded or absent (empty)
-    bool save() const;               // atomic write of library.json
+    bool load();         // read library.json; true if loaded or absent (empty)
+    bool save() const;   // atomic write of library.json
 
-    const LibraryEntry* add(const LibraryEntry& e);  // insert/replace by id; returns stored
-    bool remove(const std::string& id);              // removes entry AND deletes its file
+    const LibraryEntry* add(const LibraryEntry& e);   // insert/replace by id; returns stored
+    bool remove(const std::string& id);               // removes entry AND deletes its file
     bool setFavorite(const std::string& id, bool fav);
     bool setDisplayName(const std::string& id, const std::string& name);
     bool markUsed(const std::string& id, long long now);
     const LibraryEntry* find(const std::string& id) const;
 
-    std::vector<LibraryEntry> all(LibraryType) const;               // sorted by displayName (ci)
-    std::vector<LibraryEntry> favorites(LibraryType) const;         // favorite==true, same sort
-    std::vector<LibraryEntry> recents(LibraryType, int limit) const;// lastUsedAt desc, >0 only
+    std::vector<LibraryEntry> all(LibraryType) const;                  // sorted by displayName (ci)
+    std::vector<LibraryEntry> favorites(LibraryType) const;            // favorite==true, same sort
+    std::vector<LibraryEntry> recents(LibraryType, int limit) const;   // lastUsedAt desc, >0 only
 
     std::string dir() const;                 // library root
     std::string subdir(LibraryType) const;   // models/ or irs/ absolute path
@@ -40,4 +40,4 @@ private:
     std::list<LibraryEntry> entries_;
 };
 
-}
+}   // namespace nam

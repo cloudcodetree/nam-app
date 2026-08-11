@@ -10,10 +10,10 @@ struct AudioSettingsState {
     // Where "System Default" output actually lands right now (e.g. the USB
     // interface) — shown as the row subtitle so default routing is honest.
     juce::String outputRouteHint;
-    juce::StringArray rates, buffers;        // chip labels, e.g. "48k" / "192"
+    juce::StringArray rates, buffers;   // chip labels, e.g. "48k" / "192"
     juce::String currentRate, currentBuffer;
-    double latencyMs = 0.0;                  // round-trip estimate
-    bool   running = false;
+    double latencyMs = 0.0;   // round-trip estimate
+    bool running = false;
 };
 
 // The "Audio" settings screen (Hi-Fi design): DEVICE rows (input + output),
@@ -22,11 +22,11 @@ struct AudioSettingsState {
 // Setup screen — calibration is a button here, not a gate.
 class AudioSettingsScreen : public juce::Component, private juce::Timer {
 public:
-    AudioSettingsScreen();
-    ~AudioSettingsScreen() override;
+    AudioSettingsScreen ();
+    ~AudioSettingsScreen () override;
 
-    std::function<void()> onBack;
-    std::function<void()> onRescan;
+    std::function<void ()> onBack;
+    std::function<void ()> onRescan;
     std::function<void (juce::String)> onSelectInput;
     std::function<void (juce::String)> onSelectOutput;
     std::function<void (juce::String)> onSelectRate;
@@ -37,16 +37,16 @@ public:
     void setLevels (float inPeak, float outPeak);   // owner's timer feeds these
 
     void paint (juce::Graphics&) override;
-    void resized() override;
+    void resized () override;
     void mouseDown (const juce::MouseEvent&) override;
     void mouseDrag (const juce::MouseEvent&) override;
-    void mouseUp   (const juce::MouseEvent&) override;
+    void mouseUp (const juce::MouseEvent&) override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
 
 private:
-    void timerCallback() override;
-    void relayout();
-    void clampScroll();
+    void timerCallback () override;
+    void relayout ();
+    void clampScroll ();
     juce::Point<int> toContent (juce::Point<int> p) const;
 
     AudioSettingsState st_;
@@ -54,8 +54,8 @@ private:
 
     // Auto gain-stage (manual trigger): listen ~4 s, aim peaks at -12 dBFS.
     enum class Gain { Idle, Listening, Applied };
-    Gain  gain_ = Gain::Idle;
-    int   gainTicks_ = 0;
+    Gain gain_ = Gain::Idle;
+    int gainTicks_ = 0;
     float gainMax_ = 0.0f;
     float appliedDb_ = 0.0f;
 
@@ -64,12 +64,13 @@ private:
     // Content-space rects.
     std::vector<juce::Rectangle<int>> inRects_, outRects_, rateRects_, bufRects_;
     std::vector<juce::Rectangle<int>> cards_;
-    juce::Rectangle<int> inHeader_, outHeader_, rescanRect_, engineHeader_,
-                         rateRow_, bufRow_, latencyRow_, levelsHeader_,
-                         meterInRow_, meterOutRow_, gainBtn_;
+    juce::Rectangle<int> inHeader_, outHeader_, rescanRect_, engineHeader_, rateRow_, bufRow_,
+        latencyRow_, levelsHeader_, meterInRow_, meterOutRow_, gainBtn_;
     int contentTop_ = 0, contentH_ = 0;
     float scrollY_ = 0.0f;
-    int  pressY_ = 0; float pressScroll_ = 0.0f; bool dragged_ = false;
+    int pressY_ = 0;
+    float pressScroll_ = 0.0f;
+    bool dragged_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioSettingsScreen)
 };

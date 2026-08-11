@@ -18,16 +18,17 @@ public:
         juce::JUCEApplication::getInstance()->systemRequestedQuit();
     }
     AndroidAudioApp* audioApp() const { return audioApp_; }
+
 private:
     AndroidAudioApp* audioApp_ = nullptr;   // owned by the DocumentWindow content
 };
 
 class NamPlayerApplication : public juce::JUCEApplication {
 public:
-    const juce::String getApplicationName() override    { return "NAM Player"; }
+    const juce::String getApplicationName() override { return "NAM Player"; }
     const juce::String getApplicationVersion() override { return "0.1.0"; }
-    void initialise(const juce::String&) override       { window_.reset(new BringUpWindow()); }
-    void shutdown() override                             { window_ = nullptr; }
+    void initialise(const juce::String&) override { window_.reset(new BringUpWindow()); }
+    void shutdown() override { window_ = nullptr; }
 
     // Android hardware/gesture back: navigate our own screen stack (pop to
     // Play) instead of finishing the activity. Returning true tells JUCE the
@@ -38,6 +39,7 @@ public:
             return window_->audioApp()->handleBackButton();
         return false;
     }
+
 private:
     std::unique_ptr<BringUpWindow> window_;
 };

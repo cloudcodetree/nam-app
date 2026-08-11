@@ -17,13 +17,13 @@ struct ModelInfo {
 };
 
 struct ToneInfo {
-    std::string id;      // stringified integer
+    std::string id;   // stringified integer
     std::string title;
-    std::string format;  // "nam" | "ir"
+    std::string format;   // "nam" | "ir"
     std::string gear;
-    long long   a2Count = 0;
-    long long   a1Count = 0;
-    long long   downloads = 0;
+    long long a2Count = 0;
+    long long a1Count = 0;
+    long long downloads = 0;
     std::string imageUrl;   // first entry of `images` ("" if none)
 };
 
@@ -35,24 +35,20 @@ std::string urlEncode(const std::string& s);
 // TONE3000-specific hint, e.g. "select_tone". When `prompt` is empty, the
 // `prompt` param is omitted entirely (a standard authenticate with no
 // tone-picker).
-std::string buildAuthorizeUrl(const std::string& publishableKey,
-                               const std::string& redirectUri,
-                               const std::string& challenge,
-                               const std::string& state,
-                               const std::string& prompt);
+std::string buildAuthorizeUrl(const std::string& publishableKey, const std::string& redirectUri,
+                              const std::string& challenge, const std::string& state,
+                              const std::string& prompt);
 
 // Builds the application/x-www-form-urlencoded body for the
 // authorization_code token exchange.
-std::string buildTokenFormBody(const std::string& publishableKey,
-                                const std::string& redirectUri,
-                                const std::string& code,
-                                const std::string& codeVerifier);
+std::string buildTokenFormBody(const std::string& publishableKey, const std::string& redirectUri,
+                               const std::string& code, const std::string& codeVerifier);
 
 // Builds the application/x-www-form-urlencoded body for a refresh_token
 // grant: silently exchanges a stored refresh token for a new access token
 // (and possibly a rotated refresh token) without involving the browser.
 std::string buildRefreshFormBody(const std::string& publishableKey,
-                                  const std::string& refreshToken);
+                                 const std::string& refreshToken);
 
 // Full /api/v1/models?tone_id=...&architecture=...&page_size=50 URL for a
 // given tone id. `architecture` is the TONE3000 API's numeric-string
@@ -89,12 +85,12 @@ struct SearchParams {
     std::string query;
     int page = 1;
     int pageSize = 25;
-    std::string sort;                   // trending|newest|oldest|best-match|downloads-all-time
-    std::vector<std::string> gears;     // amp-cab|amp|cab|pedal|outboard|space|experimental
-    std::string format;                 // nam|ir ("" = all)
-    std::vector<std::string> tags;      // exact tag names, OR'd
-    std::vector<std::string> makes;     // exact make/model names, OR'd
-    int architecture = 0;               // 0 = any, 1 = A1, 2 = A2
+    std::string sort;                 // trending|newest|oldest|best-match|downloads-all-time
+    std::vector<std::string> gears;   // amp-cab|amp|cab|pedal|outboard|space|experimental
+    std::string format;               // nam|ir ("" = all)
+    std::vector<std::string> tags;    // exact tag names, OR'd
+    std::vector<std::string> makes;   // exact make/model names, OR'd
+    int architecture = 0;             // 0 = any, 1 = A1, 2 = A2
 };
 std::string buildSearchUrl(const SearchParams& p);
 
@@ -107,4 +103,4 @@ std::string buildTrendingUrl();
 // Never throws: malformed JSON yields an empty vector.
 std::vector<ToneInfo> parseToneList(const std::string& json);
 
-} // namespace nam
+}   // namespace nam

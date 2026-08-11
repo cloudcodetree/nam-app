@@ -9,15 +9,15 @@
 // purpose). Cross-platform (shared nam::LibraryEntry only).
 class LiveScreen : public juce::Component {
 public:
-    LiveScreen();
+    LiveScreen ();
 
-    std::function<void()> onExit;
+    std::function<void ()> onExit;
     std::function<void (nam::LibraryEntry)> onSelect;
 
     void setSlots (std::vector<nam::LibraryEntry> slots);
 
     void paint (juce::Graphics&) override;
-    void resized() override;
+    void resized () override;
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
@@ -25,6 +25,6 @@ private:
     int active_ = 0;
     juce::Rectangle<int> exitRect_;
     std::vector<juce::Rectangle<int>> rowRects_;
-    void relayout();
+    void relayout ();
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LiveScreen)
 };

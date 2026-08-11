@@ -12,36 +12,36 @@ void SearchPanel::ResultListModel::setResults(std::vector<nam::ToneInfo> results
     results_ = std::move(results);
 }
 
-int SearchPanel::ResultListModel::getNumRows() { return (int) results_.size(); }
+int SearchPanel::ResultListModel::getNumRows() { return (int)results_.size(); }
 
 void SearchPanel::ResultListModel::paintListBoxItem(int rowNumber, juce::Graphics& g, int width,
-                                                      int height, bool rowIsSelected) {
-    if (rowNumber < 0 || rowNumber >= (int) results_.size()) return;
-    const auto& t = results_[(size_t) rowNumber];
+                                                    int height, bool rowIsSelected) {
+    if (rowNumber < 0 || rowNumber >= (int)results_.size()) return;
+    const auto& t = results_[(size_t)rowNumber];
 
     g.fillAll(rowIsSelected ? juce::Colours::darkslateblue.withAlpha(0.5f)
-                             : juce::Colours::transparentBlack);
+                            : juce::Colours::transparentBlack);
 
     // Small hint: gear, format, "A2:<n>" -- whatever's non-empty/non-zero.
     juce::StringArray parts;
-    if (! t.gear.empty()) parts.add(juce::String(t.gear));
-    if (! t.format.empty()) parts.add(juce::String(t.format));
-    parts.add("A2:" + juce::String((juce::int64) t.a2Count));
+    if (!t.gear.empty()) parts.add(juce::String(t.gear));
+    if (!t.format.empty()) parts.add(juce::String(t.format));
+    parts.add("A2:" + juce::String((juce::int64)t.a2Count));
     const juce::String hint = parts.joinIntoString("  ");
 
     auto textArea = juce::Rectangle<int>(4, 0, width - 8, height);
     g.setColour(juce::Colours::white);
-    g.setFont((float) height * 0.5f);
+    g.setFont((float)height * 0.5f);
     g.drawText(juce::String(t.title), textArea, juce::Justification::centredLeft);
 
     g.setColour(juce::Colours::lightgrey.withAlpha(0.7f));
-    g.setFont((float) height * 0.4f);
+    g.setFont((float)height * 0.4f);
     g.drawText(hint, textArea, juce::Justification::centredRight);
 }
 
 void SearchPanel::ResultListModel::listBoxItemClicked(int row, const juce::MouseEvent&) {
-    if (row < 0 || row >= (int) results_.size()) return;
-    const auto tone = results_[(size_t) row];  // copy: a later setResults() may reallocate results_
+    if (row < 0 || row >= (int)results_.size()) return;
+    const auto tone = results_[(size_t)row];   // copy: a later setResults() may reallocate results_
     if (owner_.onPick) owner_.onPick(tone);
 }
 
@@ -65,9 +65,7 @@ SearchPanel::SearchPanel() : resultsModel_(*this) {
     addAndMakeVisible(resultsList_);
 }
 
-SearchPanel::~SearchPanel() {
-    resultsList_.setModel(nullptr);
-}
+SearchPanel::~SearchPanel() { resultsList_.setModel(nullptr); }
 
 void SearchPanel::fireSearch() {
     if (onSearch) onSearch(searchBox_.getText());

@@ -26,8 +26,8 @@ AndroidAudioApp::AndroidAudioApp() {
     // riff (audition) is the emulator's sound source. Real devices keep the
     // live guitar path.
     char qemu[PROP_VALUE_MAX] = {};
-    if ((__system_property_get("ro.boot.qemu", qemu) > 0 && qemu[0] == '1')
-        || (__system_property_get("ro.kernel.qemu", qemu) > 0 && qemu[0] == '1')) {
+    if ((__system_property_get("ro.boot.qemu", qemu) > 0 && qemu[0] == '1') ||
+        (__system_property_get("ro.kernel.qemu", qemu) > 0 && qemu[0] == '1')) {
         liveMuted_.store(true, std::memory_order_relaxed);
         alwaysMuteLive_ = true;
         preRenderAuditions_ = true;   // QEMU can't run NAM inference in real time
@@ -44,10 +44,9 @@ AndroidAudioApp::AndroidAudioApp() {
                 anyEntry = true;
                 anyFav = anyFav || e.favorite;
             }
-        if (anyEntry && ! anyFav) {
+        if (anyEntry && !anyFav) {
             for (auto type : { nam::LibraryType::Model, nam::LibraryType::Ir })
-                for (const auto& e : library_.all(type))
-                    library_.setFavorite(e.id, true);
+                for (const auto& e : library_.all(type)) library_.setFavorite(e.id, true);
             library_.save();
         }
     }
@@ -56,14 +55,16 @@ AndroidAudioApp::AndroidAudioApp() {
     shell_ = std::make_unique<AppShell>(engine_);
     addAndMakeVisible(*shell_);
     AppShell::BrowseServices browse;
-    browse.search = [this](juce::String q,
-            std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
-        doSearch(std::move(q), std::move(done));
-    };
-    browse.searchEx = [this](nam::SearchParams p,
-            std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
-        doSearchEx(std::move(p), std::move(done));
-    };
+    browse.search =
+        [this](juce::String q,
+               std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+            doSearch(std::move(q), std::move(done));
+        };
+    browse.searchEx =
+        [this](nam::SearchParams p,
+               std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+            doSearchEx(std::move(p), std::move(done));
+        };
     browse.keep = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doToggleKeep(std::move(t), std::move(done));
     };
@@ -74,9 +75,7 @@ AndroidAudioApp::AndroidAudioApp() {
         const auto* e = library_.find(id);
         return e != nullptr && e->favorite;
     };
-    browse.isSaved = [this](std::string toneId) {
-        return ! libraryIdForTone(toneId).empty();
-    };
+    browse.isSaved = [this](std::string toneId) { return !libraryIdForTone(toneId).empty(); };
     browse.save = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         fetchArtwork(t);
         doDownload(std::move(t), std::move(done));   // import; favorite stays false
@@ -85,9 +84,7 @@ AndroidAudioApp::AndroidAudioApp() {
         library_.setFavorite(libraryId, fav);
         library_.save();
     };
-    browse.libraryIdForTone = [this](std::string toneId) {
-        return libraryIdForTone(toneId);
-    };
+    browse.libraryIdForTone = [this](std::string toneId) { return libraryIdForTone(toneId); };
     browse.removeKept = [this](std::string libraryId) {
         library_.remove(libraryId);
         library_.save();
@@ -114,10 +111,8 @@ AndroidAudioApp::AndroidAudioApp() {
             t.title = e.displayName;
             t.format = "nam";
             const auto a = juce::String(e.arch).toLowerCase();
-            if (a.contains("slim") || a.startsWith("2") || a.startsWith("a2"))
-                t.a2Count = 1;
-            else
-                t.a1Count = 1;
+            if (a.contains("slim") || a.startsWith("2") || a.startsWith("a2")) t.a2Count = 1;
+            else t.a1Count = 1;
             out.push_back(std::move(t));
         }
         return out;
@@ -133,30 +128,31 @@ AndroidAudioApp::AndroidAudioApp() {
         doAuditionModel(toneId, m, isIr, std::move(done));
     };
     browse.muteLiveInput = [this](bool m) { setLiveInputMuted(m); };
-    browse.listModels = [this](std::string toneId,
-            std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
-        doListModels(toneId, std::move(done));
-    };
+    browse.listModels =
+        [this](std::string toneId,
+               std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
+            doListModels(toneId, std::move(done));
+        };
     browse.setDemoTrack = [this](int t, std::function<void(bool)> done) {
         ensureDemoTrack(t, [this, t, done](bool ok) {
             if (ok) setDemoTrack(t);   // RT switch only after audio is loaded
             done(ok);
         });
     };
-    browse.stopDemo     = [this] { setDemoActive(false); };
-    browse.setCab       = [this](int c) { setCab(c); };
+    browse.stopDemo = [this] { setDemoActive(false); };
+    browse.setCab = [this](int c) { setCab(c); };
     browse.isAuditionCached = [this](std::string toneId) {
         if (preRenderAuditions_)
-            return cachedAudition(toneId + "#best#" + std::to_string(demoTrack_)
-                                  + "#c" + std::to_string(cab_)) != nullptr;
+            return cachedAudition(toneId + "#best#" + std::to_string(demoTrack_) + "#c" +
+                                  std::to_string(cab_)) != nullptr;
         // Live mode: any local file means instant audition, any riff.
-        return modelCacheFile("keep_" + toneId).existsAsFile()
-            || modelCacheFile("auto_" + toneId).existsAsFile()
-            || modelCacheFile("ir_" + toneId).existsAsFile();
+        return modelCacheFile("keep_" + toneId).existsAsFile() ||
+               modelCacheFile("auto_" + toneId).existsAsFile() ||
+               modelCacheFile("ir_" + toneId).existsAsFile();
     };
     browse.isDownloaded = [](std::string toneId) {
-        return modelCacheFile("keep_" + toneId).existsAsFile()
-            || modelCacheFile("ir_" + toneId).existsAsFile();
+        return modelCacheFile("keep_" + toneId).existsAsFile() ||
+               modelCacheFile("ir_" + toneId).existsAsFile();
     };
     browse.loadStacksJson = [] { return stacksFile().loadFileAsString(); };
     browse.saveStacksJson = [](juce::String s) {
@@ -167,18 +163,15 @@ AndroidAudioApp::AndroidAudioApp() {
     browse.loadTone = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doLoadToneLive(std::move(t), std::move(done));
     };
-    browse.setTestTone = [this](bool on) {
-        testTone_.store(on, std::memory_order_relaxed);
-    };
+    browse.setTestTone = [this](bool on) { testTone_.store(on, std::memory_order_relaxed); };
     shell_->setBrowseServices(std::move(browse));
-    shell_->setLibraryService(
-        [this] { return library_.all(nam::LibraryType::Model); },
-        [this](nam::LibraryEntry e) { loadModelEntry(e); });
+    shell_->setLibraryService([this] { return library_.all(nam::LibraryType::Model); },
+                              [this](nam::LibraryEntry e) { loadModelEntry(e); });
     shell_->setIrService(
         [this] { return library_.all(nam::LibraryType::Ir); },
         [this](nam::LibraryEntry e) {
             const std::string p = library_.subdir(nam::LibraryType::Ir) + "/" + e.fileName;
-            if (auto ir = nam::loadImpulseResponse(p, (int) sampleRate_, dsp::kMaxIrTaps)) {
+            if (auto ir = nam::loadImpulseResponse(p, (int)sampleRate_, dsp::kMaxIrTaps)) {
                 engine_.setImpulse(ir);
                 engine_.setIrEnabled(true);
             }
@@ -188,16 +181,14 @@ AndroidAudioApp::AndroidAudioApp() {
         [this](bool m) { outputMutedUser_.store(m, std::memory_order_relaxed); });
     shell_->setArtworkService([](const nam::LibraryEntry& e) {
         const auto id = toneIdFromEntry(e);
-        return id.empty() ? juce::Image()
-                          : juce::ImageFileFormat::loadFrom(artworkFile(id));
+        return id.empty() ? juce::Image() : juce::ImageFileFormat::loadFrom(artworkFile(id));
     });
-    shell_->setAudioDeviceService(
-        [this] { return audioSettingsState(); },
-        [this](juce::String name) { selectInputDevice(name); },
-        [this](juce::String name) { selectOutputDevice(name); },
-        [this] { rescanAudioDevices(); },
-        [this](juce::String label) { selectSampleRate(label); },
-        [this](juce::String label) { selectBufferSize(label); });
+    shell_->setAudioDeviceService([this] { return audioSettingsState(); },
+                                  [this](juce::String name) { selectInputDevice(name); },
+                                  [this](juce::String name) { selectOutputDevice(name); },
+                                  [this] { rescanAudioDevices(); },
+                                  [this](juce::String label) { selectSampleRate(label); },
+                                  [this](juce::String label) { selectBufferSize(label); });
 
     // 1 input (guitar) / 2 output. JUCE requests RECORD_AUDIO on input open.
     setAudioChannels(1, 2);
@@ -213,8 +204,7 @@ AndroidAudioApp::AndroidAudioApp() {
 
     // First run with an empty deck: fetch the most popular A2 tone as the
     // default in the background (bundled model covers the gap offline).
-    if (library_.all(nam::LibraryType::Model).empty()
-        && ! defaultToneFile().existsAsFile())
+    if (library_.all(nam::LibraryType::Model).empty() && !defaultToneFile().existsAsFile())
         juce::MessageManager::callAsync([this] { fetchPopularDefault(); });
 }
 
@@ -226,21 +216,20 @@ AndroidAudioApp::~AndroidAudioApp() {
 }
 
 std::string AndroidAudioApp::copyBundledModelToFile() {
-    auto dest = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                    .getChildFile("model.nam");
-    if (! dest.existsAsFile()) {
+    auto dest = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("model.nam");
+    if (!dest.existsAsFile()) {
         int size = 0;
         if (const char* data = BinaryData::getNamedResource("model_nam", size))
-            dest.replaceWithData(data, (size_t) size);
+            dest.replaceWithData(data, (size_t)size);
     }
     return dest.getFullPathName().toStdString();
 }
 
 void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRate) {
     sampleRate_ = sampleRate;
-    blockSize_  = samplesPerBlockExpected;
-    mono_.assign((size_t) juce::jmax(1, samplesPerBlockExpected), 0.0f);
-    engine_.prepare((int) sampleRate, samplesPerBlockExpected);
+    blockSize_ = samplesPerBlockExpected;
+    mono_.assign((size_t)juce::jmax(1, samplesPerBlockExpected), 0.0f);
+    engine_.prepare((int)sampleRate, samplesPerBlockExpected);
     buildDemoLoop(sampleRate);
 
     // Bundled cab IRs (IrLoader wants a path; stage each through a temp file).
@@ -250,9 +239,9 @@ void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRa
         if (data == nullptr || size <= 0) continue;
         auto tmp = juce::File::getSpecialLocation(juce::File::tempDirectory)
                        .getChildFile("cab_" + juce::String(c) + ".wav");
-        tmp.replaceWithData(data, (size_t) size);
-        cabIrs_[(size_t) c] = nam::loadImpulseResponse(
-            tmp.getFullPathName().toStdString(), (int) sampleRate, dsp::kMaxIrTaps);
+        tmp.replaceWithData(data, (size_t)size);
+        cabIrs_[(size_t)c] = nam::loadImpulseResponse(tmp.getFullPathName().toStdString(),
+                                                      (int)sampleRate, dsp::kMaxIrTaps);
     }
     setCab(cab_);   // re-apply selection at the (possibly new) sample rate
 
@@ -266,8 +255,9 @@ void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRa
             if (recent == nullptr || e.lastUsedAt > recent->lastUsedAt) recent = &e;
         if (recent != nullptr) {
             const std::string p = library_.subdir(nam::LibraryType::Model) + "/" + recent->fileName;
-            if (auto m = nam::NamModel::load(p, (int) sampleRate, samplesPerBlockExpected)) {
-                juce::Logger::writeToLog("prepare: last-used model '" + juce::String(recent->displayName) + "' ok");
+            if (auto m = nam::NamModel::load(p, (int)sampleRate, samplesPerBlockExpected)) {
+                juce::Logger::writeToLog("prepare: last-used model '" +
+                                         juce::String(recent->displayName) + "' ok");
                 engine_.setModel(std::move(m));
                 modelLoaded_ = true;
                 const auto entry = *recent;
@@ -284,9 +274,9 @@ void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRa
     // popular default downloads.
     const auto defFile = defaultToneFile();
     if (defFile.existsAsFile()) {
-        if (auto m = nam::NamModel::load(defFile.getFullPathName().toStdString(),
-                                         (int) sampleRate, samplesPerBlockExpected)) {
-            juce::String name ("Popular Tone");
+        if (auto m = nam::NamModel::load(defFile.getFullPathName().toStdString(), (int)sampleRate,
+                                         samplesPerBlockExpected)) {
+            juce::String name("Popular Tone");
             if (defaultToneNameFile().existsAsFile())
                 name = defaultToneNameFile().loadFileAsString().trim();
             juce::Logger::writeToLog("prepare: popular default '" + name + "' ok");
@@ -294,32 +284,33 @@ void AndroidAudioApp::prepareToPlay(int samplesPerBlockExpected, double sampleRa
             modelLoaded_ = true;
             juce::MessageManager::callAsync([this, name] {
                 if (shell_ != nullptr)
-                    shell_->setNowPlayingInfo(name, "TONE3000 " + juce::String::fromUTF8("\xC2\xB7")
-                                                    + " MOST KEPT");
+                    shell_->setNowPlayingInfo(
+                        name, "TONE3000 " + juce::String::fromUTF8("\xC2\xB7") + " MOST KEPT");
             });
             return;
         }
     }
 
     const auto bundledPath = copyBundledModelToFile();
-    if (auto m = nam::NamModel::load(bundledPath, (int) sampleRate, samplesPerBlockExpected)) {
-        juce::Logger::writeToLog("prepare: bundled model ok (sr=" + juce::String(sampleRate)
-                                 + ", block=" + juce::String(samplesPerBlockExpected)
-                                 + ", normAdj=" + juce::String(m->recommendedOutputDbAdjustment(), 1) + " dB)");
+    if (auto m = nam::NamModel::load(bundledPath, (int)sampleRate, samplesPerBlockExpected)) {
+        juce::Logger::writeToLog("prepare: bundled model ok (sr=" + juce::String(sampleRate) +
+                                 ", block=" + juce::String(samplesPerBlockExpected) + ", normAdj=" +
+                                 juce::String(m->recommendedOutputDbAdjustment(), 1) + " dB)");
         engine_.setModel(std::move(m));
         modelLoaded_ = true;
     } else {
-        juce::Logger::writeToLog("prepare: bundled model FAILED (path=" + juce::String(bundledPath)
-                                 + ", exists=" + juce::String(juce::File(juce::String(bundledPath)).existsAsFile() ? "yes" : "no")
-                                 + ", sr=" + juce::String(sampleRate)
-                                 + ", block=" + juce::String(samplesPerBlockExpected) + ")");
+        juce::Logger::writeToLog(
+            "prepare: bundled model FAILED (path=" + juce::String(bundledPath) + ", exists=" +
+            juce::String(juce::File(juce::String(bundledPath)).existsAsFile() ? "yes" : "no") +
+            ", sr=" + juce::String(sampleRate) +
+            ", block=" + juce::String(samplesPerBlockExpected) + ")");
     }
 }
 
 void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info) {
     auto* buf = info.buffer;
     const int n = info.numSamples;
-    const int cap = (int) mono_.size();
+    const int cap = (int)mono_.size();
 
     // Mirror the raw input into the tuner ring regardless of demo state —
     // the tuner always listens to the guitar, never to demo playback.
@@ -331,7 +322,7 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         // interface via the phone mic stays useful.
         const bool tunerMuted = inputMutedUser_.load(std::memory_order_relaxed);
         for (int i = 0; i < n; ++i) {
-            tunerRing_[(size_t) (w & (kTunerRingSize - 1))] = tunerMuted ? 0.0f : rawIn[i];
+            tunerRing_[(size_t)(w & (kTunerRingSize - 1))] = tunerMuted ? 0.0f : rawIn[i];
             ++w;
         }
         tunerWrite_.store(w, std::memory_order_release);
@@ -346,24 +337,24 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         // as if it were the guitar input — real-time inference, no waiting.
         // Take our OWN reference: a concurrent re-publish (track fetched on
         // the message thread) must not pull the buffer out from under us.
-        const auto loopPtr = demoTracks_[(size_t) demoTrackRT_.load(std::memory_order_relaxed)];
-        if (loopPtr != nullptr && ! loopPtr->empty()) {
+        const auto loopPtr = demoTracks_[(size_t)demoTrackRT_.load(std::memory_order_relaxed)];
+        if (loopPtr != nullptr && !loopPtr->empty()) {
             const auto& loop = *loopPtr;
             size_t pos = demoPos_.load(std::memory_order_relaxed);
             for (int i = 0; i < n && i < cap; ++i) {
                 if (pos >= loop.size()) pos = 0;
                 const float v = loop[pos++];
-                mono_[(size_t) i] = v;
+                mono_[(size_t)i] = v;
                 inPk = juce::jmax(inPk, std::fabs(v));
             }
             demoPos_.store(pos, std::memory_order_relaxed);
         } else {
-            for (int i = 0; i < n && i < cap; ++i) mono_[(size_t) i] = 0.0f;
+            for (int i = 0; i < n && i < cap; ++i) mono_[(size_t)i] = 0.0f;
         }
     } else if (const auto slotPtr = (demoOn && slot >= 0)
-                   ? demoSlots_[(size_t) slot]
-                   : std::shared_ptr<const std::vector<float>>();
-               slotPtr != nullptr && ! slotPtr->empty()) {
+                                        ? demoSlots_[(size_t)slot]
+                                        : std::shared_ptr<const std::vector<float>>();
+               slotPtr != nullptr && !slotPtr->empty()) {
         // Audition: play back the offline-rendered (model-processed) riff.
         // No inference on the audio thread. Own reference held for the block.
         const auto& loop = *slotPtr;
@@ -371,41 +362,38 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         for (int i = 0; i < n && i < cap; ++i) {
             if (pos >= loop.size()) pos = 0;
             const float v = loop[pos++];
-            mono_[(size_t) i] = v;
+            mono_[(size_t)i] = v;
             inPk = juce::jmax(inPk, std::fabs(v));
         }
         demoPos_.store(pos, std::memory_order_relaxed);
         bypassEngine = true;   // slot is already model-processed
-    } else if (liveMuted_.load(std::memory_order_relaxed)
-               || inputMutedUser_.load(std::memory_order_relaxed)
-               || feedbackGuard_.load(std::memory_order_relaxed)) {
+    } else if (liveMuted_.load(std::memory_order_relaxed) ||
+               inputMutedUser_.load(std::memory_order_relaxed) ||
+               feedbackGuard_.load(std::memory_order_relaxed)) {
         // No demo playing and the live path is muted (emulator, the status-
         // orb input toggle, or the no-interface feedback guard): the engine
         // gets silence. Also bypass it — amp models synthesise their own
         // noise floor even on silent input, and inference costs CPU.
         // Guard-only mute still METERS the raw mic so the input arc and
         // tuner stay live (demo playback through the speaker is unaffected).
-        if (feedbackGuard_.load(std::memory_order_relaxed)
-            && ! inputMutedUser_.load(std::memory_order_relaxed)
-            && ! liveMuted_.load(std::memory_order_relaxed)
-            && buf->getNumChannels() > 0) {
+        if (feedbackGuard_.load(std::memory_order_relaxed) &&
+            !inputMutedUser_.load(std::memory_order_relaxed) &&
+            !liveMuted_.load(std::memory_order_relaxed) && buf->getNumChannels() > 0) {
             const float* in = buf->getReadPointer(0, info.startSample);
-            for (int i = 0; i < n && i < cap; ++i)
-                inPk = juce::jmax(inPk, std::fabs(in[i]));
+            for (int i = 0; i < n && i < cap; ++i) inPk = juce::jmax(inPk, std::fabs(in[i]));
         }
-        for (int i = 0; i < n && i < cap; ++i) mono_[(size_t) i] = 0.0f;
+        for (int i = 0; i < n && i < cap; ++i) mono_[(size_t)i] = 0.0f;
         bypassEngine = true;
     } else {
         const float* in = buf->getReadPointer(0, info.startSample);
         for (int i = 0; i < n && i < cap; ++i) {
-            mono_[(size_t) i] = in[i];
+            mono_[(size_t)i] = in[i];
             inPk = juce::jmax(inPk, std::fabs(in[i]));
         }
     }
     inPeak_.store(inPk, std::memory_order_relaxed);
 
-    if (! bypassEngine)
-        engine_.render(mono_.data(), mono_.data(), std::min(n, cap));
+    if (!bypassEngine) engine_.render(mono_.data(), mono_.data(), std::min(n, cap));
 
     // Output mute is the user's alone — the feedback guard silences the
     // live INPUT path instead, so demo playback keeps working without an
@@ -416,21 +404,20 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         // Write the WHOLE block: an oversized device burst (n > cap) must
         // not pass its tail through untouched — on a duplex stream those
         // samples are raw mic input, bypassing every mute.
-        for (int i = 0; i < n; ++i)
-            out[i] = (outMuted || i >= cap) ? 0.0f : mono_[(size_t) i];
+        for (int i = 0; i < n; ++i) out[i] = (outMuted || i >= cap) ? 0.0f : mono_[(size_t)i];
     }
 
     // Output-check tone: a plain 440 Hz sine ADDED to the device output
     // (post-chain, respects the output mute). Envelope avoids clicks; both
     // state vars are audio-thread-only, the on/off flag is the atomic.
     const bool testOn = testTone_.load(std::memory_order_relaxed);
-    if (! outMuted && (testOn || testEnv_ > 0.0001f)) {
-        const double inc = 2.0 * juce::MathConstants<double>::pi * 440.0
-                           / juce::jmax(1.0, sampleRate_);
+    if (!outMuted && (testOn || testEnv_ > 0.0001f)) {
+        const double inc =
+            2.0 * juce::MathConstants<double>::pi * 440.0 / juce::jmax(1.0, sampleRate_);
         const float target = testOn ? 1.0f : 0.0f;
         for (int i = 0; i < n; ++i) {
             testEnv_ += (target - testEnv_) * 0.002f;
-            const float s = 0.16f * testEnv_ * (float) std::sin(testPhase_);
+            const float s = 0.16f * testEnv_ * (float)std::sin(testPhase_);
             testPhase_ += inc;
             if (testPhase_ > 2.0 * juce::MathConstants<double>::pi)
                 testPhase_ -= 2.0 * juce::MathConstants<double>::pi;
@@ -446,9 +433,9 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     // telemetry freezes whenever the engine is bypassed (demo playback,
     // mutes), so the output arc must tap the device write instead.
     float outPk = 0.0f;
-    if (! outMuted) {
+    if (!outMuted) {
         for (int i = 0; i < n && i < cap; ++i)
-            outPk = juce::jmax(outPk, std::fabs(mono_[(size_t) i]));
+            outPk = juce::jmax(outPk, std::fabs(mono_[(size_t)i]));
         outPk = juce::jmax(outPk, 0.16f * testEnv_);
     }
     outPeak_.store(outPk, std::memory_order_relaxed);
@@ -474,15 +461,16 @@ void AndroidAudioApp::timerCallback() {
         if (auto* dev = deviceManager.getCurrentAudioDevice()) {
             const double sr = dev->getCurrentSampleRate();
             if (sr > 0)
-                shell_->setLatencyMs ((dev->getInputLatencyInSamples()
-                                       + dev->getOutputLatencyInSamples()
-                                       + dev->getCurrentBufferSizeSamples()) * 1000.0 / sr);
+                shell_->setLatencyMs((dev->getInputLatencyInSamples() +
+                                      dev->getOutputLatencyInSamples() +
+                                      dev->getCurrentBufferSizeSamples()) *
+                                     1000.0 / sr);
         }
         constexpr int kWin = 2048;
-        static thread_local std::array<float, (size_t) kWin> win;
+        static thread_local std::array<float, (size_t)kWin> win;
         const int w = tunerWrite_.load(std::memory_order_acquire);
         for (int i = 0; i < kWin; ++i)
-            win[(size_t) i] = tunerRing_[(size_t) ((w - kWin + i) & (kTunerRingSize - 1))];
+            win[(size_t)i] = tunerRing_[(size_t)((w - kWin + i) & (kTunerRingSize - 1))];
         const float hz = dsp::detectPitchHz(win.data(), kWin, sampleRate_);
         shell_->setTunerPitch(hz);
     }
@@ -490,9 +478,9 @@ void AndroidAudioApp::timerCallback() {
     // Audio watchdog: a USB flake can kill the duplex stream — JUCE stops
     // the device and nothing restarts it ("engine stopped", silence until
     // an app restart). If the device sits stopped for ~2 s, rebuild it.
-    if (! applyingDeviceChange_) {
+    if (!applyingDeviceChange_) {
         auto* dev = deviceManager.getCurrentAudioDevice();
-        if (dev != nullptr && ! dev->isPlaying()) {
+        if (dev != nullptr && !dev->isPlaying()) {
             if (++engineDeadTicks_ == 60) {
                 engineDeadTicks_ = 0;
                 juce::Logger::writeToLog("audio watchdog: device stopped -> rescan");
@@ -575,9 +563,8 @@ void AndroidAudioApp::selectInputDevice(const juce::String& name) {
     setup.inputDeviceName = name;
     setup.useDefaultInputChannels = true;
     const auto err = applyDeviceSetup(setup);
-    juce::Logger::writeToLog("selectInputDevice(" + name + ") -> "
-                             + (err.isEmpty() ? "ok" : err)
-                             + " now=" + deviceManager.getAudioDeviceSetup().inputDeviceName);
+    juce::Logger::writeToLog("selectInputDevice(" + name + ") -> " + (err.isEmpty() ? "ok" : err) +
+                             " now=" + deviceManager.getAudioDeviceSetup().inputDeviceName);
 }
 
 void AndroidAudioApp::selectOutputDevice(const juce::String& name) {
@@ -588,8 +575,7 @@ void AndroidAudioApp::selectOutputDevice(const juce::String& name) {
     setup.outputDeviceName = name;
     setup.useDefaultOutputChannels = true;
     const auto err = applyDeviceSetup(setup);
-    juce::Logger::writeToLog("selectOutputDevice(" + name + ") -> "
-                             + (err.isEmpty() ? "ok" : err));
+    juce::Logger::writeToLog("selectOutputDevice(" + name + ") -> " + (err.isEmpty() ? "ok" : err));
 }
 
 void AndroidAudioApp::rescanAudioDevices() {
@@ -604,12 +590,11 @@ void AndroidAudioApp::rescanAudioDevices() {
         juce::AudioIODeviceType::createAudioIODeviceType_Oboe()));
     deviceManager.setCurrentAudioDeviceType("Android Oboe", true);
 
-    if (applyDeviceSetup(setup).isNotEmpty())
-        deviceManager.initialiseWithDefaultDevices(1, 2);
+    if (applyDeviceSetup(setup).isNotEmpty()) deviceManager.initialiseWithDefaultDevices(1, 2);
 
-    if (! userChoseInput_) preferUsbInput();
-    juce::Logger::writeToLog("rescanAudioDevices -> in=" + currentInputDevice()
-                             + " out=" + currentOutputDevice());
+    if (!userChoseInput_) preferUsbInput();
+    juce::Logger::writeToLog("rescanAudioDevices -> in=" + currentInputDevice() +
+                             " out=" + currentOutputDevice());
 }
 
 void AndroidAudioApp::updateFeedbackGuard() {
@@ -623,12 +608,12 @@ void AndroidAudioApp::updateFeedbackGuard() {
                 usbPresent = true;
                 break;
             }
-    const bool guard = ! usbPresent && ! userChoseInput_ && ! userChoseOutput_
-                       && ! alwaysMuteLive_;   // emulator has its own mute
+    const bool guard = !usbPresent && !userChoseInput_ && !userChoseOutput_ &&
+                       !alwaysMuteLive_;   // emulator has its own mute
     if (feedbackGuard_.exchange(guard, std::memory_order_relaxed) != guard)
-        juce::Logger::writeToLog(juce::String("feedback guard ")
-                                 + (guard ? "ON (no interface: live path muted)"
-                                          : "off (interface present or manual pick)"));
+        juce::Logger::writeToLog(juce::String("feedback guard ") +
+                                 (guard ? "ON (no interface: live path muted)"
+                                        : "off (interface present or manual pick)"));
 }
 
 void AndroidAudioApp::preferUsbInput() {
@@ -638,9 +623,15 @@ void AndroidAudioApp::preferUsbInput() {
 
     juce::String usbIn, usbOut;
     for (const auto& n : type->getDeviceNames(true))
-        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbIn = n; break; }
+        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) {
+            usbIn = n;
+            break;
+        }
     for (const auto& n : type->getDeviceNames(false))
-        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) { usbOut = n; break; }
+        if (n.containsIgnoreCase("usb") || n.containsIgnoreCase("irig")) {
+            usbOut = n;
+            break;
+        }
     updateFeedbackGuard();   // every path that (re)checks devices refreshes it
     if (usbIn.isEmpty() && usbOut.isEmpty()) return;
 
@@ -652,20 +643,20 @@ void AndroidAudioApp::preferUsbInput() {
     // Legacy cost is the price of immunity. Manual picks still win.
     auto setup = deviceManager.getAudioDeviceSetup();
     bool changed = false;
-    if (usbIn.isNotEmpty() && ! userChoseInput_ && setup.inputDeviceName != usbIn) {
+    if (usbIn.isNotEmpty() && !userChoseInput_ && setup.inputDeviceName != usbIn) {
         setup.inputDeviceName = usbIn;
         setup.useDefaultInputChannels = true;
         changed = true;
     }
-    if (usbOut.isNotEmpty() && ! userChoseOutput_ && setup.outputDeviceName != usbOut) {
+    if (usbOut.isNotEmpty() && !userChoseOutput_ && setup.outputDeviceName != usbOut) {
         setup.outputDeviceName = usbOut;
         setup.useDefaultOutputChannels = true;
         changed = true;
     }
-    if (! changed) return;
+    if (!changed) return;
     const auto err = applyDeviceSetup(setup);
-    juce::Logger::writeToLog("preferUsb(in=" + usbIn + " out=" + usbOut + ") -> "
-                             + (err.isEmpty() ? "ok" : err));
+    juce::Logger::writeToLog("preferUsb(in=" + usbIn + " out=" + usbOut + ") -> " +
+                             (err.isEmpty() ? "ok" : err));
 }
 
 // --- Engine settings (sample rate / buffer / latency) ---------------------
@@ -673,16 +664,17 @@ namespace {
 juce::String rateLabel(double sr) {
     if (sr <= 0) return "?";
     const double k = sr / 1000.0;
-    return (std::fabs(k - std::round(k)) < 0.01
-                ? juce::String((int) std::round(k)) : juce::String(k, 1)) + "k";
+    return (std::fabs(k - std::round(k)) < 0.01 ? juce::String((int)std::round(k))
+                                                : juce::String(k, 1)) +
+           "k";
 }
-}
+}   // namespace
 
 AudioSettingsState AndroidAudioApp::audioSettingsState() {
     AudioSettingsState s;
-    s.inputs  = inputDeviceNames();
+    s.inputs = inputDeviceNames();
     s.outputs = outputDeviceNames();
-    s.currentInput  = currentInputDevice();
+    s.currentInput = currentInputDevice();
     s.currentOutput = currentOutputDevice();
 
     // "System Default" output follows the USB interface when one is plugged
@@ -693,8 +685,8 @@ AudioSettingsState AndroidAudioApp::audioSettingsState() {
     if (s.currentOutput.containsIgnoreCase("default")) {
         for (const auto& name : s.outputs) {
             if (name.containsIgnoreCase("usb")) {
-                s.outputRouteHint = name.replace("USB-Audio - ", "")
-                                        .replace(" USB headset", "").trim();
+                s.outputRouteHint =
+                    name.replace("USB-Audio - ", "").replace(" USB headset", "").trim();
                 break;
             }
         }
@@ -703,29 +695,28 @@ AudioSettingsState AndroidAudioApp::audioSettingsState() {
     auto* dev = deviceManager.getCurrentAudioDevice();
     if (dev != nullptr) {
         for (double r : dev->getAvailableSampleRates())
-            if (r == 44100.0 || r == 48000.0 || r == 96000.0)
-                s.rates.add(rateLabel(r));
+            if (r == 44100.0 || r == 48000.0 || r == 96000.0) s.rates.add(rateLabel(r));
         s.currentRate = rateLabel(dev->getCurrentSampleRate());
-        if (! s.rates.contains(s.currentRate)) s.rates.add(s.currentRate);
+        if (!s.rates.contains(s.currentRate)) s.rates.add(s.currentRate);
 
         auto sizes = dev->getAvailableBufferSizes();
         const int cur = dev->getCurrentBufferSizeSamples();
         // Offer up to 4 sizes spanning small..large.
         for (int want : { 0, 1, 2, 3 }) {
-            const int idx = sizes.size() <= 4 ? want
-                            : (want * (sizes.size() - 1)) / 3;
+            const int idx = sizes.size() <= 4 ? want : (want * (sizes.size() - 1)) / 3;
             if (idx >= 0 && idx < sizes.size()) {
-                const auto label = juce::String(sizes[(int) idx]);
-                if (! s.buffers.contains(label)) s.buffers.add(label);
+                const auto label = juce::String(sizes[(int)idx]);
+                if (!s.buffers.contains(label)) s.buffers.add(label);
             }
         }
         s.currentBuffer = juce::String(cur);
-        if (! s.buffers.contains(s.currentBuffer)) s.buffers.add(s.currentBuffer);
+        if (!s.buffers.contains(s.currentBuffer)) s.buffers.add(s.currentBuffer);
 
         const double sr = dev->getCurrentSampleRate();
         if (sr > 0)
-            s.latencyMs = (dev->getInputLatencyInSamples()
-                           + dev->getOutputLatencyInSamples() + cur) * 1000.0 / sr;
+            s.latencyMs =
+                (dev->getInputLatencyInSamples() + dev->getOutputLatencyInSamples() + cur) *
+                1000.0 / sr;
         s.running = dev->isPlaying();
     }
     return s;
@@ -773,13 +764,11 @@ void AndroidAudioApp::clampBufferForLowLatency() {
     if (setup.bufferSize > 0 && setup.bufferSize <= smallest) return;
     setup.bufferSize = smallest;
     const auto err = applyDeviceSetup(setup);
-    juce::Logger::writeToLog("clampBufferForLowLatency(" + juce::String(smallest)
-                             + ") -> " + (err.isEmpty() ? "ok" : err));
+    juce::Logger::writeToLog("clampBufferForLowLatency(" + juce::String(smallest) + ") -> " +
+                             (err.isEmpty() ? "ok" : err));
 }
 
-bool AndroidAudioApp::handleBackButton() {
-    return shell_ != nullptr && shell_->handleBackButton();
-}
+bool AndroidAudioApp::handleBackButton() { return shell_ != nullptr && shell_->handleBackButton(); }
 
 void AndroidAudioApp::paint(juce::Graphics& g) { g.fillAll(nam::ui::col::bg); }
 
@@ -788,8 +777,8 @@ void AndroidAudioApp::resized() {
     // Inset the UI by the system safe area (status bar top, nav bar bottom) so
     // our own controls never sit under the OS bars. The app background paints
     // the full window behind the (translucent) bars.
-    const auto insets = juce::Desktop::getInstance().getDisplays()
-                            .getPrimaryDisplay()->safeAreaInsets;
+    const auto insets =
+        juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()->safeAreaInsets;
     shell_->setBounds(insets.subtractedFrom(getLocalBounds()));
 }
 
@@ -801,26 +790,30 @@ juce::File AndroidAudioApp::tokenStoreFile() {
 
 std::string AndroidAudioApp::defaultLibraryDir() {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("NAM Player/library").getFullPathName().toStdString();
+        .getChildFile("NAM Player/library")
+        .getFullPathName()
+        .toStdString();
 }
 
 long long AndroidAudioApp::nowSeconds() {
     using namespace std::chrono;
-    return (long long) duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
+    return (long long)duration_cast<seconds>(system_clock::now().time_since_epoch()).count();
 }
 
-void AndroidAudioApp::doSearch(juce::String query,
-        std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
-    if (! t3kAuth_.isConfigured()) { done(false, {}, "not configured (.env key missing)"); return; }
+void AndroidAudioApp::doSearch(
+    juce::String query, std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+    if (!t3kAuth_.isConfigured()) {
+        done(false, {}, "not configured (.env key missing)");
+        return;
+    }
 
     // Runs the actual search with a fresh session built from the current token.
     // Backfill artwork for tones kept before art caching existed (or whose
     // download failed): any kept result missing its file gets a quiet fetch.
-    auto withBackfill = [this, done](bool ok, std::vector<nam::ToneInfo> tones,
-                                     juce::String err) {
+    auto withBackfill = [this, done](bool ok, std::vector<nam::ToneInfo> tones, juce::String err) {
         if (ok)
             for (const auto& t : tones)
-                if (! libraryIdForTone(t.id).empty()) fetchArtwork(t);
+                if (!libraryIdForTone(t.id).empty()) fetchArtwork(t);
         done(ok, std::move(tones), std::move(err));
     };
 
@@ -837,28 +830,40 @@ void AndroidAudioApp::doSearch(juce::String query,
         t3kSession_->search(query.toStdString(), 1, withBackfill);
     };
 
-    if (t3kAuth_.hasValidToken()) { run(); return; }
+    if (t3kAuth_.hasValidToken()) {
+        run();
+        return;
+    }
 
     // No valid token: try a silent refresh, else the browser Connect flow
     // (loopback OAuth — the on-device browser redirects back to 127.0.0.1).
     t3kAuth_.tryRefresh([this, run, done](bool refreshed) {
-        if (refreshed) { run(); return; }
+        if (refreshed) {
+            run();
+            return;
+        }
         t3kAuth_.beginConnectFlow([run, done](nam::Tone3000Auth::Result r) {
-            if (! r.ok) { done(false, {}, juce::String(r.error)); return; }
+            if (!r.ok) {
+                done(false, {}, juce::String(r.error));
+                return;
+            }
             run();
         });
     });
 }
 
-void AndroidAudioApp::doSearchEx(nam::SearchParams params,
-        std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
-    if (! t3kAuth_.isConfigured()) { done(false, {}, "not configured (.env key missing)"); return; }
+void AndroidAudioApp::doSearchEx(
+    nam::SearchParams params,
+    std::function<void(bool, std::vector<nam::ToneInfo>, juce::String)> done) {
+    if (!t3kAuth_.isConfigured()) {
+        done(false, {}, "not configured (.env key missing)");
+        return;
+    }
 
-    auto withBackfill = [this, done](bool ok, std::vector<nam::ToneInfo> tones,
-                                     juce::String err) {
+    auto withBackfill = [this, done](bool ok, std::vector<nam::ToneInfo> tones, juce::String err) {
         if (ok)
             for (const auto& t : tones)
-                if (! libraryIdForTone(t.id).empty()) fetchArtwork(t);
+                if (!libraryIdForTone(t.id).empty()) fetchArtwork(t);
         done(ok, std::move(tones), std::move(err));
     };
 
@@ -872,11 +877,20 @@ void AndroidAudioApp::doSearchEx(nam::SearchParams params,
         t3kSession_->search(params, withBackfill);
     };
 
-    if (t3kAuth_.hasValidToken()) { run(); return; }
+    if (t3kAuth_.hasValidToken()) {
+        run();
+        return;
+    }
     t3kAuth_.tryRefresh([this, run, done](bool refreshed) {
-        if (refreshed) { run(); return; }
+        if (refreshed) {
+            run();
+            return;
+        }
         t3kAuth_.beginConnectFlow([run, done](nam::Tone3000Auth::Result r) {
-            if (! r.ok) { done(false, {}, juce::String(r.error)); return; }
+            if (!r.ok) {
+                done(false, {}, juce::String(r.error));
+                return;
+            }
             run();
         });
     });
@@ -884,12 +898,11 @@ void AndroidAudioApp::doSearchEx(nam::SearchParams params,
 
 void AndroidAudioApp::loadModelEntry(const nam::LibraryEntry& e) {
     const std::string path = library_.subdir(nam::LibraryType::Model) + "/" + e.fileName;
-    auto m = nam::NamModel::load(path, (int) sampleRate_, blockSize_);
-    juce::Logger::writeToLog("loadModelEntry '" + juce::String(e.displayName) + "' "
-                             + (m != nullptr ? "ok" : "FAILED")
-                             + " (file " + (juce::File(juce::String(path)).existsAsFile() ? "exists" : "MISSING")
-                             + ", sr=" + juce::String(sampleRate_)
-                             + ", block=" + juce::String(blockSize_) + ")");
+    auto m = nam::NamModel::load(path, (int)sampleRate_, blockSize_);
+    juce::Logger::writeToLog(
+        "loadModelEntry '" + juce::String(e.displayName) + "' " + (m != nullptr ? "ok" : "FAILED") +
+        " (file " + (juce::File(juce::String(path)).existsAsFile() ? "exists" : "MISSING") +
+        ", sr=" + juce::String(sampleRate_) + ", block=" + juce::String(blockSize_) + ")");
     if (m != nullptr) {
         engine_.setModel(std::move(m));
         modelLoaded_ = true;
@@ -904,13 +917,13 @@ juce::File AndroidAudioApp::stacksFile() {
 }
 
 void AndroidAudioApp::doLoadToneLive(nam::ToneInfo tone,
-        std::function<void(bool, juce::String)> done) {
+                                     std::function<void(bool, juce::String)> done) {
     const bool isIr = (tone.format == "ir");
     const auto localFile = modelCacheFile((isIr ? "ir_" : "keep_") + tone.id);
     auto apply = [this, isIr, tone, done](juce::File f) {
         if (isIr) {
             if (auto ir = nam::loadImpulseResponse(f.getFullPathName().toStdString(),
-                                                   (int) sampleRate_, dsp::kMaxIrTaps)) {
+                                                   (int)sampleRate_, dsp::kMaxIrTaps)) {
                 engine_.setImpulse(ir);
                 engine_.setIrEnabled(true);
                 done(true, juce::String(tone.title));
@@ -919,8 +932,8 @@ void AndroidAudioApp::doLoadToneLive(nam::ToneInfo tone,
             }
             return;
         }
-        if (auto m = nam::NamModel::load(f.getFullPathName().toStdString(),
-                                         (int) sampleRate_, blockSize_)) {
+        if (auto m = nam::NamModel::load(f.getFullPathName().toStdString(), (int)sampleRate_,
+                                         blockSize_)) {
             engine_.setModel(std::move(m));
             modelLoaded_ = true;
             done(true, juce::String(tone.title));
@@ -928,9 +941,15 @@ void AndroidAudioApp::doLoadToneLive(nam::ToneInfo tone,
             done(false, "could not load model");
         }
     };
-    if (localFile.existsAsFile()) { apply(localFile); return; }
+    if (localFile.existsAsFile()) {
+        apply(localFile);
+        return;
+    }
     doDownloadOnly(tone, [localFile, apply, done](bool ok, juce::String msg) {
-        if (! ok) { done(false, std::move(msg)); return; }
+        if (!ok) {
+            done(false, std::move(msg));
+            return;
+        }
         apply(localFile);
     });
 }
@@ -941,56 +960,60 @@ void AndroidAudioApp::doLoadToneLive(nam::ToneInfo tone,
 // Runs at prepare time (message thread); the audio thread only reads the
 // finished buffers.
 namespace {
-struct DemoNote { double freq, t; float amp; double ring; float decay; };
+struct DemoNote {
+    double freq, t;
+    float amp;
+    double ring;
+    float decay;
+};
 
-void buildKsLoop(std::vector<float>& loop, double sr, double loopSec,
-                 const DemoNote* notes, size_t count) {
-    loop.assign((size_t) (sr * loopSec), 0.0f);
+void buildKsLoop(std::vector<float>& loop, double sr, double loopSec, const DemoNote* notes,
+                 size_t count) {
+    loop.assign((size_t)(sr * loopSec), 0.0f);
     juce::Random rng(7);
     for (size_t k = 0; k < count; ++k) {
         const auto& n = notes[k];
-        const int start = (int) (n.t * sr);
-        const int N = juce::jmax(2, (int) (sr / n.freq));
-        std::vector<float> line((size_t) N);
+        const int start = (int)(n.t * sr);
+        const int N = juce::jmax(2, (int)(sr / n.freq));
+        std::vector<float> line((size_t)N);
         for (auto& v : line) v = rng.nextFloat() * 2.0f - 1.0f;
-        const int len = (int) (sr * n.ring);
+        const int len = (int)(sr * n.ring);
         int idx = 0;
-        for (int i = 0; i < len && start + i < (int) loop.size(); ++i) {
+        for (int i = 0; i < len && start + i < (int)loop.size(); ++i) {
             const int j = (idx + 1) % N;
-            const float out = 0.5f * (line[(size_t) idx] + line[(size_t) j]) * n.decay;
-            line[(size_t) idx] = out;
+            const float out = 0.5f * (line[(size_t)idx] + line[(size_t)j]) * n.decay;
+            line[(size_t)idx] = out;
             idx = j;
-            loop[(size_t) (start + i)] += out * n.amp * 0.35f;
+            loop[(size_t)(start + i)] += out * n.amp * 0.35f;
         }
     }
     for (auto& v : loop) v = std::tanh(v);   // gentle safety clip
 }
-}
+}   // namespace
 
 namespace {
 // Decodes a WAV byte blob to mono floats at `sr`, trimmed to 12 s max.
 bool decodeDiWav(const void* data, size_t size, double sr, std::vector<float>& outMono) {
     unsigned int ch = 0, fileSr = 0;
     drwav_uint64 frames = 0;
-    float* raw = drwav_open_memory_and_read_pcm_frames_f32(
-        data, size, &ch, &fileSr, &frames, nullptr);
+    float* raw =
+        drwav_open_memory_and_read_pcm_frames_f32(data, size, &ch, &fileSr, &frames, nullptr);
     if (raw == nullptr || ch < 1 || frames == 0) {
         if (raw != nullptr) drwav_free(raw, nullptr);
         return false;
     }
-    const drwav_uint64 maxFrames = (drwav_uint64) ((double) fileSr * 12.0);
+    const drwav_uint64 maxFrames = (drwav_uint64)((double)fileSr * 12.0);
     frames = juce::jmin(frames, maxFrames);
-    std::vector<float> mono((size_t) frames);
-    for (drwav_uint64 i = 0; i < frames; ++i)
-        mono[(size_t) i] = raw[i * ch];
+    std::vector<float> mono((size_t)frames);
+    for (drwav_uint64 i = 0; i < frames; ++i) mono[(size_t)i] = raw[i * ch];
     drwav_free(raw, nullptr);
-    if ((double) fileSr != sr && fileSr > 0) {
-        const double ratio = (double) fileSr / sr;
-        std::vector<float> res((size_t) ((double) frames / ratio));
+    if ((double)fileSr != sr && fileSr > 0) {
+        const double ratio = (double)fileSr / sr;
+        std::vector<float> res((size_t)((double)frames / ratio));
         for (size_t i = 0; i < res.size(); ++i) {
-            const double pos = (double) i * ratio;
-            const size_t i0 = (size_t) pos;
-            const float frac = (float) (pos - (double) i0);
+            const double pos = (double)i * ratio;
+            const size_t i0 = (size_t)pos;
+            const float frac = (float)(pos - (double)i0);
             const float a = mono[juce::jmin(i0, mono.size() - 1)];
             const float b = mono[juce::jmin(i0 + 1, mono.size() - 1)];
             res[i] = a + (b - a) * frac;
@@ -1006,7 +1029,7 @@ juce::File diCacheFile(int index) {
         .getChildFile("di_cache")
         .getChildFile("di_" + juce::String(index) + ".wav");
 }
-}
+}   // namespace
 
 void AndroidAudioApp::buildDemoLoop(double sr) {
     // Bundled tracks decode from BinaryData; fetched tracks reload lazily
@@ -1014,27 +1037,24 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
     // everything first — a device-rate change invalidates old buffers.
     bool allDecoded = true;
     for (int t = 0; t < nam::demo::kNumTracks; ++t) {
-        demoTracks_[(size_t) t] = nullptr;   // prepare-time: audio is stopped
+        demoTracks_[(size_t)t] = nullptr;   // prepare-time: audio is stopped
         const char* res = nam::demo::kTracks[t].binaryResource;
         if (res == nullptr) continue;
         int size = 0;
         const char* data = BinaryData::getNamedResource(res, size);
         std::vector<float> decoded;
-        if (data != nullptr && size > 0
-            && decodeDiWav(data, (size_t) size, sr, decoded))
-            demoTracks_[(size_t) t] =
-                std::make_shared<const std::vector<float>>(std::move(decoded));
-        else
-            allDecoded = false;
+        if (data != nullptr && size > 0 && decodeDiWav(data, (size_t)size, sr, decoded))
+            demoTracks_[(size_t)t] = std::make_shared<const std::vector<float>>(std::move(decoded));
+        else allDecoded = false;
     }
     if (allDecoded) return;
 
     // 0: open chords in E minor (the original riff).
     static const DemoNote chords[] = {
-        { 82.41, 0.0,  0.95f, 1.4, 0.996f }, { 98.00, 0.4,  0.70f, 1.4, 0.996f },
-        { 110.0, 0.8,  0.80f, 1.4, 0.996f }, { 82.41, 1.2,  0.95f, 1.4, 0.996f },
-        { 123.47, 1.6, 0.70f, 1.4, 0.996f }, { 110.0, 2.0,  0.80f, 1.4, 0.996f },
-        { 98.00, 2.4,  0.70f, 1.4, 0.996f }, { 82.41, 2.8,  0.95f, 1.4, 0.996f },
+        { 82.41, 0.0, 0.95f, 1.4, 0.996f },  { 98.00, 0.4, 0.70f, 1.4, 0.996f },
+        { 110.0, 0.8, 0.80f, 1.4, 0.996f },  { 82.41, 1.2, 0.95f, 1.4, 0.996f },
+        { 123.47, 1.6, 0.70f, 1.4, 0.996f }, { 110.0, 2.0, 0.80f, 1.4, 0.996f },
+        { 98.00, 2.4, 0.70f, 1.4, 0.996f },  { 82.41, 2.8, 0.95f, 1.4, 0.996f },
     };
     // 1: single-note E-minor pentatonic lead, higher register.
     static const DemoNote lead[] = {
@@ -1045,19 +1065,19 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
     };
     // 2: palm-muted low-E chugs with open accents (short ring = mute).
     static const DemoNote chugs[] = {
-        { 82.41, 0.0,  0.95f, 0.12, 0.960f }, { 82.41, 0.2,  0.85f, 0.12, 0.960f },
-        { 82.41, 0.4,  0.90f, 0.12, 0.960f }, { 82.41, 0.6,  0.85f, 0.12, 0.960f },
-        { 82.41, 0.8,  1.00f, 0.55, 0.992f },   // open accent
-        { 82.41, 1.2,  0.90f, 0.12, 0.960f }, { 82.41, 1.4,  0.85f, 0.12, 0.960f },
-        { 98.00, 1.6,  0.95f, 0.30, 0.985f },   // G2 stab
-        { 82.41, 2.0,  0.90f, 0.12, 0.960f }, { 82.41, 2.2,  0.85f, 0.12, 0.960f },
-        { 110.0, 2.4,  0.95f, 0.40, 0.988f },   // A2 stab
-        { 82.41, 2.8,  0.95f, 0.12, 0.960f }, { 82.41, 3.0,  0.85f, 0.12, 0.960f },
+        { 82.41, 0.0, 0.95f, 0.12, 0.960f }, { 82.41, 0.2, 0.85f, 0.12, 0.960f },
+        { 82.41, 0.4, 0.90f, 0.12, 0.960f }, { 82.41, 0.6, 0.85f, 0.12, 0.960f },
+        { 82.41, 0.8, 1.00f, 0.55, 0.992f },   // open accent
+        { 82.41, 1.2, 0.90f, 0.12, 0.960f }, { 82.41, 1.4, 0.85f, 0.12, 0.960f },
+        { 98.00, 1.6, 0.95f, 0.30, 0.985f },   // G2 stab
+        { 82.41, 2.0, 0.90f, 0.12, 0.960f }, { 82.41, 2.2, 0.85f, 0.12, 0.960f },
+        { 110.0, 2.4, 0.95f, 0.40, 0.988f },   // A2 stab
+        { 82.41, 2.8, 0.95f, 0.12, 0.960f }, { 82.41, 3.0, 0.85f, 0.12, 0.960f },
     };
     std::vector<float> ks0, ks1, ks2;
     buildKsLoop(ks0, sr, 3.2, chords, std::size(chords));
-    buildKsLoop(ks1, sr, 3.2, lead,   std::size(lead));
-    buildKsLoop(ks2, sr, 3.2, chugs,  std::size(chugs));
+    buildKsLoop(ks1, sr, 3.2, lead, std::size(lead));
+    buildKsLoop(ks2, sr, 3.2, chugs, std::size(chugs));
     demoTracks_[0] = std::make_shared<const std::vector<float>>(std::move(ks0));
     demoTracks_[1] = std::make_shared<const std::vector<float>>(std::move(ks1));
     demoTracks_[2] = std::make_shared<const std::vector<float>>(std::move(ks2));
@@ -1071,25 +1091,31 @@ void AndroidAudioApp::setDemoTrack(int index) {
 
 void AndroidAudioApp::setCab(int index) {
     cab_ = juce::jlimit(0, nam::demo::kNumCabs - 1, index);
-    const auto ir = cabIrs_[(size_t) cab_];
+    const auto ir = cabIrs_[(size_t)cab_];
     engine_.setImpulse(ir);
     engine_.setIrEnabled(cab_ > 0 && ir != nullptr);
 }
 
 void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done) {
-    if (index < 0 || index >= nam::demo::kNumTracks) { done(false); return; }
-    if (const auto& cur = demoTracks_[(size_t) index]; cur != nullptr && ! cur->empty()) {
+    if (index < 0 || index >= nam::demo::kNumTracks) {
+        done(false);
+        return;
+    }
+    if (const auto& cur = demoTracks_[(size_t)index]; cur != nullptr && !cur->empty()) {
         done(true);
         return;
     }
     // A fetch is already in flight: don't start a second download — the
     // publish will land shortly and playback picks it up (silence until).
-    if (demoFetching_[(size_t) index]) { done(true); return; }
-    demoFetching_[(size_t) index] = true;
+    if (demoFetching_[(size_t)index]) {
+        done(true);
+        return;
+    }
+    demoFetching_[(size_t)index] = true;
 
     const double sr = sampleRate_;
     const auto cache = diCacheFile(index);
-    const juce::String fileName (nam::demo::kTracks[index].fileName);
+    const juce::String fileName(nam::demo::kTracks[index].fileName);
 
     juce::Thread::launch([this, index, sr, cache, fileName, done] {
         juce::MemoryBlock bytes;
@@ -1097,9 +1123,9 @@ void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done)
             cache.loadFileAsData(bytes);
         } else {
             // MIT-licensed DI from TONE3000's web-player repo.
-            const juce::URL url ("https://raw.githubusercontent.com/tone-3000/"
-                                 "neural-amp-modeler-wasm/main/ui/public/inputs/"
-                                 + juce::URL::addEscapeChars(fileName, false));
+            const juce::URL url("https://raw.githubusercontent.com/tone-3000/"
+                                "neural-amp-modeler-wasm/main/ui/public/inputs/" +
+                                juce::URL::addEscapeChars(fileName, false));
             if (auto stream = url.createInputStream(
                     juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
                         .withConnectionTimeoutMs(15000))) {
@@ -1112,15 +1138,15 @@ void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done)
         }
 
         auto mono = std::make_shared<std::vector<float>>();
-        const bool ok = bytes.getSize() > 1024
-                        && decodeDiWav(bytes.getData(), bytes.getSize(), sr, *mono);
+        const bool ok =
+            bytes.getSize() > 1024 && decodeDiWav(bytes.getData(), bytes.getSize(), sr, *mono);
         juce::MessageManager::callAsync([this, index, mono, ok, done] {
-            demoFetching_[(size_t) index] = false;
+            demoFetching_[(size_t)index] = false;
             // Publish a fresh immutable buffer; any audio block still holding
             // the old shared_ptr keeps a valid reference (no in-place write).
-            if (ok) demoTracks_[(size_t) index] = mono;
-            const auto& cur = demoTracks_[(size_t) index];
-            done(ok && cur != nullptr && ! cur->empty());
+            if (ok) demoTracks_[(size_t)index] = mono;
+            const auto& cur = demoTracks_[(size_t)index];
+            done(ok && cur != nullptr && !cur->empty());
         });
     });
 }
@@ -1128,7 +1154,7 @@ void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done)
 void AndroidAudioApp::setDemoActive(bool on) {
     demoPos_.store(0, std::memory_order_relaxed);
     demoOn_.store(on, std::memory_order_relaxed);
-    if (! on) demoLive_.store(false, std::memory_order_relaxed);
+    if (!on) demoLive_.store(false, std::memory_order_relaxed);
 }
 
 void AndroidAudioApp::setLiveInputMuted(bool muted) {
@@ -1139,28 +1165,25 @@ void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered, bool pres
     const int next = (demoSlot_.load(std::memory_order_relaxed) + 1) & 1;
     const size_t len = rendered.size();
     // Publish, never mutate: a reader holding the old buffer keeps it alive.
-    demoSlots_[(size_t) next] =
-        std::make_shared<const std::vector<float>>(std::move(rendered));
+    demoSlots_[(size_t)next] = std::make_shared<const std::vector<float>>(std::move(rendered));
     // Model/cab switches keep the demo rolling from the same spot (the DI
     // timeline is identical); anything else starts from the top.
     const bool wasPlaying = demoOn_.load(std::memory_order_relaxed);
-    if (! (preservePosition && wasPlaying) || len == 0)
-        demoPos_.store(0, std::memory_order_relaxed);
-    else
-        demoPos_.store(demoPos_.load(std::memory_order_relaxed) % len,
-                       std::memory_order_relaxed);
+    if (!(preservePosition && wasPlaying) || len == 0) demoPos_.store(0, std::memory_order_relaxed);
+    else demoPos_.store(demoPos_.load(std::memory_order_relaxed) % len, std::memory_order_relaxed);
     demoSlot_.store(next, std::memory_order_release);
     demoLive_.store(false, std::memory_order_relaxed);   // slot playback mode
     demoOn_.store(true, std::memory_order_relaxed);
 }
 
-void AndroidAudioApp::cacheAudition(const std::string& toneId,
-                                    const std::vector<float>& rendered) {
+void AndroidAudioApp::cacheAudition(const std::string& toneId, const std::vector<float>& rendered) {
     constexpr size_t kMaxEntries = 12;   // ~7 MB worst case
     for (auto& e : auditionCache_)
-        if (e.first == toneId) { e.second = rendered; return; }
-    if (auditionCache_.size() >= kMaxEntries)
-        auditionCache_.erase(auditionCache_.begin());
+        if (e.first == toneId) {
+            e.second = rendered;
+            return;
+        }
+    if (auditionCache_.size() >= kMaxEntries) auditionCache_.erase(auditionCache_.begin());
     auditionCache_.emplace_back(toneId, rendered);
 }
 
@@ -1184,7 +1207,10 @@ void AndroidAudioApp::withValidToken(std::function<void(bool)> then) {
         }
         then(ok);
     };
-    if (t3kAuth_.hasValidToken()) { finish(true); return; }
+    if (t3kAuth_.hasValidToken()) {
+        finish(true);
+        return;
+    }
     t3kAuth_.tryRefresh([finish](bool refreshed) { finish(refreshed); });
 }
 
@@ -1195,8 +1221,7 @@ juce::File AndroidAudioApp::modelCacheFile(const std::string& scope) {
     std::string safe;
     safe.reserve(scope.size());
     for (const char c : scope)
-        if (std::isalnum((unsigned char) c) || c == '_' || c == '-')
-            safe += c;
+        if (std::isalnum((unsigned char)c) || c == '_' || c == '-') safe += c;
     if (safe.empty()) safe = "invalid";
     return juce::File::getSpecialLocation(juce::File::tempDirectory)
         .getChildFile("audition_models")
@@ -1204,8 +1229,8 @@ juce::File AndroidAudioApp::modelCacheFile(const std::string& scope) {
 }
 
 void AndroidAudioApp::pruneModelCache() {
-    auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                   .getChildFile("audition_models");
+    auto dir =
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("audition_models");
     auto files = dir.findChildFiles(juce::File::findFiles, false, "*.nam");
     if (files.size() <= 24) return;
     std::sort(files.begin(), files.end(), [](const juce::File& a, const juce::File& b) {
@@ -1220,28 +1245,25 @@ void AndroidAudioApp::pruneModelCache() {
 // full A2 standards on fast phones with optimized builds); otherwise finish
 // the offline render and play the buffer. The emulator always pre-renders.
 void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
-                                        const std::string& cacheKey,
-                                        juce::String displayName,
-                                        std::function<void(bool, juce::String)> done,
-                                        std::shared_ptr<const std::vector<float>> overrideIr) {
+                                       const std::string& cacheKey, juce::String displayName,
+                                       std::function<void(bool, juce::String)> done,
+                                       std::shared_ptr<const std::vector<float>> overrideIr) {
     // Deliberately do NOT stop the current demo: it keeps playing until the
     // new tone is ready, then swaps in place — clean A/B comparisons.
     const std::string path = file.getFullPathName().toStdString();
     const double sr = sampleRate_;
     const int liveBlock = blockSize_;
     const bool forcePre = preRenderAuditions_;
-    const auto src = demoTracks_[(size_t) demoTrack_];
-    auto dry = std::make_shared<std::vector<float>>(src != nullptr ? *src
-                                                                   : std::vector<float>());
-    auto cabIr = overrideIr != nullptr ? overrideIr
-                 : (cab_ > 0) ? cabIrs_[(size_t) cab_] : nullptr;
+    const auto src = demoTracks_[(size_t)demoTrack_];
+    auto dry = std::make_shared<std::vector<float>>(src != nullptr ? *src : std::vector<float>());
+    auto cabIr = overrideIr != nullptr ? overrideIr : (cab_ > 0) ? cabIrs_[(size_t)cab_] : nullptr;
 
-    juce::Thread::launch([this, path, sr, liveBlock, forcePre, dry, deleteAfter,
-                          cacheKey, displayName, done, cabIr] {
+    juce::Thread::launch([this, path, sr, liveBlock, forcePre, dry, deleteAfter, cacheKey,
+                          displayName, done, cabIr] {
         constexpr int block = 256;
         auto offline = std::make_unique<dsp::ToneEngine>();
-        offline->prepare((int) sr, block);
-        auto m = nam::NamModel::load(path, (int) sr, block);
+        offline->prepare((int)sr, block);
+        auto m = nam::NamModel::load(path, (int)sr, block);
         if (m == nullptr) {
             if (deleteAfter) juce::File(juce::String(path)).deleteFile();
             juce::MessageManager::callAsync([done] { done(false, "model load failed"); });
@@ -1257,34 +1279,37 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
         std::vector<float> chunk(block, 0.0f);
 
         // Benchmark: render the first ~0.25 s and time it.
-        const size_t benchEnd = juce::jmin(dry->size(), (size_t) (sr * 0.25));
+        const size_t benchEnd = juce::jmin(dry->size(), (size_t)(sr * 0.25));
         const auto t0 = juce::Time::getHighResolutionTicks();
         size_t i = 0;
         for (; i < benchEnd; i += block) {
-            const int n = (int) std::min((size_t) block, dry->size() - i);
-            std::copy(dry->begin() + (long) i, dry->begin() + (long) i + n, chunk.begin());
+            const int n = (int)std::min((size_t)block, dry->size() - i);
+            std::copy(dry->begin() + (long)i, dry->begin() + (long)i + n, chunk.begin());
             offline->render(chunk.data(), out->data() + i, n);
         }
-        const double benchSec = juce::Time::highResolutionTicksToSeconds(
-            juce::Time::getHighResolutionTicks() - t0);
-        const double speed = benchSec > 0 ? ((double) benchEnd / sr) / benchSec : 0.0;
-        juce::Logger::writeToLog("audition bench: " + juce::String(speed, 2)
-                                 + "x realtime -> " + (! forcePre && speed >= 2.0 ? "live" : "pre-render"));
+        const double benchSec =
+            juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - t0);
+        const double speed = benchSec > 0 ? ((double)benchEnd / sr) / benchSec : 0.0;
+        juce::Logger::writeToLog("audition bench: " + juce::String(speed, 2) + "x realtime -> " +
+                                 (!forcePre && speed >= 2.0 ? "live" : "pre-render"));
 
-        if (! forcePre && speed >= 2.0) {
+        if (!forcePre && speed >= 2.0) {
             // Fast enough for the audio thread: load a fresh instance at the
             // device block size and go live.
-            auto live = nam::NamModel::load(path, (int) sr, liveBlock);
+            auto live = nam::NamModel::load(path, (int)sr, liveBlock);
             if (deleteAfter) juce::File(juce::String(path)).deleteFile();
             nam::NamModel* raw = live.release();
             juce::MessageManager::callAsync([this, raw, displayName, done] {
                 std::unique_ptr<nam::NamModel> model(raw);
-                if (model == nullptr) { done(false, "model load failed"); return; }
+                if (model == nullptr) {
+                    done(false, "model load failed");
+                    return;
+                }
                 engine_.setModel(std::move(model));
                 modelLoaded_ = true;
                 // Keep position when already playing (A/B); slot and live
                 // playback share the same DI timeline.
-                if (! demoOn_.load(std::memory_order_relaxed))
+                if (!demoOn_.load(std::memory_order_relaxed))
                     demoPos_.store(0, std::memory_order_relaxed);
                 demoLive_.store(true, std::memory_order_relaxed);
                 demoOn_.store(true, std::memory_order_relaxed);
@@ -1296,15 +1321,14 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
         // Too heavy (or emulator): finish the offline render.
         float lastReported = 0.0f;
         for (; i < dry->size(); i += block) {
-            const int n = (int) std::min((size_t) block, dry->size() - i);
-            std::copy(dry->begin() + (long) i, dry->begin() + (long) i + n, chunk.begin());
+            const int n = (int)std::min((size_t)block, dry->size() - i);
+            std::copy(dry->begin() + (long)i, dry->begin() + (long)i + n, chunk.begin());
             offline->render(chunk.data(), out->data() + i, n);
-            const float frac = (float) i / (float) dry->size();
+            const float frac = (float)i / (float)dry->size();
             if (frac - lastReported >= 0.03f) {
                 lastReported = frac;
                 juce::MessageManager::callAsync([this, frac] {
-                    if (shell_ != nullptr)
-                        shell_->setAuditionProgress(0.1f + 0.9f * frac);
+                    if (shell_ != nullptr) shell_->setAuditionProgress(0.1f + 0.9f * frac);
                 });
             }
         }
@@ -1329,19 +1353,22 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
 // amp model. Live devices swap it in gapless; the emulator re-renders the
 // bundled model with this IR.
 void AndroidAudioApp::applyIrAudition(juce::File irWav, const std::string& cacheKey,
-                                       juce::String displayName,
-                                       std::function<void(bool, juce::String)> done) {
-    auto ir = nam::loadImpulseResponse(irWav.getFullPathName().toStdString(),
-                                       (int) sampleRate_, dsp::kMaxIrTaps);
-    if (ir == nullptr) { done(false, "IR load failed"); return; }
+                                      juce::String displayName,
+                                      std::function<void(bool, juce::String)> done) {
+    auto ir = nam::loadImpulseResponse(irWav.getFullPathName().toStdString(), (int)sampleRate_,
+                                       dsp::kMaxIrTaps);
+    if (ir == nullptr) {
+        done(false, "IR load failed");
+        return;
+    }
     engine_.setImpulse(ir);
     engine_.setIrEnabled(true);
     if (preRenderAuditions_) {
-        auditionFromFile(juce::File(juce::String(copyBundledModelToFile())),
-                         false, cacheKey, displayName, done, ir);
+        auditionFromFile(juce::File(juce::String(copyBundledModelToFile())), false, cacheKey,
+                         displayName, done, ir);
         return;
     }
-    if (! demoOn_.load(std::memory_order_relaxed)) {
+    if (!demoOn_.load(std::memory_order_relaxed)) {
         demoPos_.store(0, std::memory_order_relaxed);
         demoLive_.store(true, std::memory_order_relaxed);
         demoOn_.store(true, std::memory_order_relaxed);
@@ -1350,18 +1377,28 @@ void AndroidAudioApp::applyIrAudition(juce::File irWav, const std::string& cache
 }
 
 void AndroidAudioApp::doAuditionIr(nam::ToneInfo tone,
-        std::function<void(bool, juce::String)> done) {
+                                   std::function<void(bool, juce::String)> done) {
     const auto irFile = modelCacheFile("ir_" + tone.id);
     const std::string key = tone.id + "#ir#" + std::to_string(demoTrack_);
-    const juce::String title (tone.title);
+    const juce::String title(tone.title);
 
-    if (irFile.existsAsFile()) { applyIrAudition(irFile, key, title, done); return; }
+    if (irFile.existsAsFile()) {
+        applyIrAudition(irFile, key, title, done);
+        return;
+    }
     withValidToken([this, tone, done, irFile, key, title](bool ok) {
-        if (! ok) { done(false, "connect first"); return; }
+        if (!ok) {
+            done(false, "connect first");
+            return;
+        }
         const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
-        t3kSession_->downloadToneModel(tone.id, tempDir,
+        t3kSession_->downloadToneModel(
+            tone.id, tempDir,
             [this, done, irFile, key, title](bool dlOk, juce::File file, juce::String nameOrErr) {
-                if (! dlOk) { done(false, nameOrErr); return; }
+                if (!dlOk) {
+                    done(false, nameOrErr);
+                    return;
+                }
                 irFile.getParentDirectory().createDirectory();
                 if (file.moveFileTo(irFile)) applyIrAudition(irFile, key, title, done);
                 else applyIrAudition(file, key, title, done);
@@ -1369,12 +1406,14 @@ void AndroidAudioApp::doAuditionIr(nam::ToneInfo tone,
     });
 }
 
-void AndroidAudioApp::doAudition(nam::ToneInfo tone,
-        std::function<void(bool, juce::String)> done) {
-    if (tone.format == "ir") { doAuditionIr(std::move(tone), std::move(done)); return; }
+void AndroidAudioApp::doAudition(nam::ToneInfo tone, std::function<void(bool, juce::String)> done) {
+    if (tone.format == "ir") {
+        doAuditionIr(std::move(tone), std::move(done));
+        return;
+    }
 
-    const std::string key = tone.id + "#best#" + std::to_string(demoTrack_)
-                            + "#c" + std::to_string(cab_);
+    const std::string key =
+        tone.id + "#best#" + std::to_string(demoTrack_) + "#c" + std::to_string(cab_);
     // Rendered-audio cache: instant replay (covers heavy pre-rendered
     // models on device and everything on the emulator).
     if (const auto* hit = cachedAudition(key)) {
@@ -1395,18 +1434,21 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
     const auto legacySmallest = modelCacheFile("auto_" + tone.id);
 
     withValidToken([this, tone, done, key, keepFile, legacySmallest](bool ok) {
-        if (! ok) {
+        if (!ok) {
             // Offline fallback: an older smallest-variant download still plays.
             if (legacySmallest.existsAsFile())
                 auditionFromFile(legacySmallest, false, key, juce::String(tone.title), done);
-            else
-                done(false, "connect first");
+            else done(false, "connect first");
             return;
         }
         const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
-        t3kSession_->downloadToneModel(tone.id, tempDir,
+        t3kSession_->downloadToneModel(
+            tone.id, tempDir,
             [this, done, key, keepFile](bool dlOk, juce::File file, juce::String nameOrErr) {
-                if (! dlOk) { done(false, nameOrErr); return; }
+                if (!dlOk) {
+                    done(false, nameOrErr);
+                    return;
+                }
                 keepFile.getParentDirectory().createDirectory();
                 if (file.moveFileTo(keepFile)) {
                     pruneModelCache();
@@ -1420,29 +1462,42 @@ void AndroidAudioApp::doAudition(nam::ToneInfo tone,
 }
 
 void AndroidAudioApp::doDownloadOnly(nam::ToneInfo tone,
-        std::function<void(bool, juce::String)> done) {
+                                     std::function<void(bool, juce::String)> done) {
     const bool isIr = (tone.format == "ir");
     const auto localFile = modelCacheFile((isIr ? "ir_" : "keep_") + tone.id);
-    if (localFile.existsAsFile()) { done(true, juce::String(tone.title)); return; }
+    if (localFile.existsAsFile()) {
+        done(true, juce::String(tone.title));
+        return;
+    }
 
     withValidToken([this, tone, done, localFile](bool ok) {
-        if (! ok) { done(false, "connect first"); return; }
+        if (!ok) {
+            done(false, "connect first");
+            return;
+        }
         const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
-        t3kSession_->downloadToneModelForKeep(tone.id, tempDir,
+        t3kSession_->downloadToneModelForKeep(
+            tone.id, tempDir,
             [done, localFile](bool dlOk, juce::File file, juce::String nameOrErr) {
-                if (! dlOk) { done(false, nameOrErr); return; }
+                if (!dlOk) {
+                    done(false, nameOrErr);
+                    return;
+                }
                 localFile.getParentDirectory().createDirectory();
-                if (! file.moveFileTo(localFile)) { done(false, "could not store download"); return; }
+                if (!file.moveFileTo(localFile)) {
+                    done(false, "could not store download");
+                    return;
+                }
                 done(true, nameOrErr);
             });
     });
 }
 
 void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::ModelInfo& model,
-        bool isIr, std::function<void(bool, juce::String)> done) {
-    const std::string key = toneId + "#" + model.id + "#" + std::to_string(demoTrack_)
-                            + (isIr ? "#ir" : "#c" + std::to_string(cab_));
-    const juce::String display (model.name.empty() ? model.id : model.name);
+                                      bool isIr, std::function<void(bool, juce::String)> done) {
+    const std::string key = toneId + "#" + model.id + "#" + std::to_string(demoTrack_) +
+                            (isIr ? "#ir" : "#c" + std::to_string(cab_));
+    const juce::String display(model.name.empty() ? model.id : model.name);
     if (const auto* hit = cachedAudition(key)) {
         installRenderedDemo(std::vector<float>(*hit), true);
         done(true, display);
@@ -1454,14 +1509,24 @@ void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::Mode
         if (isIr) applyIrAudition(f, key, display, done);   // IR variant = cab swap
         else auditionFromFile(f, deleteAfter, key, display, done);
     };
-    if (cachedFile.existsAsFile()) { play(cachedFile, false); return; }
+    if (cachedFile.existsAsFile()) {
+        play(cachedFile, false);
+        return;
+    }
 
     withValidToken([this, model, done, cachedFile, play](bool ok) {
-        if (! ok) { done(false, "connect first"); return; }
+        if (!ok) {
+            done(false, "connect first");
+            return;
+        }
         const auto tempDir = juce::File::getSpecialLocation(juce::File::tempDirectory);
-        t3kSession_->downloadModel(model, tempDir,
+        t3kSession_->downloadModel(
+            model, tempDir,
             [this, done, cachedFile, play](bool dlOk, juce::File file, juce::String nameOrErr) {
-                if (! dlOk) { done(false, nameOrErr); return; }
+                if (!dlOk) {
+                    done(false, nameOrErr);
+                    return;
+                }
                 cachedFile.getParentDirectory().createDirectory();
                 if (file.moveFileTo(cachedFile)) {
                     pruneModelCache();
@@ -1473,10 +1538,14 @@ void AndroidAudioApp::doAuditionModel(const std::string& toneId, const nam::Mode
     });
 }
 
-void AndroidAudioApp::doListModels(const std::string& toneId,
-        std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
+void AndroidAudioApp::doListModels(
+    const std::string& toneId,
+    std::function<void(bool, std::vector<nam::ModelInfo>, juce::String)> done) {
     withValidToken([this, toneId, done](bool ok) {
-        if (! ok) { done(false, {}, "connect first"); return; }
+        if (!ok) {
+            done(false, {}, "connect first");
+            return;
+        }
         t3kSession_->listToneModels(toneId, std::move(done));
     });
 }
@@ -1496,36 +1565,39 @@ void AndroidAudioApp::fetchPopularDefault() {
     defaultFetchKicked_ = true;
 
     withValidToken([this](bool ok) {
-        if (! ok) return;   // offline / never connected: bundled stays
-        t3kSession_->search("", 1,
-            [this](bool sOk, std::vector<nam::ToneInfo> tones, juce::String) {
-                if (! sOk) return;
+        if (!ok) return;   // offline / never connected: bundled stays
+        t3kSession_->search(
+            "", 1, [this](bool sOk, std::vector<nam::ToneInfo> tones, juce::String) {
+                if (!sOk) return;
                 const nam::ToneInfo* best = nullptr;
                 for (const auto& t : tones)
-                    if (t.format == "nam" && t.a2Count > 0
-                        && (best == nullptr || t.downloads > best->downloads))
+                    if (t.format == "nam" && t.a2Count > 0 &&
+                        (best == nullptr || t.downloads > best->downloads))
                         best = &t;
                 if (best == nullptr) return;
                 const auto tone = *best;
                 fetchArtwork(tone);
                 doDownloadOnly(tone, [this, tone](bool dlOk, juce::String) {
-                    if (! dlOk) return;
+                    if (!dlOk) return;
                     const auto keep = modelCacheFile("keep_" + tone.id);
-                    if (! keep.existsAsFile()) return;
+                    if (!keep.existsAsFile()) return;
                     keep.copyFileTo(defaultToneFile());
                     defaultToneNameFile().replaceWithText(juce::String(tone.title));
-                    juce::Logger::writeToLog("popular default fetched: " + juce::String(tone.title));
+                    juce::Logger::writeToLog("popular default fetched: " +
+                                             juce::String(tone.title));
                     // Deck still empty and we're sitting on the bundled tone?
                     // Swap in the popular default right away.
                     if (library_.all(nam::LibraryType::Model).empty()) {
                         if (auto m = nam::NamModel::load(
-                                defaultToneFile().getFullPathName().toStdString(),
-                                (int) sampleRate_, blockSize_)) {
+                                defaultToneFile().getFullPathName().toStdString(), (int)sampleRate_,
+                                blockSize_)) {
                             engine_.setModel(std::move(m));
                             modelLoaded_ = true;
                             if (shell_ != nullptr)
                                 shell_->setNowPlayingInfo(juce::String(tone.title),
-                                    "TONE3000 " + juce::String::fromUTF8("\xC2\xB7") + " MOST KEPT");
+                                                          "TONE3000 " +
+                                                              juce::String::fromUTF8("\xC2\xB7") +
+                                                              " MOST KEPT");
                         }
                     }
                 });
@@ -1535,7 +1607,8 @@ void AndroidAudioApp::fetchPopularDefault() {
 
 juce::File AndroidAudioApp::artworkFile(const std::string& toneId) {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("NAM Player/artwork").getChildFile(toneId + ".jpg");
+        .getChildFile("NAM Player/artwork")
+        .getChildFile(toneId + ".jpg");
 }
 
 std::string AndroidAudioApp::toneIdFromEntry(const nam::LibraryEntry& e) {
@@ -1546,9 +1619,8 @@ std::string AndroidAudioApp::toneIdFromEntry(const nam::LibraryEntry& e) {
         const auto plen = std::string(prefix).size();
         if (f.rfind(prefix, 0) != 0) continue;
         std::string id;
-        for (size_t i = plen; i < f.size() && std::isdigit((unsigned char) f[i]); ++i)
-            id += f[i];
-        if (! id.empty()) return id;
+        for (size_t i = plen; i < f.size() && std::isdigit((unsigned char)f[i]); ++i) id += f[i];
+        if (!id.empty()) return id;
     }
     return {};
 }
@@ -1557,14 +1629,14 @@ void AndroidAudioApp::fetchArtwork(nam::ToneInfo tone) {
     // tone.id and imageUrl are API-supplied: the id becomes a filename (must
     // not traverse out of the artwork dir) and the URL is fetched (https
     // only, bounded size). Tone ids are numeric on the real API.
-    const bool idIsNumeric = ! tone.id.empty()
-        && std::all_of(tone.id.begin(), tone.id.end(),
-                       [](unsigned char c) { return std::isdigit(c); });
-    if (! idIsNumeric || tone.id.size() > 20) return;
+    const bool idIsNumeric =
+        !tone.id.empty() && std::all_of(tone.id.begin(), tone.id.end(),
+                                        [](unsigned char c) { return std::isdigit(c); });
+    if (!idIsNumeric || tone.id.size() > 20) return;
     if (tone.imageUrl.rfind("https://", 0) != 0 || tone.imageUrl.size() > 2048) return;
     if (artworkFile(tone.id).existsAsFile()) return;
     juce::Thread::launch([tone] {
-        juce::URL url { juce::String(tone.imageUrl) };
+        juce::URL url{ juce::String(tone.imageUrl) };
         auto stream = url.createInputStream(
             juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
                 .withConnectionTimeoutMs(15000));
@@ -1572,19 +1644,19 @@ void AndroidAudioApp::fetchArtwork(nam::ToneInfo tone) {
         // Bounded read: a hostile/misconfigured server must not OOM the app.
         constexpr size_t kMaxImageBytes = 8 * 1024 * 1024;
         juce::MemoryBlock raw;
-        while (! stream->isExhausted()) {
+        while (!stream->isExhausted()) {
             if (raw.getSize() >= kMaxImageBytes) return;
             juce::HeapBlock<char> chunk(65536);
             const int n = stream->read(chunk.getData(), 65536);
             if (n <= 0) break;
-            raw.append(chunk.getData(), (size_t) n);
+            raw.append(chunk.getData(), (size_t)n);
         }
         auto img = juce::ImageFileFormat::loadFrom(raw.getData(), raw.getSize());
-        if (! img.isValid()) return;   // e.g. webp — JUCE can't decode it
+        if (!img.isValid()) return;   // e.g. webp — JUCE can't decode it
         // Downscale so per-swipe decode stays cheap (card is ~<700 px wide).
         constexpr int kMaxDim = 700;
         if (juce::jmax(img.getWidth(), img.getHeight()) > kMaxDim) {
-            const float s = (float) kMaxDim / (float) juce::jmax(img.getWidth(), img.getHeight());
+            const float s = (float)kMaxDim / (float)juce::jmax(img.getWidth(), img.getHeight());
             img = img.rescaled(juce::roundToInt(img.getWidth() * s),
                                juce::roundToInt(img.getHeight() * s),
                                juce::Graphics::highResamplingQuality);
@@ -1592,10 +1664,13 @@ void AndroidAudioApp::fetchArtwork(nam::ToneInfo tone) {
         const auto dest = artworkFile(tone.id);
         dest.getParentDirectory().createDirectory();
         juce::FileOutputStream out(dest);
-        if (! out.openedOk()) return;
+        if (!out.openedOk()) return;
         juce::JPEGImageFormat jpeg;
         jpeg.setQuality(0.85f);
-        if (! jpeg.writeImageToStream(img, out)) { dest.deleteFile(); return; }
+        if (!jpeg.writeImageToStream(img, out)) {
+            dest.deleteFile();
+            return;
+        }
         out.flush();
         // Cache hygiene (mirrors pruneModelCache): keep the most recent 64.
         auto dir = dest.getParentDirectory();
@@ -1605,8 +1680,7 @@ void AndroidAudioApp::fetchArtwork(nam::ToneInfo tone) {
             std::sort(files.begin(), files.end(), [](const juce::File& a, const juce::File& b) {
                 return a.getLastModificationTime() < b.getLastModificationTime();
             });
-            for (int i = 0; i < files.size() - 64; ++i)
-                files.getReference(i).deleteFile();
+            for (int i = 0; i < files.size() - 64; ++i) files.getReference(i).deleteFile();
         }
     });
 }
@@ -1618,27 +1692,26 @@ std::string AndroidAudioApp::libraryIdForTone(const std::string& toneId) const {
         const std::string stem = prefix + toneId;
         for (auto type : { nam::LibraryType::Model, nam::LibraryType::Ir })
             for (const auto& e : library_.all(type))
-                if (e.id.rfind(stem, 0) == 0
-                    && (e.id.size() == stem.size() || e.id[stem.size()] == '.'
-                        || e.id[stem.size()] == ' '))
+                if (e.id.rfind(stem, 0) == 0 &&
+                    (e.id.size() == stem.size() || e.id[stem.size()] == '.' ||
+                     e.id[stem.size()] == ' '))
                     return e.id;
     }
     return {};
 }
 
 void AndroidAudioApp::doToggleKeep(nam::ToneInfo tone,
-        std::function<void(bool, juce::String)> done) {
+                                   std::function<void(bool, juce::String)> done) {
     // Heart = saved + favorite flag. Already saved -> toggle the flag only
     // (un-hearting KEEPS the download; the save button owns removal).
     const auto id = libraryIdForTone(tone.id);
-    if (! id.empty()) {
+    if (!id.empty()) {
         const auto* e = library_.find(id);
-        library_.setFavorite(id, ! (e != nullptr && e->favorite));
+        library_.setFavorite(id, !(e != nullptr && e->favorite));
         // Heal pre-fix entries whose name is still the raw cache stem
         // ("ir_79857"): we know the real title now, so keep it.
-        if (e != nullptr && ! tone.title.empty()
-            && (e->displayName.rfind("ir_", 0) == 0
-                || e->displayName.rfind("keep_", 0) == 0))
+        if (e != nullptr && !tone.title.empty() &&
+            (e->displayName.rfind("ir_", 0) == 0 || e->displayName.rfind("keep_", 0) == 0))
             library_.setDisplayName(id, tone.title);
         library_.save();
         done(true, juce::String(tone.title));
@@ -1648,7 +1721,7 @@ void AndroidAudioApp::doToggleKeep(nam::ToneInfo tone,
     doDownload(tone, [this, tone, done](bool ok, juce::String msg) {
         if (ok) {
             const auto id2 = libraryIdForTone(tone.id);
-            if (! id2.empty()) {
+            if (!id2.empty()) {
                 library_.setFavorite(id2, true);
                 library_.save();
             }
@@ -1659,21 +1732,26 @@ void AndroidAudioApp::doToggleKeep(nam::ToneInfo tone,
 
 // Keep = favorite: imports the already-downloaded file into the Library
 // (models as Model, IR tones as Ir). Fetches first only if never downloaded.
-void AndroidAudioApp::doDownload(nam::ToneInfo tone,
-        std::function<void(bool, juce::String)> done) {
+void AndroidAudioApp::doDownload(nam::ToneInfo tone, std::function<void(bool, juce::String)> done) {
     const bool isIr = (tone.format == "ir");
     const auto localFile = modelCacheFile((isIr ? "ir_" : "keep_") + tone.id);
     if (localFile.existsAsFile()) {
         auto* entry = nam::importIntoLibrary(library_, localFile.getFullPathName().toStdString(),
                                              isIr ? nam::LibraryType::Ir : nam::LibraryType::Model,
                                              nowSeconds(), tone.title);
-        if (entry == nullptr) { done(false, "import failed"); return; }
+        if (entry == nullptr) {
+            done(false, "import failed");
+            return;
+        }
         library_.save();
         done(true, juce::String(entry->displayName));
         return;
     }
     doDownloadOnly(tone, [this, tone, done](bool ok, juce::String msg) {
-        if (! ok) { done(false, msg); return; }
+        if (!ok) {
+            done(false, msg);
+            return;
+        }
         doDownload(tone, done);   // local file exists now -> import branch
     });
 }

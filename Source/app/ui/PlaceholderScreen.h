@@ -8,10 +8,11 @@
 class PlaceholderScreen : public juce::Component {
 public:
     explicit PlaceholderScreen (juce::String title);
-    std::function<void()> onBack;
+    std::function<void ()> onBack;
     void paint (juce::Graphics&) override;
-    void resized() override;
+    void resized () override;
     void mouseDown (const juce::MouseEvent&) override;
+
 private:
     juce::String title_;
     juce::Rectangle<int> backRect_;

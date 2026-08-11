@@ -12,12 +12,13 @@ public:
     void setEnabled(bool on) { enabled_.store(on, std::memory_order_relaxed); }
     void setImpulse(std::shared_ptr<const std::vector<float>> ir);
     void process(const float* in, float* out, int numSamples);
+
 private:
-    std::atomic<bool> enabled_{false};
+    std::atomic<bool> enabled_{ false };
 
     // RT-safe IR ownership: audio thread reads `active_` (raw ptr) only;
     // control thread owns lifetime via current_/retired_, reclaimed in prepare().
-    std::atomic<const std::vector<float>*> active_{nullptr};
+    std::atomic<const std::vector<float>*> active_{ nullptr };
     std::shared_ptr<const std::vector<float>> current_;
     std::vector<std::shared_ptr<const std::vector<float>>> retired_;
 
@@ -25,4 +26,4 @@ private:
     std::vector<float> ring_;
     int writePos_ = 0;
 };
-} // namespace dsp
+}   // namespace dsp

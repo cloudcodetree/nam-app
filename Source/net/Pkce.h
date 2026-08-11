@@ -25,4 +25,4 @@ PkcePair generatePkce();
 // [A-Za-z0-9-._~], suitable for an OAuth `state` parameter.
 std::string randomUrlToken(int nChars);
 
-} // namespace nam
+}   // namespace nam
