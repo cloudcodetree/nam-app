@@ -34,12 +34,18 @@ void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
     // pointer) rather than freeing it here. Actual reclamation happens in
     // prepare(), at a safe point. Publish the new pointer with a release
     // store; render() acquires it, giving a genuinely lock-free hand-off.
-    if (current_) retired_.push_back(std::move(current_));
-    // Bounded reclamation: only the most recent retirees can still be in a
-    // running render() (a block lasts milliseconds; swaps are user-scale).
-    // Without this, hot-swapping tones (card swipes, auditions) pins every
-    // model ever loaded until the next prepare() — an OOM ratchet on mobile.
-    while (retired_.size() > 4) retired_.erase(retired_.begin());   // frees on the control thread
+    // Block-gated reclamation: a retiree is freeable once at least two
+    // render blocks have COMPLETED since it was retired — any in-flight
+    // render that could still hold its raw pointer has provably finished
+    // (renders are serialized on the audio thread). A plain count-based
+    // trim would be unsafe: several setModel calls can flush in one
+    // message-loop drain with no block boundary between them. This keeps
+    // hot-swapped models from pinning memory until the next prepare().
+    const auto nowBlocks = blockCount_.load(std::memory_order_acquire);
+    retired_.erase(std::remove_if(retired_.begin(), retired_.end(),
+                                  [nowBlocks](const auto& r) { return nowBlocks >= r.second + 2; }),
+                   retired_.end());
+    if (current_) retired_.push_back({ std::move(current_), nowBlocks });
     current_ = m;
 
     // NAM loudness normalisation: land every model near the -18 dBFS

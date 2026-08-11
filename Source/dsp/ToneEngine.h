@@ -80,15 +80,16 @@ private:
     //   control/message thread. current_ keeps the live model alive;
     //   retired_ holds previously-active models that render() may still
     //   have a raw pointer to.
-    // - Reclamation (freeing retired_ entries) happens only in prepare(),
-    //   which the caller guarantees runs while audio is stopped/not yet
-    //   started -- i.e. no concurrent render() call -- so it is a safe
-    //   point to drop the shared_ptrs and let the destructors run off the
-    //   audio thread.
+    // - Reclamation: prepare() (audio stopped) frees everything; setModel()
+    //   additionally frees retirees stamped at least TWO completed render
+    //   blocks ago -- any render() that could still hold their raw pointer
+    //   has provably finished by then (renders are serialized), so hot-
+    //   swapping many models no longer pins them all until the next
+    //   prepare(). Stamp = blockCount_ at retirement.
     std::atomic<nam::NamModel*> active_{ nullptr };   // audio thread reads this only
     std::shared_ptr<nam::NamModel> current_;          // control thread: keeps active alive
-    std::vector<std::shared_ptr<nam::NamModel>>
-        retired_;   // control thread: awaiting reclaim in prepare()
+    std::vector<std::pair<std::shared_ptr<nam::NamModel>, uint64_t>>
+        retired_;   // control thread: awaiting block-gated reclaim
 
     int sampleRate_ = 48000;
     int maxBlock_ = 128;

@@ -337,7 +337,8 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         // as if it were the guitar input — real-time inference, no waiting.
         // Take our OWN reference: a concurrent re-publish (track fetched on
         // the message thread) must not pull the buffer out from under us.
-        const auto loopPtr = demoTracks_[(size_t)demoTrackRT_.load(std::memory_order_relaxed)];
+        const auto loopPtr =
+            std::atomic_load(&demoTracks_[(size_t)demoTrackRT_.load(std::memory_order_relaxed)]);
         if (loopPtr != nullptr && !loopPtr->empty()) {
             const auto& loop = *loopPtr;
             size_t pos = demoPos_.load(std::memory_order_relaxed);
@@ -352,7 +353,7 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
             for (int i = 0; i < n && i < cap; ++i) mono_[(size_t)i] = 0.0f;
         }
     } else if (const auto slotPtr = (demoOn && slot >= 0)
-                                        ? demoSlots_[(size_t)slot]
+                                        ? std::atomic_load(&demoSlots_[(size_t)slot])
                                         : std::shared_ptr<const std::vector<float>>();
                slotPtr != nullptr && !slotPtr->empty()) {
         // Audition: play back the offline-rendered (model-processed) riff.
@@ -1101,7 +1102,8 @@ void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done)
         done(false);
         return;
     }
-    if (const auto& cur = demoTracks_[(size_t)index]; cur != nullptr && !cur->empty()) {
+    if (const auto cur = std::atomic_load(&demoTracks_[(size_t)index]);
+        cur != nullptr && !cur->empty()) {
         done(true);
         return;
     }
@@ -1144,8 +1146,10 @@ void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done)
             demoFetching_[(size_t)index] = false;
             // Publish a fresh immutable buffer; any audio block still holding
             // the old shared_ptr keeps a valid reference (no in-place write).
-            if (ok) demoTracks_[(size_t)index] = mono;
-            const auto& cur = demoTracks_[(size_t)index];
+            if (ok)
+                std::atomic_store(&demoTracks_[(size_t)index],
+                                  std::shared_ptr<const std::vector<float>>(mono));
+            const auto cur = std::atomic_load(&demoTracks_[(size_t)index]);
             done(ok && cur != nullptr && !cur->empty());
         });
     });
@@ -1165,7 +1169,9 @@ void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered, bool pres
     const int next = (demoSlot_.load(std::memory_order_relaxed) + 1) & 1;
     const size_t len = rendered.size();
     // Publish, never mutate: a reader holding the old buffer keeps it alive.
-    demoSlots_[(size_t)next] = std::make_shared<const std::vector<float>>(std::move(rendered));
+    std::atomic_store(&demoSlots_[(size_t)next],
+                      std::shared_ptr<const std::vector<float>>(
+                          std::make_shared<const std::vector<float>>(std::move(rendered))));
     // Model/cab switches keep the demo rolling from the same spot (the DI
     // timeline is identical); anything else starts from the top.
     const bool wasPlaying = demoOn_.load(std::memory_order_relaxed);
@@ -1254,7 +1260,7 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
     const double sr = sampleRate_;
     const int liveBlock = blockSize_;
     const bool forcePre = preRenderAuditions_;
-    const auto src = demoTracks_[(size_t)demoTrack_];
+    const auto src = std::atomic_load(&demoTracks_[(size_t)demoTrack_]);
     auto dry = std::make_shared<std::vector<float>>(src != nullptr ? *src : std::vector<float>());
     auto cabIr = overrideIr != nullptr ? overrideIr : (cab_ > 0) ? cabIrs_[(size_t)cab_] : nullptr;
 
