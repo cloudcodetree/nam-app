@@ -158,6 +158,15 @@ AndroidAudioApp::AndroidAudioApp() {
         return modelCacheFile("keep_" + toneId).existsAsFile()
             || modelCacheFile("ir_" + toneId).existsAsFile();
     };
+    browse.loadStacksJson = [] { return stacksFile().loadFileAsString(); };
+    browse.saveStacksJson = [](juce::String s) {
+        const auto f = stacksFile();
+        f.getParentDirectory().createDirectory();
+        f.replaceWithText(s);
+    };
+    browse.loadTone = [this](nam::ToneInfo t, AppShell::DoneFn done) {
+        doLoadToneLive(std::move(t), std::move(done));
+    };
     shell_->setBrowseServices(std::move(browse));
     shell_->setLibraryService(
         [this] { return library_.all(nam::LibraryType::Model); },
@@ -839,6 +848,43 @@ void AndroidAudioApp::loadModelEntry(const nam::LibraryEntry& e) {
         library_.markUsed(e.id, nowSeconds());
         library_.save();
     }
+}
+
+juce::File AndroidAudioApp::stacksFile() {
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("NAM Player/stacks.json");
+}
+
+void AndroidAudioApp::doLoadToneLive(nam::ToneInfo tone,
+        std::function<void(bool, juce::String)> done) {
+    const bool isIr = (tone.format == "ir");
+    const auto localFile = modelCacheFile((isIr ? "ir_" : "keep_") + tone.id);
+    auto apply = [this, isIr, tone, done](juce::File f) {
+        if (isIr) {
+            if (auto ir = nam::loadImpulseResponse(f.getFullPathName().toStdString(),
+                                                   (int) sampleRate_, dsp::kMaxIrTaps)) {
+                engine_.setImpulse(ir);
+                engine_.setIrEnabled(true);
+                done(true, juce::String(tone.title));
+            } else {
+                done(false, "could not read impulse");
+            }
+            return;
+        }
+        if (auto m = nam::NamModel::load(f.getFullPathName().toStdString(),
+                                         (int) sampleRate_, blockSize_)) {
+            engine_.setModel(std::move(m));
+            modelLoaded_ = true;
+            done(true, juce::String(tone.title));
+        } else {
+            done(false, "could not load model");
+        }
+    };
+    if (localFile.existsAsFile()) { apply(localFile); return; }
+    doDownloadOnly(tone, [localFile, apply, done](bool ok, juce::String msg) {
+        if (! ok) { done(false, std::move(msg)); return; }
+        apply(localFile);
+    });
 }
 
 // --- Audition (demo riffs) ------------------------------------------------

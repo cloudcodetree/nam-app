@@ -40,6 +40,8 @@ public:
     std::function<void()>     onLibrary;
     std::function<void()>     onPrev, onNext;   // step through the collection
     std::function<void (int)> onSelectIndex;    // dots pagination jump
+    std::function<void (int)> onPageDelta;      // dots-row ‹ › page arrows (±1)
+    void setPageNav (bool canPrev, bool canNext);   // show/hide the arrows
     std::function<void()>     onSettings;       // top-bar gear -> audio settings
     std::function<void()>     onEdit, onLive;   // top-bar shortcuts
     std::function<void()>     onTuner;          // tuner panel -> strobe tuner
@@ -88,7 +90,6 @@ private:
     bool  demoPlaying_ = false;
     bool  cabCard_ = false;          // current card is a cab/IR
     int   view_ = 0;                 // 0 favorites · 1 downloaded · 2 browse
-    float viewSlide_ = 0.0f;         // animated thumb position (0..2)
     juce::String pairLabel_ { "PAIR CAB" };
     juce::StringArray pairNames_;
     int   pairSel_ = 0;
@@ -120,6 +121,8 @@ private:
     // Hit / layout rects, computed in resized(). (Nav lives in AppShell.)
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_,
                          metersRow_;
+    bool pagePrev_ = false, pageNext_ = false;   // dots-row page arrows
+    juce::Rectangle<int> pagePrevRect_, pageNextRect_;
     juce::Rectangle<int> libRect_, prevRect_, nextRect_, dotsRect_, tunerRect_,
                          gearRect_, editTopRect_, liveTopRect_,
                          backBtnRect_,   // card-back return button

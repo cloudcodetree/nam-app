@@ -108,6 +108,11 @@ private:
     // Library: load a kept model file into the running engine.
     void loadModelEntry(const nam::LibraryEntry& e);
 
+    // Stacks: load a tone (model or cab impulse, by format) straight into
+    // the engine, downloading on demand if it isn't cached yet.
+    void doLoadToneLive(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
+    static juce::File stacksFile();   // stacks.json under appdata
+
     // Runs `then(true)` with a valid token (refreshing silently if needed;
     // recreates the session so it carries the fresh token), else then(false).
     void withValidToken(std::function<void(bool)> then);

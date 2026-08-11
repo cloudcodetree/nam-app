@@ -83,8 +83,14 @@ void PlayScreen::setDeckView (int v) {
     flyOpen_ = false;
     gearSel_ = 0;        // fresh filter state per view (owner re-sends groups)
     layout();
-    startTimerHz (60);   // slide the toggle thumb
     repaint();
+}
+
+void PlayScreen::setPageNav (bool canPrev, bool canNext) {
+    if (pagePrev_ == canPrev && pageNext_ == canNext) return;
+    pagePrev_ = canPrev;
+    pageNext_ = canNext;
+    repaint (dotsRect_.expanded (40, 4));
 }
 
 void PlayScreen::notifyFilters() {
@@ -262,31 +268,26 @@ void PlayScreen::layout() {
         flyScroll_ = 0.0f;
     }
 
-    // Full-bleed tone card; below it: pagination dots, then the view toggle
-    // (Hi-Fi design order: card / dots / toggle).
+    // Full-bleed tone card; below it: pagination dots. (Deck switching moved
+    // to the shell's bottom nav — no in-screen view toggle.)
     auto inner = hero_.reduced (26, 8);
-    viewRow_ = inner.removeFromBottom (38);
-    inner.removeFromBottom (6);
     dotsRect_ = inner.removeFromBottom (24);
     inner.removeFromBottom (4);
     artRect_ = inner;
     textRect_ = transportRect_ = {};
-    {
-        const int w = juce::jmin (106, (viewRow_.getWidth() - 12) / 3);
-        const int h = viewRow_.getHeight();
-        const int x = viewRow_.getCentreX() - (w * 3 + 6) / 2;
-        favViewRect_    = { x + 3,         viewRow_.getY() + 3, w, h - 6 };
-        savedViewRect_  = { x + 3 + w,     viewRow_.getY() + 3, w, h - 6 };
-        browseViewRect_ = { x + 3 + w * 2, viewRow_.getY() + 3, w, h - 6 };
-    }
+    viewRow_ = favViewRect_ = savedViewRect_ = browseViewRect_ = {};
+    // Page arrows bracket the dots row (browse pages / big-deck windows).
+    pagePrevRect_ = dotsRect_.removeFromLeft (34);
+    pageNextRect_ = dotsRect_.removeFromRight (34);
 
-    // Card footer heart + download buttons (front face).
-    heartRect_ = { artRect_.getRight() - 64, artRect_.getBottom() - 64, 46, 46 };
-    saveRect_  = { heartRect_.getX() - 54, heartRect_.getY(), 46, 46 };
+    // Card corner buttons (front face): download + heart top-left, in the
+    // same 34px circle style as the mixer button opposite them.
+    saveRect_  = { artRect_.getX() + 14, artRect_.getY() + 14, 34, 34 };
+    heartRect_ = { saveRect_.getRight() + 8, saveRect_.getY(), 34, 34 };
 
-    // Chevrons float at the card's outer edges.
-    prevRect_ = { hero_.getX() + 2,        artRect_.getCentreY() - 34, 26, 68 };
-    nextRect_ = { hero_.getRight() - 28,   artRect_.getCentreY() - 34, 26, 68 };
+    // Circled chevrons straddle the card's side edges (half in, half out).
+    prevRect_ = { artRect_.getX() - 20,     artRect_.getCentreY() - 20, 40, 40 };
+    nextRect_ = { artRect_.getRight() - 20, artRect_.getCentreY() - 20, 40, 40 };
 
     // Pagination dot hit rects. Dots shrink as the deck grows so a full
     // results page (25) still fits; beyond that a bar is drawn instead.
@@ -354,15 +355,6 @@ void PlayScreen::timerCallback() {
         burst_ = juce::jmax (0.0f, burst_ - 1.0f / 40.0f);
         busy = busy || burst_ > 0.0f;
     }
-    const float slideTarget = (float) view_;
-    if (std::abs (viewSlide_ - slideTarget) > 0.001f) {
-        const float step = 1.0f / 6.0f;
-        float next = viewSlide_ + (slideTarget > viewSlide_ ? step : -step);
-        if (std::abs (next - slideTarget) < step) next = slideTarget;
-        viewSlide_ = juce::jlimit (0.0f, 2.0f, next);
-        busy = busy || std::abs (viewSlide_ - slideTarget) > 0.001f;
-        repaint (viewRow_.expanded (4));
-    }
     if (! busy) stopTimer();
     repaint (artRect_.expanded (12));
 }
@@ -399,24 +391,8 @@ void PlayScreen::paint (juce::Graphics& g) {
               col::inkA (0.6f), gearRect_, juce::Justification::centred);
     }
 
-    // --- View toggle slider (single pill, animated 3-way thumb) ----------
+    // --- Browse strip (gear dropdown; deck switching lives in the nav) ---
     {
-        const auto container = favViewRect_.getUnion (browseViewRect_).expanded (3);
-        drawPill (g, container.toFloat(), col::bg.withAlpha (0.4f), col::inkA (0.16f));
-        // Sliding accent thumb (0 favorites · 1 downloaded · 2 browse).
-        const float seg = (float) favViewRect_.getWidth();
-        const float tx = (float) favViewRect_.getX() + viewSlide_ * seg;
-        const juce::Rectangle<float> thumb (tx, (float) favViewRect_.getY(),
-                                            seg, (float) favViewRect_.getHeight());
-        drawPill (g, thumb, col::accent, col::accent);
-        auto segText = [&] (juce::Rectangle<int> rr, const char* label, int idx) {
-            const bool on = std::abs (viewSlide_ - (float) idx) < 0.5f;
-            text (label, uiFontTracked (9.0f, true),
-                  on ? col::inkOnAccent : col::inkA (0.55f), rr, juce::Justification::centred);
-        };
-        segText (favViewRect_, "FAVORITES", 0);
-        segText (savedViewRect_, "DOWNLOADED", 1);
-        segText (browseViewRect_, "BROWSE", 2);
         // Gear-type dropdown (browse strip).
         if (! gearDdRect_.isEmpty()) {
             const bool hot = gearSel_ > 0;
@@ -580,7 +556,7 @@ void PlayScreen::paint (juce::Graphics& g) {
 
             auto ft = face.reduced (18, 0).withTrimmedBottom (16);
             auto block = ft.removeFromBottom (author_.isNotEmpty() ? 84 : 62)
-                           .withTrimmedRight (110);
+                           .withTrimmedRight (12);   // corner buttons live up top now
             text (family_.toUpperCase(), uiFontTracked (11.0f, false), col::inkA (0.45f),
                   block.removeFromTop (18), juce::Justification::centredLeft);
             text (name_, displayFont (26.0f), col::ink,
@@ -591,9 +567,9 @@ void PlayScreen::paint (juce::Graphics& g) {
 
             g.setColour (kept_ ? col::accentA (0.14f) : col::bg.withAlpha (0.35f));
             g.fillEllipse (heartRect_.toFloat());
-            g.setColour (kept_ ? col::accentA (0.7f) : col::inkA (0.25f));
+            g.setColour (kept_ ? col::accentA (0.7f) : col::inkA (0.3f));
             g.drawEllipse (heartRect_.toFloat().reduced (0.5f), 1.0f);
-            const auto hb = heartRect_.toFloat().withSizeKeepingCentre (20.0f, 20.0f);
+            const auto hb = heartRect_.toFloat().withSizeKeepingCentre (16.0f, 16.0f);
             if (kept_) { g.setColour (col::accent); g.fillPath (heartPath (hb)); }
             else       { g.setColour (col::inkA (0.6f)); g.strokePath (heartPath (hb),
                                                                        juce::PathStrokeType (1.5f)); }
@@ -601,10 +577,10 @@ void PlayScreen::paint (juce::Graphics& g) {
             // Download / saved toggle (left of the heart).
             g.setColour (saved_ ? col::accentA (0.14f) : col::bg.withAlpha (0.35f));
             g.fillEllipse (saveRect_.toFloat());
-            g.setColour (saved_ ? col::accentA (0.7f) : col::inkA (0.25f));
+            g.setColour (saved_ ? col::accentA (0.7f) : col::inkA (0.3f));
             g.drawEllipse (saveRect_.toFloat().reduced (0.5f), 1.0f);
             text (juce::String::fromUTF8 (saved_ ? "\xE2\x9C\x93" : "\xE2\x86\x93"),
-                  uiFont (18.0f, false), saved_ ? col::accent : col::inkA (0.6f),
+                  uiFont (15.0f, false), saved_ ? col::accent : col::inkA (0.6f),
                   saveRect_, juce::Justification::centred);
 
             // Heart-pop burst on keep.
@@ -620,11 +596,27 @@ void PlayScreen::paint (juce::Graphics& g) {
         g.drawRoundedRectangle (face.toFloat(), 14.0f, 1.0f);
     }
 
-    // --- Transport: side chevrons + dots pagination ----------------------
-    text (juce::String::fromUTF8 ("\xE2\x80\xB9"), uiFont (26.0f, false),
-          col::inkA (0.5f), prevRect_, juce::Justification::centred);
-    text (juce::String::fromUTF8 ("\xE2\x80\xBA"), uiFont (26.0f, false),
-          col::inkA (0.5f), nextRect_, juce::Justification::centred);
+    // --- Transport: circled side chevrons + dots pagination --------------
+    // The buttons straddle the card edge, so they paint after it (on top).
+    auto chevBtn = [&] (juce::Rectangle<int> rr, const char* glyph) {
+        g.setColour (col::bg.withAlpha (0.72f));
+        g.fillEllipse (rr.toFloat());
+        g.setColour (col::inkA (0.28f));
+        g.drawEllipse (rr.toFloat().reduced (0.5f), 1.0f);
+        text (juce::String::fromUTF8 (glyph), uiFont (22.0f, false),
+              col::inkA (0.75f), rr, juce::Justification::centred);
+    };
+    chevBtn (prevRect_, "\xE2\x80\xB9");
+    chevBtn (nextRect_, "\xE2\x80\xBA");
+    // Page arrows bracketing the dots (dimmed when that direction is empty).
+    if (pagePrev_ || pageNext_) {
+        text (juce::String::fromUTF8 ("\xE2\x80\xB9"), uiFont (17.0f, true),
+              col::inkA (pagePrev_ ? 0.6f : 0.15f), pagePrevRect_,
+              juce::Justification::centred);
+        text (juce::String::fromUTF8 ("\xE2\x80\xBA"), uiFont (17.0f, true),
+              col::inkA (pageNext_ ? 0.6f : 0.15f), pageNextRect_,
+              juce::Justification::centred);
+    }
     if (count_ > 0 && count_ <= (int) dotRects_.size()) {
         for (int k = 0; k < count_; ++k) {
             g.setColour (k == index_ ? col::accent : col::inkA (0.2f));
@@ -877,9 +869,12 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
         return;
     }
 
-    // A tap on the card flips it around to the settings face.
+    // A tap on the card flips it around to the settings face. The circled
+    // chevrons overlap the card edge, so they must not flip it.
     if (tap && artRect_.contains (pressPos_) && ! heartRect_.expanded (4).contains (pressPos_)
-        && ! saveRect_.expanded (4).contains (pressPos_)) {
+        && ! saveRect_.expanded (4).contains (pressPos_)
+        && ! prevRect_.expanded (4).contains (pressPos_)
+        && ! nextRect_.expanded (4).contains (pressPos_)) {
         toggleFlip();
         return;
     }
@@ -952,9 +947,6 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
 
     if (gearRect_.expanded (4).contains (p)) { if (onSettings) onSettings(); return; }
 
-    if (favViewRect_.contains (p))    { if (onViewChange) onViewChange (0); return; }
-    if (savedViewRect_.contains (p))  { if (onViewChange) onViewChange (1); return; }
-    if (browseViewRect_.contains (p)) { if (onViewChange) onViewChange (2); return; }
     if (! gearDdRect_.isEmpty() && gearDdRect_.contains (p)) {
         openMenu (Menu::Gear, gearDdRect_, gearNames_, gearSel_);
         return;
@@ -1001,6 +993,14 @@ void PlayScreen::mouseDown (const juce::MouseEvent& e) {
 
     if (prevRect_.expanded (6).contains (p)) { if (onPrev) onPrev(); return; }
     if (nextRect_.expanded (6).contains (p)) { if (onNext) onNext(); return; }
+    if (pagePrev_ && pagePrevRect_.expanded (4).contains (p)) {
+        if (onPageDelta) onPageDelta (-1);
+        return;
+    }
+    if (pageNext_ && pageNextRect_.expanded (4).contains (p)) {
+        if (onPageDelta) onPageDelta (+1);
+        return;
+    }
     if (tunerRect_.contains (p)) { if (onTuner) onTuner(); return; }
     if (dotsRect_.contains (p) && count_ <= (int) dotRects_.size())
         for (int k = 0; k < count_; ++k)

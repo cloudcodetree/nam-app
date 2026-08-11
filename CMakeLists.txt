@@ -98,6 +98,7 @@ if(NAM_BUILD_APP)
             Source/app/ui/LibraryScreen.cpp
             Source/app/ui/LiveScreen.cpp
             Source/app/ui/AudioSettingsScreen.cpp
+            Source/app/ui/StacksScreen.cpp
             Source/app/ui/TunerScreen.cpp
             Source/app/ui/AppShell.cpp
             Source/dsp/ToneEngine.cpp

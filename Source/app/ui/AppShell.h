@@ -13,6 +13,7 @@
 #include "app/ui/LibraryScreen.h"
 #include "app/ui/LiveScreen.h"
 #include "app/ui/AudioSettingsScreen.h"
+#include "app/ui/StacksScreen.h"
 #include "app/ui/TunerScreen.h"
 
 // Cross-platform app shell: owns every screen and swaps the visible one on
@@ -80,6 +81,11 @@ public:
             std::function<void (bool, std::vector<nam::ToneInfo>, juce::String)>)> searchEx;
         // Cached/fetch-on-miss artwork for a browse card ({} until fetched).
         std::function<juce::Image (nam::ToneInfo)> artworkForTone;
+        // Stacks: persistence + on-the-fly load of a tone into the engine
+        // (downloads what it needs; format decides model vs cab impulse).
+        std::function<juce::String()> loadStacksJson;
+        std::function<void (juce::String)> saveStacksJson;
+        DownloadFn loadTone;
     };
     void setBrowseServices (BrowseServices services);
 
@@ -118,7 +124,7 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
-    enum class Screen { Play, Edit, Library, Browse, Live, Devices };
+    enum class Screen { Play, Edit, Library, Browse, Live, Devices, Stacks };
     void show (Screen s);
     void toggleTuner();                       // expand/collapse the tuner overlay
     void refreshDevices();
@@ -137,6 +143,7 @@ private:
     std::unique_ptr<LibraryScreen> library_;
     std::unique_ptr<LiveScreen>    live_;
     std::unique_ptr<AudioSettingsScreen> devices_;
+    std::unique_ptr<StacksScreen> stacks_;
     std::unique_ptr<TunerScreen>   tuner_;    // overlay above Play, not a screen
     // Invisible click-catcher under the tuner card: any tap outside the card
     // collapses it (nav taps stay live — the scrim covers content only).
@@ -186,7 +193,10 @@ private:
     // Global bottom chrome: persistent nav bar with a central status orb —
     // circular meter (input arc left / output arc right), latency readout in
     // the centre, tap opens the I/O mute panel.
-    juce::Rectangle<int> navBar_, orbRect_;
+    // Nav: BROWSE / FAVORITES | orb | DOWNLOADED / STACKS.
+    juce::Rectangle<int> navBar_, orbRect_,
+                         navBrowseRect_, navFavRect_, navSavedRect_, navStacksRect_;
+    void setDeckMode (int mode);              // nav deck buttons (0 fav · 1 saved · 2 browse)
     juce::Rectangle<int> ioPanelRect_, ioInRow_, ioOutRow_;
     bool  ioPanelOpen_ = false;
     std::array<juce::Rectangle<int>, 5> navRects_;
@@ -209,10 +219,19 @@ private:
     int  favGear_ = -1;                      // -1 all · 0 amps · 1 cabs
     juce::StringArray favTags_, favMakes_;
     int  browseGear_ = 0;                    // gear dropdown index (0 = all)
+    int  browsePage_ = 1;                    // TONE3000 results page (1-based)
+    int  deckWindow_ = 0;                    // local decks: 25-card dots window
     std::vector<PlayScreen::FilterGroup> browseGroups_;
     void showFavCard (int index, bool loadIntoEngine);
     void showBrowseCard (int index);
     void updateCabChoices();
+    // Stacks state (persisted through the host as JSON).
+    std::vector<StacksScreen::Stack> stackList_;
+    int  stackSel_ = -1;
+    void loadStacksState();
+    void saveStacksState();
+    void pushStacks();
+    void applyStack (int index);
     void pushPairChoices();                   // PAIR row matches the card's gear
     std::vector<nam::LibraryEntry> keptModelsSorted() const;
     int  cabBuiltinCount_ = 0;                // names beyond this are kept IRs

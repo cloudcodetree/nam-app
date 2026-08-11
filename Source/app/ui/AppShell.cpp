@@ -39,12 +39,14 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     library_ = std::make_unique<LibraryScreen>();
     live_    = std::make_unique<LiveScreen>();
     devices_ = std::make_unique<AudioSettingsScreen>();
+    stacks_  = std::make_unique<StacksScreen>();
     tuner_   = std::make_unique<TunerScreen>();
     tuner_->setPanelMode (true);   // hosted as a card over Play, not a screen
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) browse_.get(), (juce::Component*) library_.get(),
                                 (juce::Component*) live_.get(), (juce::Component*) devices_.get(),
+                                (juce::Component*) stacks_.get(),
                                 (juce::Component*) tuner_.get() })
         addChildComponent (*c);
 
@@ -56,36 +58,33 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_->onNext     = [this] { stepCollection (+1); };
     play_->onSelectIndex = [this] (int k) {
         if (deckMode_ == 2) showBrowseCard (k);
-        else                showFavCard (k, true);
+        else                showFavCard (deckWindow_ * 25 + k, true);   // dots are windowed
     };
 
-    play_->onViewChange = [this] (int v) {
-        if (v == deckMode_) return;
-        deckMode_ = v;
-        play_->setDeckView (v);
-        favGear_ = -1;
-        favTags_.clear();
-        favMakes_.clear();
-        browseGear_ = 0;
-        pushFilterGroups();
-        if (svc_.stopDemo) svc_.stopDemo();
-        play_->setDemoPlaying (false);
+    play_->onViewChange = [this] (int v) { setDeckMode (v); };
+
+    play_->onPageDelta = [this] (int d) {
         if (deckMode_ == 2) {
+            browsePage_ = juce::jmax (1, browsePage_ + d);
             runPlayBrowse();
         } else {
-            showFavCard (0, false);
+            const int n = (int) favDeck().size();
+            const int target = (deckWindow_ + d) * 25;
+            if (target >= 0 && target < n) showFavCard (target, true);
         }
     };
 
     play_->onGearSelect = [this] (int idx) {
         if (deckMode_ != 2) return;
         browseGear_ = idx;
+        browsePage_ = 1;   // fresh query, fresh pages
         runPlayBrowse();
     };
 
     play_->onFilterGroupsChanged = [this] (const std::vector<PlayScreen::FilterGroup>& groups) {
         if (deckMode_ == 2) {
             browseGroups_ = groups;
+            browsePage_ = 1;   // fresh query, fresh pages
             runPlayBrowse();
         } else {
             favTags_.clear();
@@ -185,6 +184,12 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
             if (svc_.stopDemo) svc_.stopDemo();
             auditioningPack_ = -1;
             play_->setDemoPlaying (false);
+            // Demo over: if the live input is the phone mic (system default,
+            // no interface), mute it so the amp sim doesn't resume feeding
+            // off room noise through the speaker.
+            if (getDevices_ && muteInput_
+                && getDevices_().currentInput.containsIgnoreCase ("System Default"))
+                muteInput_ (true);
             return;
         }
         nam::ToneInfo tone;
@@ -205,11 +210,72 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
             if (! found) return;
         }
         if (! svc_.audition) return;
+        // Hitting play means "I want to hear this": lift a user output mute.
+        if (outMuted_ && muteOutput_) muteOutput_ (false);
         svc_.audition (tone, [this] (bool ok, juce::String) {
             auditioningPack_ = ok ? -2 : -1;
             play_->setDemoPlaying (ok);
         });
     };
+    // --- Stacks: user-built rigs; every slot picks live from TONE3000 ----
+    stacks_->onCreate = [this] {
+        StacksScreen::Stack st;
+        st.name = "STACK " + juce::String ((int) stackList_.size() + 1);
+        stackList_.push_back (std::move (st));
+        stackSel_ = (int) stackList_.size() - 1;
+        saveStacksState();
+        pushStacks();
+    };
+    stacks_->onDelete = [this] (int i) {
+        if (i < 0 || i >= (int) stackList_.size()) return;
+        stackList_.erase (stackList_.begin() + i);
+        if (stackSel_ >= (int) stackList_.size()) stackSel_ = -1;
+        saveStacksState();
+        pushStacks();
+    };
+    stacks_->onSelect = [this] (int i) {
+        stackSel_ = (stackSel_ == i ? -1 : i);
+        pushStacks();
+    };
+    stacks_->onApply = [this] (int i) { applyStack (i); };
+    stacks_->onFetchSlotOptions = [this] (int slot,
+            std::function<void (juce::StringArray, juce::StringArray,
+                                juce::StringArray)> cb) {
+        if (! svc_.searchEx || slot < 0 || slot >= StacksScreen::kNumSlots) {
+            cb ({}, {}, {});
+            return;
+        }
+        // Trending list for the slot's gear type, fetched on demand — nothing
+        // needs downloading up front.
+        nam::SearchParams p;
+        p.sort = "trending";
+        const auto& def = StacksScreen::slotDefs()[(size_t) slot];
+        if (juce::String (def.gearApi) == "ir") { p.format = "ir"; p.gears.push_back ("cab"); }
+        else                                    p.gears.push_back (def.gearApi);
+        svc_.searchEx (p, [cb] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
+            juce::StringArray ids, titles, formats;
+            if (ok)
+                for (const auto& t : tones) {
+                    ids.add (juce::String (t.id));
+                    titles.add (juce::String (t.title));
+                    formats.add (juce::String (t.format));
+                }
+            cb (std::move (ids), std::move (titles), std::move (formats));
+        });
+    };
+    stacks_->onSlotPicked = [this] (int stack, int slot, juce::String id,
+                                    juce::String title, juce::String format) {
+        if (stack < 0 || stack >= (int) stackList_.size()
+            || slot < 0 || slot >= StacksScreen::kNumSlots)
+            return;
+        auto& st = stackList_[(size_t) stack];
+        st.toneIds[(size_t) slot] = std::move (id);
+        st.titles [(size_t) slot] = std::move (title);
+        st.formats[(size_t) slot] = std::move (format);
+        saveStacksState();
+        pushStacks();
+    };
+
     play_->onTuner    = [this] { toggleTuner(); };
     tuner_->onBack    = [this] { if (tunerOpen_) toggleTuner(); };
     addChildComponent (tunerScrim_);
@@ -379,6 +445,10 @@ void AppShell::setBrowseServices (BrowseServices services) {
             }
         });
     };
+
+    // Saved stacks live behind the host's persistence service.
+    loadStacksState();
+    pushStacks();
 }
 
 void AppShell::stopAudition() {
@@ -516,10 +586,12 @@ void AppShell::showFavCard (int index, bool loadIntoEngine) {
     const auto deck = favDeck();
     if (deck.empty()) {
         collectionIndex_ = -1;
+        deckWindow_ = 0;
         play_->setNowPlaying ("Nothing kept yet", "NAM PLAYER", {});
         play_->setArtwork ({});
         play_->setKept (false);
         play_->setPosition (-1, 0);
+        play_->setPageNav (false, false);
         return;
     }
     const int n = (int) deck.size();
@@ -548,7 +620,11 @@ void AppShell::showFavCard (int index, bool loadIntoEngine) {
         curCardIsCab_ = isIr;
         pushPairChoices();
     }
-    play_->setPosition (index, n);
+    // Dots show a 25-card window into big decks; ‹ › shifts the window.
+    deckWindow_ = index / 25;
+    const int wStart = deckWindow_ * 25;
+    play_->setPosition (index - wStart, juce::jmin (25, n - wStart));
+    play_->setPageNav (deckWindow_ > 0, wStart + 25 < n);
 }
 
 void AppShell::showBrowseCard (int index) {
@@ -558,6 +634,7 @@ void AppShell::showBrowseCard (int index) {
         play_->setArtwork ({});
         play_->setKept (false);
         play_->setPosition (-1, 0);
+        play_->setPageNav (browsePage_ > 1, false);   // back out of an empty page
         return;
     }
     const int n = (int) playDeck_.size();
@@ -578,6 +655,8 @@ void AppShell::showBrowseCard (int index) {
         pushPairChoices();
     }
     play_->setPosition (index, n);
+    // A full page implies more pages upstream (TONE3000 pages are 25).
+    play_->setPageNav (browsePage_ > 1, n >= 25);
 }
 
 void AppShell::runPlayBrowse() {
@@ -585,6 +664,7 @@ void AppShell::runPlayBrowse() {
     // Build real /tones/search params from the strip + flyout state.
     nam::SearchParams p;
     p.sort = "trending";
+    p.page = browsePage_;
     const int gi = browseGear_ - 1;   // dropdown index 0 = All Gear
     if (gi >= 0 && gi < (int) (sizeof (kGearVocab) / sizeof (kGearVocab[0])))
         p.gears.push_back (kGearVocab[gi].api);
@@ -637,6 +717,105 @@ void AppShell::pushPairChoices() {
     } else {
         play_->setPairChoices ("PAIR CAB", cabChoiceNames_, pairCabSel_);
     }
+}
+
+void AppShell::setDeckMode (int v) {
+    if (current_ != play_.get()) show (Screen::Play);
+    if (v == deckMode_) { repaint (navBar_); return; }
+    deckMode_ = v;
+    play_->setDeckView (v);
+    favGear_ = -1;
+    favTags_.clear();
+    favMakes_.clear();
+    browseGear_ = 0;
+    browsePage_ = 1;
+    deckWindow_ = 0;
+    pushFilterGroups();
+    if (svc_.stopDemo) svc_.stopDemo();
+    play_->setDemoPlaying (false);
+    if (deckMode_ == 2) runPlayBrowse();
+    else                showFavCard (0, false);
+    repaint (navBar_);
+}
+
+void AppShell::loadStacksState() {
+    stackList_.clear();
+    stackSel_ = -1;
+    if (! svc_.loadStacksJson) return;
+    const auto parsed = juce::JSON::parse (svc_.loadStacksJson());
+    if (auto* arr = parsed.getArray())
+        for (const auto& v : *arr) {
+            auto* obj = v.getDynamicObject();
+            if (obj == nullptr) continue;
+            StacksScreen::Stack st;
+            st.name = obj->getProperty ("name").toString();
+            if (auto* slots = obj->getProperty ("slots").getArray())
+                for (int k = 0; k < juce::jmin ((int) StacksScreen::kNumSlots,
+                                                slots->size()); ++k) {
+                    auto* so = (*slots)[k].getDynamicObject();
+                    if (so == nullptr) continue;
+                    st.toneIds[(size_t) k] = so->getProperty ("id").toString();
+                    st.titles [(size_t) k] = so->getProperty ("title").toString();
+                    st.formats[(size_t) k] = so->getProperty ("format").toString();
+                }
+            stackList_.push_back (std::move (st));
+        }
+}
+
+void AppShell::saveStacksState() {
+    if (! svc_.saveStacksJson) return;
+    juce::Array<juce::var> arr;
+    for (const auto& st : stackList_) {
+        auto* obj = new juce::DynamicObject();
+        obj->setProperty ("name", st.name);
+        juce::Array<juce::var> slots;
+        for (int k = 0; k < StacksScreen::kNumSlots; ++k) {
+            auto* so = new juce::DynamicObject();
+            so->setProperty ("id", st.toneIds[(size_t) k]);
+            so->setProperty ("title", st.titles[(size_t) k]);
+            so->setProperty ("format", st.formats[(size_t) k]);
+            slots.add (juce::var (so));
+        }
+        obj->setProperty ("slots", slots);
+        arr.add (juce::var (obj));
+    }
+    svc_.saveStacksJson (juce::JSON::toString (juce::var (arr)));
+}
+
+void AppShell::pushStacks() {
+    if (stacks_ != nullptr) stacks_->setStacks (stackList_, stackSel_);
+}
+
+void AppShell::applyStack (int index) {
+    if (index < 0 || index >= (int) stackList_.size() || ! svc_.loadTone) return;
+    const auto& st = stackList_[(size_t) index];
+    auto toneAt = [&st] (int k) {
+        nam::ToneInfo t;
+        t.id     = st.toneIds[(size_t) k].toStdString();
+        t.title  = st.titles [(size_t) k].toStdString();
+        t.format = st.formats[(size_t) k].toStdString();
+        return t;
+    };
+    // The engine chain runs ONE model + ONE impulse: the first filled
+    // head-ish slot becomes the model, the first filled cab/space slot the
+    // impulse. Each loads on the fly (download only if not cached).
+    bool modelPicked = false, irPicked = false;
+    juce::String modelTitle;
+    for (int k : { 0, 2, 3, 5 })   // AMP, PEDAL, OUTBOARD, EXPERIMENTAL
+        if (! modelPicked && st.toneIds[(size_t) k].isNotEmpty()) {
+            modelPicked = true;
+            modelTitle = st.titles[(size_t) k];
+            svc_.loadTone (toneAt (k), [] (bool, juce::String) {});
+        }
+    for (int k : { 1, 4 })         // CABINET, SPACES
+        if (! irPicked && st.toneIds[(size_t) k].isNotEmpty()) {
+            irPicked = true;
+            svc_.loadTone (toneAt (k), [] (bool, juce::String) {});
+        }
+    if (modelPicked)
+        setNowPlayingInfo (modelTitle, st.name.toUpperCase() + " " + kDotSep + " STACK");
+    stackSel_ = index;
+    pushStacks();
 }
 
 void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {
@@ -790,6 +969,7 @@ void AppShell::show (Screen s) {
     if (s == Screen::Library && getModels_) library_->setEntries (getModels_());
     if (s == Screen::Live && getModels_)     live_->setSlots (getModels_());
     if (s == Screen::Devices)                refreshDevices();
+    if (s == Screen::Stacks)                 pushStacks();
 
     // Browse opens onto the live TONE3000 catalog (browse-by-default).
     if (s == Screen::Browse && ! browseLoadedOnce_ && svc_.search) {
@@ -826,6 +1006,7 @@ void AppShell::show (Screen s) {
         case Screen::Library: target = library_.get(); break;
         case Screen::Live:    target = live_.get();    break;
         case Screen::Devices: target = devices_.get(); break;
+        case Screen::Stacks:  target = stacks_.get();  break;
         case Screen::Play:    default: target = play_.get(); break;
     }
     // Persistent chrome: which nav tab is lit for this screen.
@@ -902,24 +1083,35 @@ juce::Rectangle<int> AppShell::contentBounds() const {
 
 void AppShell::resized() {
     auto b = getLocalBounds();
-    // Bottom chrome is just the status orb now (Hi-Fi design): navigation
-    // lives in the Play top bar; the orb is the one persistent control.
+    // Bottom chrome: BROWSE / FAVORITES | status orb | DOWNLOADED / STACKS.
     navBar_ = b.removeFromBottom (juce::jmax (72, getHeight() / 12));
     for (auto& r : navRects_) r = {};
     const int orbD = juce::jmin (58, navBar_.getHeight() - 10);
     orbRect_ = { navBar_.getCentreX() - orbD / 2,
                  navBar_.getCentreY() - orbD / 2, orbD, orbD };
+    {
+        auto left  = navBar_.withTrimmedRight (navBar_.getWidth() / 2 + orbD / 2 + 6)
+                            .withTrimmedLeft (8);
+        auto right = navBar_.withTrimmedLeft (navBar_.getWidth() / 2 + orbD / 2 + 6)
+                            .withTrimmedRight (8);
+        navBrowseRect_ = left.removeFromLeft (left.getWidth() / 2);
+        navFavRect_    = left;
+        navSavedRect_  = right.removeFromLeft (right.getWidth() / 2);
+        navStacksRect_ = right;
+    }
 
-    // I/O mute panel floats above the nav, centred on the orb.
+    // I/O mute panel floats above the nav, centred on the orb (a breath of
+    // padding between the INPUT and OUTPUT rows).
     const int pw = juce::jmin (380, getWidth() - 48);
-    ioPanelRect_ = { getWidth() / 2 - pw / 2, navBar_.getY() - 128 - 10, pw, 128 };
+    ioPanelRect_ = { getWidth() / 2 - pw / 2, navBar_.getY() - 142 - 10, pw, 142 };
     auto rows = ioPanelRect_.reduced (14, 12);
     ioInRow_  = rows.removeFromTop (52);
     ioOutRow_ = rows.removeFromBottom (52);
 
     for (juce::Component* c : { (juce::Component*) play_.get(), (juce::Component*) edit_.get(),
                                 (juce::Component*) browse_.get(), (juce::Component*) library_.get(),
-                                (juce::Component*) live_.get(), (juce::Component*) devices_.get() })
+                                (juce::Component*) live_.get(), (juce::Component*) devices_.get(),
+                                (juce::Component*) stacks_.get() })
         if (c != nullptr) c->setBounds (b);
 
     // The tuner overlay tracks the Play tuner panel, not the screen grid.
@@ -936,6 +1128,73 @@ void AppShell::paint (juce::Graphics& g) {
     // Global bottom chrome only — screens paint everything above it.
     g.setColour (nam::ui::col::bg);
     g.fillRect (navBar_);
+
+    // Nav buttons flanking the orb: vector icon over a micro-label. Deck
+    // buttons light up for the Play deck they select; STACKS for its screen.
+    {
+        const bool onPlay = (current_ == play_.get());
+        auto navBtn = [&] (juce::Rectangle<int> r, const char* label, bool active,
+                           int iconKind) {
+            const auto c = active ? nam::ui::col::accent : nam::ui::col::inkA (0.45f);
+            const auto ib = r.withSizeKeepingCentre (18, 18).toFloat()
+                                .translated (0.0f, -8.0f);
+            g.setColour (c);
+            switch (iconKind) {
+                case 0: {   // magnifier (browse)
+                    const juce::Rectangle<float> lens (ib.getX() + 1.0f, ib.getY() + 1.0f,
+                                                       11.0f, 11.0f);
+                    g.drawEllipse (lens, 1.6f);
+                    g.drawLine ({ { lens.getRight() - 1.5f, lens.getBottom() - 1.5f },
+                                  { ib.getRight() - 1.0f, ib.getBottom() - 1.0f } }, 1.8f);
+                    break;
+                }
+                case 1: {   // heart (favorites)
+                    juce::Path p;
+                    p.startNewSubPath (0.50f, 0.32f);
+                    p.cubicTo (0.50f, 0.20f, 0.38f, 0.12f, 0.27f, 0.12f);
+                    p.cubicTo (0.11f, 0.12f, 0.04f, 0.26f, 0.04f, 0.38f);
+                    p.cubicTo (0.04f, 0.58f, 0.26f, 0.74f, 0.50f, 0.92f);
+                    p.cubicTo (0.74f, 0.74f, 0.96f, 0.58f, 0.96f, 0.38f);
+                    p.cubicTo (0.96f, 0.26f, 0.89f, 0.12f, 0.73f, 0.12f);
+                    p.cubicTo (0.62f, 0.12f, 0.50f, 0.20f, 0.50f, 0.32f);
+                    p.closeSubPath();
+                    p.applyTransform (juce::AffineTransform::scale (ib.getWidth(), ib.getHeight())
+                                          .translated (ib.getX(), ib.getY()));
+                    if (active) g.fillPath (p);
+                    else        g.strokePath (p, juce::PathStrokeType (1.5f));
+                    break;
+                }
+                case 2: {   // down arrow into tray (downloaded)
+                    const float cx = ib.getCentreX();
+                    g.drawLine ({ { cx, ib.getY() + 1.0f }, { cx, ib.getBottom() - 6.0f } }, 1.8f);
+                    juce::Path a;
+                    a.addTriangle (cx - 4.5f, ib.getBottom() - 8.5f,
+                                   cx + 4.5f, ib.getBottom() - 8.5f,
+                                   cx,        ib.getBottom() - 3.5f);
+                    g.fillPath (a);
+                    g.fillRoundedRectangle (ib.getX(), ib.getBottom() - 1.5f,
+                                            ib.getWidth(), 1.8f, 0.9f);
+                    break;
+                }
+                default: {  // three stacked bars (stacks)
+                    for (int i = 0; i < 3; ++i)
+                        g.fillRoundedRectangle (ib.getX() + (float) (2 - i) * 1.5f,
+                                                ib.getY() + 1.0f + (float) i * 5.5f,
+                                                ib.getWidth() - (float) (2 - i) * 3.0f,
+                                                3.0f, 1.5f);
+                    break;
+                }
+            }
+            g.setFont (nam::ui::uiFontTracked (8.0f, true));
+            g.setColour (c);
+            g.drawText (label, r.withTrimmedTop (r.getHeight() / 2 + 6),
+                        juce::Justification::centredTop, false);
+        };
+        navBtn (navBrowseRect_, "BROWSE",  onPlay && deckMode_ == 2, 0);
+        navBtn (navFavRect_,    "FAVORITES", onPlay && deckMode_ == 0, 1);
+        navBtn (navSavedRect_,  "DOWNLOADED", onPlay && deckMode_ == 1, 2);
+        navBtn (navStacksRect_, "STACKS",  current_ == stacks_.get(), 3);
+    }
 
     // Status orb: input level = left arc, output level = right arc, both
     // filling upward from 6 o'clock. Centre shows the round-trip latency
@@ -977,16 +1236,28 @@ void AppShell::paint (juce::Graphics& g) {
                      nam::ui::col::meterBlue, 3.5f);   // output = blue (vs lime input)
         }
 
-        // Centre: latency, or MUTE when the output is silenced.
+        // Centre: latency ms over a "LATENCY" micro-label, or MUTE when the
+        // output is silenced.
         const float bad = juce::jlimit (0.0f, 1.0f, ((float) latencyMs_ - 20.0f) / 30.0f);
-        g.setFont (nam::ui::uiFont (outMuted_ ? 9.0f : 10.0f, true));
-        g.setColour (outMuted_ ? juce::Colour (0xffff3b30)
-                               : nam::ui::col::meterLime.interpolatedWith (
-                                     juce::Colour (0xffff3b30), bad));
-        g.drawText (outMuted_ ? juce::String ("MUTE")
-                              : latencyMs_ > 0.0 ? juce::String ((int) std::round (latencyMs_))
-                                                 : juce::String ("--"),
-                    orbRect_, juce::Justification::centred, false);
+        const auto readout = outMuted_ ? juce::Colour (0xffff3b30)
+                                       : nam::ui::col::meterLime.interpolatedWith (
+                                             juce::Colour (0xffff3b30), bad);
+        if (outMuted_) {
+            g.setFont (nam::ui::uiFont (9.0f, true));
+            g.setColour (readout);
+            g.drawText ("MUTE", orbRect_, juce::Justification::centred, false);
+        } else {
+            g.setFont (nam::ui::uiFont (10.0f, true));
+            g.setColour (readout);
+            g.drawText (latencyMs_ > 0.0 ? juce::String ((int) std::round (latencyMs_))
+                                         : juce::String ("--"),
+                        orbRect_.withTrimmedBottom (10), juce::Justification::centred, false);
+            g.setFont (nam::ui::uiFontTracked (5.5f, true));
+            g.setColour (nam::ui::col::inkA (0.45f));
+            g.drawText ("LATENCY",
+                        orbRect_.withTrimmedTop (orbRect_.getHeight() / 2 + 2),
+                        juce::Justification::centredTop, false);
+        }
     }
 
 }
@@ -1214,6 +1485,16 @@ void AppShell::mouseDown (const juce::MouseEvent& e) {
         ioScrim_.setVisible (true);
         ioScrim_.toFront (false);
         repaint();
+        return;
+    }
+
+    // Nav buttons: deck pickers left/right of the orb, STACKS screen far right.
+    if (navBrowseRect_.contains (p)) { setDeckMode (2); return; }
+    if (navFavRect_.contains (p))    { setDeckMode (0); return; }
+    if (navSavedRect_.contains (p))  { setDeckMode (1); return; }
+    if (navStacksRect_.contains (p)) {
+        show (Screen::Stacks);
+        repaint (navBar_);
         return;
     }
 
