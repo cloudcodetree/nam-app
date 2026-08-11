@@ -30,6 +30,18 @@ public:
     // (amp cards pair a cab; cab cards pair an amp; etc).
     void setPairChoices (juce::String label, juce::StringArray names, int sel);
     void setDeckView (int v);                 // 0 favorites · 1 browse (reflect)
+
+    // Deck contents for the non-card layouts (detail list / grids). The
+    // owner pushes the whole visible deck; `active` highlights the tone the
+    // engine is running. Layout choice itself lives in the strip's view menu.
+    struct DeckItem {
+        juce::String title, sub;
+        juce::Image  thumb;
+        bool kept = false;
+    };
+    void setDeckItems (std::vector<DeckItem> items);
+    void setActiveDeckIndex (int index);
+    std::function<void (int)> onSelectAbsolute;   // list/grid tap -> deck index
     // Cab/IR cards: no amp sliders, no PAIR row (a cab can't pair a cab).
     void setCabCard (bool isCab);
 
@@ -124,6 +136,16 @@ private:
                          metersRow_;
     bool pagePrev_ = false, pageNext_ = false;   // dots-row page arrows
     juce::Rectangle<int> pagePrevRect_, pageNextRect_;
+    // Deck layout: 0 swipe cards · 1 detail list · 2 two-col grid · 3 four-col.
+    int   layoutMode_ = 0;
+    std::vector<DeckItem> deckItems_;
+    int   activeIdx_ = -1;
+    juce::Rectangle<int> viewBtnRect_;           // strip: layout picker button
+    float deckScroll_ = 0.0f, deckPressScroll_ = 0.0f;
+    bool  deckPressed_ = false, deckMoved_ = false;
+    juce::Rectangle<int> deckItemRect (int i) const;   // list/grid geometry
+    int   deckContentHeight() const;
+    void  paintDeckPanel (juce::Graphics& g);
     juce::Rectangle<int> libRect_, prevRect_, nextRect_, dotsRect_, tunerRect_,
                          gearRect_, editTopRect_, liveTopRect_,
                          backBtnRect_,   // card-back return button
@@ -146,7 +168,7 @@ private:
 
     // In-screen dropdown overlay (gear / pair-cab / demo-track pickers) —
     // themed like the filters flyout, anchored to its field, scrollable.
-    enum class Menu { None, Gear, Pair, Demo };
+    enum class Menu { None, Gear, Pair, Demo, ViewType };
     Menu  menu_ = Menu::None;
     juce::Rectangle<int> menuRect_;
     juce::StringArray menuOptions_;

@@ -36,6 +36,12 @@ void ToneEngine::setModel(std::shared_ptr<nam::NamModel> m) {
     // store; render() acquires it, giving a genuinely lock-free hand-off.
     if (current_)
         retired_.push_back(std::move(current_));
+    // Bounded reclamation: only the most recent retirees can still be in a
+    // running render() (a block lasts milliseconds; swaps are user-scale).
+    // Without this, hot-swapping tones (card swipes, auditions) pins every
+    // model ever loaded until the next prepare() — an OOM ratchet on mobile.
+    while (retired_.size() > 4)
+        retired_.erase(retired_.begin());   // frees on the control thread
     current_ = m;
 
     // NAM loudness normalisation: land every model near the -18 dBFS

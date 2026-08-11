@@ -341,8 +341,11 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     if (demoOn && demoLive_.load(std::memory_order_relaxed)) {
         // Live audition (real device): feed the DRY DI loop into the engine
         // as if it were the guitar input — real-time inference, no waiting.
-        const auto& loop = demoTracks_[(size_t) demoTrackRT_.load(std::memory_order_relaxed)];
-        if (! loop.empty()) {
+        // Take our OWN reference: a concurrent re-publish (track fetched on
+        // the message thread) must not pull the buffer out from under us.
+        const auto loopPtr = demoTracks_[(size_t) demoTrackRT_.load(std::memory_order_relaxed)];
+        if (loopPtr != nullptr && ! loopPtr->empty()) {
+            const auto& loop = *loopPtr;
             size_t pos = demoPos_.load(std::memory_order_relaxed);
             for (int i = 0; i < n && i < cap; ++i) {
                 if (pos >= loop.size()) pos = 0;
@@ -354,11 +357,13 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
         } else {
             for (int i = 0; i < n && i < cap; ++i) mono_[(size_t) i] = 0.0f;
         }
-    } else if (demoOn && slot >= 0
-        && ! demoSlots_[(size_t) slot].empty()) {
+    } else if (const auto slotPtr = (demoOn && slot >= 0)
+                   ? demoSlots_[(size_t) slot]
+                   : std::shared_ptr<const std::vector<float>>();
+               slotPtr != nullptr && ! slotPtr->empty()) {
         // Audition: play back the offline-rendered (model-processed) riff.
-        // No inference on the audio thread.
-        const auto& loop = demoSlots_[(size_t) slot];
+        // No inference on the audio thread. Own reference held for the block.
+        const auto& loop = *slotPtr;
         size_t pos = demoPos_.load(std::memory_order_relaxed);
         for (int i = 0; i < n && i < cap; ++i) {
             if (pos >= loop.size()) pos = 0;
@@ -405,8 +410,11 @@ void AndroidAudioApp::getNextAudioBlock(const juce::AudioSourceChannelInfo& info
     const bool outMuted = outputMutedUser_.load(std::memory_order_relaxed);
     for (int ch = 0; ch < buf->getNumChannels(); ++ch) {
         float* out = buf->getWritePointer(ch, info.startSample);
-        for (int i = 0; i < n && i < cap; ++i)
-            out[i] = outMuted ? 0.0f : mono_[(size_t) i];
+        // Write the WHOLE block: an oversized device burst (n > cap) must
+        // not pass its tail through untouched — on a duplex stream those
+        // samples are raw mic input, bypassing every mute.
+        for (int i = 0; i < n; ++i)
+            out[i] = (outMuted || i >= cap) ? 0.0f : mono_[(size_t) i];
     }
 
     // Meter the signal actually leaving the app. The engine's own peak
@@ -790,7 +798,15 @@ void AndroidAudioApp::doSearch(juce::String query,
     };
 
     auto run = [this, query, withBackfill] {
-        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+        // Reuse the session unless the token changed: destroying it joins
+        // its download threads ON THIS (message) THREAD — up to 20 s of ANR
+        // and a cancelled in-flight keep download (same guard as
+        // withValidToken).
+        const auto tok = t3kAuth_.accessToken();
+        if (t3kSession_ == nullptr || sessionToken_ != tok) {
+            t3kSession_ = std::make_unique<nam::Tone3000Session>(tok);
+            sessionToken_ = tok;
+        }
         t3kSession_->search(query.toStdString(), 1, withBackfill);
     };
 
@@ -820,7 +836,12 @@ void AndroidAudioApp::doSearchEx(nam::SearchParams params,
     };
 
     auto run = [this, params, withBackfill] {
-        t3kSession_ = std::make_unique<nam::Tone3000Session>(t3kAuth_.accessToken());
+        // Session reuse guard — see doSearch (ANR + dropped-download hazard).
+        const auto tok = t3kAuth_.accessToken();
+        if (t3kSession_ == nullptr || sessionToken_ != tok) {
+            t3kSession_ = std::make_unique<nam::Tone3000Session>(tok);
+            sessionToken_ = tok;
+        }
         t3kSession_->search(params, withBackfill);
     };
 
@@ -966,13 +987,17 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
     // everything first — a device-rate change invalidates old buffers.
     bool allDecoded = true;
     for (int t = 0; t < nam::demo::kNumTracks; ++t) {
-        demoTracks_[(size_t) t].clear();
+        demoTracks_[(size_t) t] = nullptr;   // prepare-time: audio is stopped
         const char* res = nam::demo::kTracks[t].binaryResource;
         if (res == nullptr) continue;
         int size = 0;
         const char* data = BinaryData::getNamedResource(res, size);
-        if (data == nullptr || size <= 0
-            || ! decodeDiWav(data, (size_t) size, sr, demoTracks_[(size_t) t]))
+        std::vector<float> decoded;
+        if (data != nullptr && size > 0
+            && decodeDiWav(data, (size_t) size, sr, decoded))
+            demoTracks_[(size_t) t] =
+                std::make_shared<const std::vector<float>>(std::move(decoded));
+        else
             allDecoded = false;
     }
     if (allDecoded) return;
@@ -1002,9 +1027,13 @@ void AndroidAudioApp::buildDemoLoop(double sr) {
         { 110.0, 2.4,  0.95f, 0.40, 0.988f },   // A2 stab
         { 82.41, 2.8,  0.95f, 0.12, 0.960f }, { 82.41, 3.0,  0.85f, 0.12, 0.960f },
     };
-    buildKsLoop(demoTracks_[0], sr, 3.2, chords, std::size(chords));
-    buildKsLoop(demoTracks_[1], sr, 3.2, lead,   std::size(lead));
-    buildKsLoop(demoTracks_[2], sr, 3.2, chugs,  std::size(chugs));
+    std::vector<float> ks0, ks1, ks2;
+    buildKsLoop(ks0, sr, 3.2, chords, std::size(chords));
+    buildKsLoop(ks1, sr, 3.2, lead,   std::size(lead));
+    buildKsLoop(ks2, sr, 3.2, chugs,  std::size(chugs));
+    demoTracks_[0] = std::make_shared<const std::vector<float>>(std::move(ks0));
+    demoTracks_[1] = std::make_shared<const std::vector<float>>(std::move(ks1));
+    demoTracks_[2] = std::make_shared<const std::vector<float>>(std::move(ks2));
     demoTracks_[3] = demoTracks_[0];   // bass fallback: reuse chords synth
 }
 
@@ -1022,7 +1051,14 @@ void AndroidAudioApp::setCab(int index) {
 
 void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done) {
     if (index < 0 || index >= nam::demo::kNumTracks) { done(false); return; }
-    if (! demoTracks_[(size_t) index].empty()) { done(true); return; }
+    if (const auto& cur = demoTracks_[(size_t) index]; cur != nullptr && ! cur->empty()) {
+        done(true);
+        return;
+    }
+    // A fetch is already in flight: don't start a second download — the
+    // publish will land shortly and playback picks it up (silence until).
+    if (demoFetching_[(size_t) index]) { done(true); return; }
+    demoFetching_[(size_t) index] = true;
 
     const double sr = sampleRate_;
     const auto cache = diCacheFile(index);
@@ -1052,8 +1088,12 @@ void AndroidAudioApp::ensureDemoTrack(int index, std::function<void(bool)> done)
         const bool ok = bytes.getSize() > 1024
                         && decodeDiWav(bytes.getData(), bytes.getSize(), sr, *mono);
         juce::MessageManager::callAsync([this, index, mono, ok, done] {
-            if (ok) demoTracks_[(size_t) index] = std::move(*mono);
-            done(ok && ! demoTracks_[(size_t) index].empty());
+            demoFetching_[(size_t) index] = false;
+            // Publish a fresh immutable buffer; any audio block still holding
+            // the old shared_ptr keeps a valid reference (no in-place write).
+            if (ok) demoTracks_[(size_t) index] = mono;
+            const auto& cur = demoTracks_[(size_t) index];
+            done(ok && cur != nullptr && ! cur->empty());
         });
     });
 }
@@ -1071,7 +1111,9 @@ void AndroidAudioApp::setLiveInputMuted(bool muted) {
 void AndroidAudioApp::installRenderedDemo(std::vector<float> rendered, bool preservePosition) {
     const int next = (demoSlot_.load(std::memory_order_relaxed) + 1) & 1;
     const size_t len = rendered.size();
-    demoSlots_[(size_t) next] = std::move(rendered);
+    // Publish, never mutate: a reader holding the old buffer keeps it alive.
+    demoSlots_[(size_t) next] =
+        std::make_shared<const std::vector<float>>(std::move(rendered));
     // Model/cab switches keep the demo rolling from the same spot (the DI
     // timeline is identical); anything else starts from the top.
     const bool wasPlaying = demoOn_.load(std::memory_order_relaxed);
@@ -1120,9 +1162,18 @@ void AndroidAudioApp::withValidToken(std::function<void(bool)> then) {
 }
 
 juce::File AndroidAudioApp::modelCacheFile(const std::string& scope) {
+    // The scope embeds API-supplied ids (tone/model). Whitelist the charset
+    // so a hostile id can never traverse out of the cache dir (same
+    // invariant fetchArtwork enforces for artwork paths).
+    std::string safe;
+    safe.reserve(scope.size());
+    for (const char c : scope)
+        if (std::isalnum((unsigned char) c) || c == '_' || c == '-')
+            safe += c;
+    if (safe.empty()) safe = "invalid";
     return juce::File::getSpecialLocation(juce::File::tempDirectory)
         .getChildFile("audition_models")
-        .getChildFile(juce::String(scope) + ".nam");
+        .getChildFile(juce::String(safe) + ".nam");
 }
 
 void AndroidAudioApp::pruneModelCache() {
@@ -1152,7 +1203,9 @@ void AndroidAudioApp::auditionFromFile(juce::File file, bool deleteAfter,
     const double sr = sampleRate_;
     const int liveBlock = blockSize_;
     const bool forcePre = preRenderAuditions_;
-    auto dry = std::make_shared<std::vector<float>>(demoTracks_[(size_t) demoTrack_]);
+    const auto src = demoTracks_[(size_t) demoTrack_];
+    auto dry = std::make_shared<std::vector<float>>(src != nullptr ? *src
+                                                                   : std::vector<float>());
     auto cabIr = overrideIr != nullptr ? overrideIr
                  : (cab_ > 0) ? cabIrs_[(size_t) cab_] : nullptr;
 

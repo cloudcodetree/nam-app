@@ -346,9 +346,14 @@ void AppShell::setBrowseServices (BrowseServices services) {
         if (! svc_.listModels || idx < 0 || idx >= (int) browseResults_.size()) return;
         const auto toneId = browseResults_[(size_t) idx].id;
         svc_.listModels (toneId,
-            [this, idx] (bool ok, std::vector<nam::ModelInfo> models, juce::String err) {
+            [this, idx, toneId] (bool ok, std::vector<nam::ModelInfo> models, juce::String err) {
                 if (! ok) { browse_->setStatus ("Models: " + err); return; }
-                if (idx >= (int) browseModels_.size()) return;
+                // A newer search may have replaced the rows while this was in
+                // flight — only bind if row idx is still the SAME tone.
+                if (idx >= (int) browseModels_.size()
+                    || idx >= (int) browseResults_.size()
+                    || browseResults_[(size_t) idx].id != toneId)
+                    return;
                 browseModels_[(size_t) idx] = models;
                 juce::StringArray names;
                 for (const auto& m : models)
@@ -798,22 +803,27 @@ void AppShell::applyStack (int index) {
     };
     // The engine chain runs ONE model + ONE impulse: the first filled
     // head-ish slot becomes the model, the first filled cab/space slot the
-    // impulse. Each loads on the fly (download only if not cached).
-    bool modelPicked = false, irPicked = false;
-    juce::String modelTitle;
+    // impulse. Loads are SEQUENTIAL — the host funnels downloads through one
+    // session thread, so a concurrent cab fetch would supersede (cancel) the
+    // amp fetch and the amp would never load.
+    int modelSlot = -1, irSlot = -1;
     for (int k : { 0, 2, 3, 5 })   // AMP, PEDAL, OUTBOARD, EXPERIMENTAL
-        if (! modelPicked && st.toneIds[(size_t) k].isNotEmpty()) {
-            modelPicked = true;
-            modelTitle = st.titles[(size_t) k];
-            svc_.loadTone (toneAt (k), [] (bool, juce::String) {});
-        }
+        if (modelSlot < 0 && st.toneIds[(size_t) k].isNotEmpty()) modelSlot = k;
     for (int k : { 1, 4 })         // CABINET, SPACES
-        if (! irPicked && st.toneIds[(size_t) k].isNotEmpty()) {
-            irPicked = true;
-            svc_.loadTone (toneAt (k), [] (bool, juce::String) {});
-        }
-    if (modelPicked)
-        setNowPlayingInfo (modelTitle, st.name.toUpperCase() + " " + kDotSep + " STACK");
+        if (irSlot < 0 && st.toneIds[(size_t) k].isNotEmpty()) irSlot = k;
+
+    auto loadIrSlot = [this, irSlot, tone = irSlot >= 0 ? toneAt (irSlot)
+                                                        : nam::ToneInfo{}] {
+        if (irSlot >= 0) svc_.loadTone (tone, [] (bool, juce::String) {});
+    };
+    if (modelSlot >= 0) {
+        setNowPlayingInfo (st.titles[(size_t) modelSlot],
+                           st.name.toUpperCase() + " " + kDotSep + " STACK");
+        svc_.loadTone (toneAt (modelSlot),
+                       [loadIrSlot] (bool, juce::String) { loadIrSlot(); });
+    } else {
+        loadIrSlot();
+    }
     stackSel_ = index;
     pushStacks();
 }

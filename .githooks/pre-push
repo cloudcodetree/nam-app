@@ -35,7 +35,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
         2>&1)
     echo "$out"
 
-    if printf '%s\n' "$out" | grep -q "VERDICT: PASS"; then
+    # Anchor to the LAST verdict-bearing line: findings legitimately quote
+    # the contract strings, so a whole-transcript grep is spoofable (the
+    # reviewer itself caught this).
+    verdict=$(printf '%s\n' "$out" | grep -oE "VERDICT: (PASS|BLOCK)" | tail -n 1)
+    if [ "$verdict" = "VERDICT: PASS" ]; then
         echo "[pre-push] review passed for $range"
     else
         echo "[pre-push] BLOCKED: adversarial review did not pass for $range"

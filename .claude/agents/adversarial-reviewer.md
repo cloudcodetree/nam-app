@@ -22,6 +22,13 @@ scenario (inputs/state → wrong outcome) is not a finding.
 
 ## Project invariants to attack against
 
+**Coding standards (CLAUDE.md).** Read the repo's `CLAUDE.md` and hold the
+diff to it. Structural violations in new/changed code — a new file over 400
+lines, an already-800+-line file growing instead of extracting, a new .cpp
+missing from a consuming CMake target, unbounded caches — are MAJOR findings.
+Standards violations that can corrupt audio, leak data, or crash rank as the
+rule says: BLOCKER.
+
 **Real-time audio (highest severity).** Nothing on the audio thread
 (`getNextAudioBlock`, `dsp::ToneEngine::render`, anything they call) may
 allocate, lock, throw, log, or do I/O. Cross-thread state passes through

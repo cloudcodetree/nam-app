@@ -93,6 +93,42 @@ void PlayScreen::setDeckView (int v) {
     repaint();
 }
 
+void PlayScreen::setDeckItems (std::vector<DeckItem> items) {
+    deckItems_ = std::move (items);
+    deckScroll_ = juce::jlimit (0.0f,
+        (float) juce::jmax (0, deckContentHeight() - artRect_.getHeight()), deckScroll_);
+    if (layoutMode_ != 0) repaint (artRect_.expanded (12));
+}
+
+void PlayScreen::setActiveDeckIndex (int index) {
+    if (activeIdx_ == index) return;
+    activeIdx_ = index;
+    if (layoutMode_ != 0) repaint (artRect_.expanded (12));
+}
+
+// List/grid geometry, shared by paint and hit-testing. Rects are in screen
+// coords with the current scroll applied.
+juce::Rectangle<int> PlayScreen::deckItemRect (int i) const {
+    const auto area = artRect_.reduced (10, 10);
+    if (layoutMode_ == 1) {
+        constexpr int rowH = 68, gap = 6;
+        return { area.getX(), area.getY() + i * (rowH + gap) - (int) deckScroll_,
+                 area.getWidth(), rowH };
+    }
+    const int cols = layoutMode_ == 2 ? 2 : 4;
+    const int gap = layoutMode_ == 2 ? 8 : 6;
+    const int cw = (area.getWidth() - gap * (cols - 1)) / cols;
+    return { area.getX() + (i % cols) * (cw + gap),
+             area.getY() + (i / cols) * (cw + gap) - (int) deckScroll_, cw, cw };
+}
+
+int PlayScreen::deckContentHeight() const {
+    const int n = (int) deckItems_.size();
+    if (n == 0) return 0;
+    const auto last = deckItemRect (n - 1);
+    return last.getBottom() + (int) deckScroll_ - (artRect_.getY() + 10) + 20;
+}
+
 void PlayScreen::setPageNav (bool canPrev, bool canNext) {
     if (pagePrev_ == canPrev && pageNext_ == canNext) return;
     pagePrev_ = canPrev;

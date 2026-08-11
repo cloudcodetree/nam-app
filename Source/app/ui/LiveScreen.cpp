@@ -52,7 +52,7 @@ void LiveScreen::paint (juce::Graphics& g) {
     text ("EXIT", uiFontTracked (12.0f, true), col::inkA (0.7f), exitRect_, juce::Justification::centred);
 
     if (slots_.empty()) {
-        text ("No tones yet — keep some from Radio or Library",
+        text (juce::String::fromUTF8 ("No tones yet \xE2\x80\x94 keep some from Radio or Library"),
               uiFont (14.0f, false), col::inkA (0.5f), getLocalBounds(), juce::Justification::centred);
         return;
     }
