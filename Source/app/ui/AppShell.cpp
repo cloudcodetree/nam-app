@@ -47,25 +47,14 @@ const SortDef kSortVocab[] = {
 
 AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_ = std::make_unique<PlayScreen> ();
-    edit_ = std::make_unique<EditScreen> (engine_);
-    browse_ = std::make_unique<BrowseScreen> ();
-    library_ = std::make_unique<LibraryScreen> ();
-    live_ = std::make_unique<LiveScreen> ();
-    devices_ = std::make_unique<AudioSettingsScreen> ();
     stacks_ = std::make_unique<StacksScreen> ();
     tuner_ = std::make_unique<TunerScreen> ();
     tuner_->setPanelMode (true);   // hosted as a card over Play, not a screen
 
-    for (juce::Component* c : { (juce::Component*)play_.get (), (juce::Component*)edit_.get (),
-                                (juce::Component*)browse_.get (), (juce::Component*)library_.get (),
-                                (juce::Component*)live_.get (), (juce::Component*)devices_.get (),
-                                (juce::Component*)stacks_.get (), (juce::Component*)tuner_.get () })
+    for (juce::Component* c : { (juce::Component*)play_.get (), (juce::Component*)stacks_.get (),
+                                (juce::Component*)tuner_.get () })
         addChildComponent (*c);
 
-    play_->onLibrary = [this] { show (Screen::Library); };
-    play_->onSettings = [this] { show (Screen::Devices); };
-    play_->onEdit = [this] { show (Screen::Edit); };
-    play_->onLive = [this] { show (Screen::Live); };
     play_->onPrev = [this] { stepCollection (-1); };
     play_->onNext = [this] { stepCollection (+1); };
     play_->onSelectAbsolute = [this] (int i) {   // list/grid rows: full-deck index
@@ -311,13 +300,6 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         }
         closeMoreMenu ();
     };
-    devices_->onBack = [this] { show (Screen::Play); };
-    edit_->onDone = [this] { show (Screen::Play); };
-    browse_->onBack = [this] { show (Screen::Play); };
-    library_->onBack = [this] { show (Screen::Play); };
-    live_->onExit = [this] { show (Screen::Play); };
-
-    devices_->onSetInputDb = [this] (float db) { engine_.setInputDb (db); };
 
     // Card-back quick sliders -> engine (same ranges as the EDIT screen).
     play_->onToneParam = [this] (int idx, float v) {
@@ -337,169 +319,6 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
 void AppShell::setBrowseServices (BrowseServices services) {
     svc_ = std::move (services);
 
-    browse_->onQuery = [this] (juce::String q) { runBrowseSearch (std::move (q)); };
-
-    browse_->onSort = [this] (int mode) {
-        browseSort_ = mode;
-        pushBrowseResults ();
-    };
-
-    browse_->onFavorites = [this] {
-        stopAudition ();
-        browseUnsorted_ = svc_.listKept ? svc_.listKept () : std::vector<nam::ToneInfo>{};
-        pushBrowseResults ();
-        browse_->setStatus (
-            browseUnsorted_.empty ()
-                ? ("Deck is empty " + kDotSep + " " + kHeart + " tones to collect them")
-                : ("Your tone deck " + kDotSep + " " + juce::String ((int)browseUnsorted_.size ()) +
-                   (browseUnsorted_.size () == 1 ? " tone" : " tones")));
-    };
-
-    browse_->onKeep = [this] (int idx) {
-        if (!svc_.keep || idx < 0 || idx >= (int)browseResults_.size ()) return;
-        const auto tone = browseResults_[(size_t)idx];
-        const bool wasKept = svc_.isKept && svc_.isKept (tone.id);
-        browse_->setStatus ((wasKept ? "Removing \"" : "Adding \"") + juce::String (tone.title) +
-                            "\"" + kEllipsis);
-        svc_.keep (tone, [this, wasKept] (bool ok, juce::String msg) {
-            browse_->setStatus (
-                !ok       ? ("Deck update failed: " + msg)
-                : wasKept ? ("Removed from deck: " + msg)
-                          : (juce::String::fromUTF8 ("\xE2\x99\xA5") + " In deck: " + msg));
-            refreshCachedFlags ();
-        });
-    };
-
-    browse_->onExpand = [this] (int idx) {
-        if (!svc_.listModels || idx < 0 || idx >= (int)browseResults_.size ()) return;
-        const auto toneId = browseResults_[(size_t)idx].id;
-        svc_.listModels (toneId, [this, idx, toneId] (bool ok, std::vector<nam::ModelInfo> models,
-                                                      juce::String err) {
-            if (!ok) {
-                browse_->setStatus ("Models: " + err);
-                return;
-            }
-            // A newer search may have replaced the rows while this was in
-            // flight — only bind if row idx is still the SAME tone.
-            if (idx >= (int)browseModels_.size () || idx >= (int)browseResults_.size () ||
-                browseResults_[(size_t)idx].id != toneId)
-                return;
-            browseModels_[(size_t)idx] = models;
-            juce::StringArray names;
-            for (const auto& m : models) names.add (juce::String (m.name.empty () ? m.id : m.name));
-            browse_->setModels (idx, names);
-            // Tell the UI which variant "Auto (best)" actually resolves to.
-            nam::ModelInfo best;
-            if (nam::pickBestModel (models, best)) {
-                int bestIdx = -1;
-                for (size_t k = 0; k < models.size (); ++k)
-                    if (models[k].id == best.id) {
-                        bestIdx = (int)k;
-                        break;
-                    }
-                browse_->setDefaultModel (idx, bestIdx,
-                                          juce::String (best.name.empty () ? best.id : best.name));
-            }
-        });
-    };
-
-    browse_->onPlayPack = [this] (int idx) {
-        if (idx < 0 || idx >= (int)browseResults_.size ()) return;
-        if (idx == auditioningPack_ && auditioningModel_ < 0) {   // toggle stop
-            stopAudition ();
-            browse_->setStatus ("Stopped");
-            return;
-        }
-        if (!svc_.audition) return;
-        const auto tone = browseResults_[(size_t)idx];
-        browse_->setLoading (idx, 0.04f);
-        browse_->setStatus ("Preparing \"" + juce::String (tone.title) + "\"" + kEllipsis);
-        svc_.audition (tone, [this, idx, tone] (bool ok, juce::String msg) {
-            browse_->setLoading (-1, 0.0f);
-            if (!ok) {
-                browse_->setStatus ("Audition failed: " + msg);
-                return;
-            }
-            auditioningPack_ = idx;
-            auditioningModel_ = -1;
-            browse_->setPlaying (idx, -1);
-            browse_->setStatus ("Auditioning \"" + juce::String (tone.title) + "\"");
-            refreshCachedFlags ();
-            // The engine now runs this tone: reflect it on the Play screen.
-            auditionToneId_ = tone.id;
-            collectionIndex_ = -1;
-            play_->setNowPlaying (juce::String (tone.title),
-                                  (tone.gear.empty () ? juce::String ("TONE3000")
-                                                      : juce::String (tone.gear).toUpperCase () +
-                                                            " " + kDotSep + " TONE3000"),
-                                  {});
-            play_->setPosition (-1, 0);
-        });
-    };
-
-    browse_->onPlayModel = [this] (int idx, int modelIdx) {
-        if (!svc_.auditionModel || idx < 0 || idx >= (int)browseModels_.size ()) return;
-        const auto& models = browseModels_[(size_t)idx];
-        if (modelIdx < 0 || modelIdx >= (int)models.size ()) return;
-        const auto tone = browseResults_[(size_t)idx];
-        const auto model = models[(size_t)modelIdx];
-        browse_->setLoading (idx, 0.04f);
-        browse_->setStatus ("Preparing variant" + kEllipsis);
-        svc_.auditionModel (tone.id, model, tone.format == "ir",
-                            [this, idx, modelIdx, tone] (bool ok, juce::String msg) {
-                                browse_->setLoading (-1, 0.0f);
-                                if (!ok) {
-                                    browse_->setStatus ("Audition failed: " + msg);
-                                    return;
-                                }
-                                auditioningPack_ = idx;
-                                auditioningModel_ = modelIdx;
-                                browse_->setPlaying (idx, modelIdx);
-                                browse_->setStatus ("Auditioning \"" + msg + "\"");
-                                if (tone.format != "ir")
-                                    auditionToneId_ = tone.id;   // IRs swap the cab, not the amp
-                                collectionIndex_ = -1;
-                                play_->setNowPlaying (msg, "TONE3000", {});
-                                play_->setPosition (-1, 0);
-                            });
-    };
-
-    browse_->onCab = [this] (int cabIdx) {
-        if (svc_.setCab) svc_.setCab (cabIdx);
-        refreshCachedFlags ();
-        // Live auditions pick the cab up instantly; re-render buffered ones.
-        if (auditioningPack_ >= 0) {
-            const int pack = auditioningPack_, model = auditioningModel_;
-            if (model >= 0) browse_->onPlayModel (pack, model);
-            else {
-                auditioningPack_ = -1;
-                browse_->onPlayPack (pack);
-            }
-        }
-    };
-
-    browse_->onDemoTrack = [this] (int track) {
-        if (!svc_.setDemoTrack) return;
-        browse_->setStatus ("Fetching demo track" + kEllipsis);
-        svc_.setDemoTrack (track, [this] (bool ok) {
-            if (!ok) {
-                browse_->setStatus ("Demo track unavailable (offline?)");
-                return;
-            }
-            browse_->setStatus ("Demo track ready");
-            refreshCachedFlags ();
-            // Re-audition with the new riff, if something is playing.
-            if (auditioningPack_ >= 0) {
-                const int pack = auditioningPack_, model = auditioningModel_;
-                if (model >= 0) browse_->onPlayModel (pack, model);
-                else {
-                    auditioningPack_ = -1;
-                    browse_->onPlayPack (pack);
-                }
-            }
-        });
-    };
-
     // Saved stacks live behind the host's persistence service.
     loadStacksState ();
     pushStacks ();
@@ -508,46 +327,15 @@ void AppShell::setBrowseServices (BrowseServices services) {
 void AppShell::stopAudition () {
     if (svc_.stopDemo) svc_.stopDemo ();
     auditioningPack_ = auditioningModel_ = -1;
-    browse_->setPlaying (-1, -1);
-    browse_->setLoading (-1, 0.0f);
     play_->setDemoPlaying (false);
 }
 
-void AppShell::setAuditionProgress (float progress) { browse_->setLoadingProgress (progress); }
-
-void AppShell::refreshCachedFlags () {
-    if (svc_.isAuditionCached) {
-        std::vector<bool> flags (browseResults_.size (), false);
-        for (size_t i = 0; i < browseResults_.size (); ++i)
-            flags[i] = svc_.isAuditionCached (browseResults_[i].id);
-        browse_->setCachedFlags (std::move (flags));
-    }
-    if (svc_.isDownloaded) {
-        std::vector<bool> dl (browseResults_.size (), false);
-        for (size_t i = 0; i < browseResults_.size (); ++i)
-            dl[i] = svc_.isDownloaded (browseResults_[i].id);
-        browse_->setDownloadedFlags (std::move (dl));
-    }
-    if (svc_.isKept) {
-        std::vector<bool> kept (browseResults_.size (), false);
-        for (size_t i = 0; i < browseResults_.size (); ++i)
-            kept[i] = svc_.isKept (browseResults_[i].id);
-        browse_->setKeptFlags (std::move (kept));
-    }
-}
+// Kept for the host API; the audition progress bar left with BrowseScreen.
+void AppShell::setAuditionProgress (float) {}
 
 void AppShell::setLibraryService (GetModelsFn getModels, LoadModelFn loadModel) {
     getModels_ = std::move (getModels);
     loadModel_ = std::move (loadModel);
-    library_->onLoad = [this] (nam::LibraryEntry e) {
-        if (loadModel_) loadModel_ (e);
-        showEntryAsNowPlaying (e);
-        show (Screen::Play);
-    };
-    live_->onSelect = [this] (nam::LibraryEntry e) {
-        if (loadModel_) loadModel_ (e);
-        showEntryAsNowPlaying (e);
-    };
 }
 
 std::vector<nam::LibraryEntry> AppShell::favDeckAll () const {
@@ -950,36 +738,6 @@ void AppShell::stepCollection (int delta) {
     showFavCard (collectionIndex_ < 0 ? (delta > 0 ? 0 : -1) : collectionIndex_ + delta, true);
 }
 
-void AppShell::runBrowseSearch (juce::String q) {
-    if (!svc_.search) return;
-    stopAudition ();
-    browse_->setStatus (q.isEmpty () ? ("Tuning in to TONE3000" + kEllipsis)
-                                     : ("Searching \"" + q + "\"" + kEllipsis));
-    svc_.search (q, [this] (bool ok, std::vector<nam::ToneInfo> tones, juce::String err) {
-        if (!ok) {
-            browse_->setStatus ("TONE3000: " + err);
-            return;
-        }
-        browseUnsorted_ = std::move (tones);
-        pushBrowseResults ();
-        browse_->setStatus (juce::String ((int)browseUnsorted_.size ()) +
-                            (browseUnsorted_.size () == 1 ? " pack" : " packs") + " " + kDotSep +
-                            " tap a pack to expand " + kDotSep + " " + kHeart + " keeps");
-    });
-}
-
-void AppShell::pushBrowseResults () {
-    // Sorting lives HERE so browseResults_ order always matches the rows the
-    // screen displays (index-based callbacks depend on it).
-    browseResults_ = browseUnsorted_;
-    if (browseSort_ == 1)
-        std::stable_sort (browseResults_.begin (), browseResults_.end (),
-                          [] (const auto& a, const auto& b) { return a.downloads > b.downloads; });
-    browseModels_.assign (browseResults_.size (), {});
-    browse_->setResults (browseResults_);
-    refreshCachedFlags ();
-}
-
 void AppShell::setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInput,
                                       SelectDeviceFn selectOutput, RescanFn rescan,
                                       SelectDeviceFn selectRate, SelectDeviceFn selectBuffer) {
@@ -989,32 +747,6 @@ void AppShell::setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInp
     rescanDevices_ = std::move (rescan);
     selectRate_ = std::move (selectRate);
     selectBuffer_ = std::move (selectBuffer);
-
-    devices_->onRescan = [this] {
-        if (rescanDevices_) rescanDevices_ ();
-        refreshDevices ();
-    };
-    devices_->onSelectInput = [this] (juce::String name) {
-        if (selectInput_) selectInput_ (name);
-        refreshDevices ();
-    };
-    devices_->onSelectOutput = [this] (juce::String name) {
-        if (selectOutput_) selectOutput_ (name);
-        refreshDevices ();
-    };
-    devices_->onSelectRate = [this] (juce::String label) {
-        if (selectRate_) selectRate_ (label);
-        refreshDevices ();
-    };
-    devices_->onSelectBuffer = [this] (juce::String label) {
-        if (selectBuffer_) selectBuffer_ (label);
-        refreshDevices ();
-    };
-}
-
-void AppShell::refreshDevices () {
-    if (!getDevices_) return;
-    devices_->setState (getDevices_ ());
 }
 
 bool AppShell::handleBackButton () {
@@ -1077,18 +809,7 @@ void AppShell::show (Screen s) {
     }
 
     // Refresh data-backed screens as they come into view.
-    if (s == Screen::Library && getModels_) library_->setEntries (getModels_ ());
-    if (s == Screen::Live && getModels_) live_->setSlots (getModels_ ());
-    if (s == Screen::Devices) refreshDevices ();
     if (s == Screen::Stacks) pushStacks ();
-
-    // Browse opens onto the live TONE3000 catalog (browse-by-default).
-    if (s == Screen::Browse && !browseLoadedOnce_ && svc_.search) {
-        browseLoadedOnce_ = true;
-        runBrowseSearch ({});
-    }
-    // Leaving Browse stops any audition demo.
-    if (s != Screen::Browse && auditioningPack_ >= 0) stopAudition ();
 
     // Arriving at Play with an audition tone still in the engine: if that
     // tone was hearted into the deck, promote it to the ACTIVE library entry
@@ -1109,27 +830,9 @@ void AppShell::show (Screen s) {
         }
     }
 
-    juce::Component* target = play_.get ();
-    switch (s) {
-        case Screen::Edit: target = edit_.get (); break;
-        case Screen::Browse: target = browse_.get (); break;
-        case Screen::Library: target = library_.get (); break;
-        case Screen::Live: target = live_.get (); break;
-        case Screen::Devices: target = devices_.get (); break;
-        case Screen::Stacks: target = stacks_.get (); break;
-        case Screen::Play:
-        default: target = play_.get (); break;
-    }
-    // Persistent chrome: which nav tab is lit for this screen.
-    switch (s) {
-        case Screen::Play: activeTab_ = 0; break;
-        case Screen::Edit: activeTab_ = 1; break;
-        case Screen::Browse: activeTab_ = 2; break;
-        case Screen::Live: activeTab_ = 3; break;
-        case Screen::Devices: activeTab_ = 4; break;
-        default: activeTab_ = -1; break;
-    }
-    repaint (navBar_);
+    juce::Component* target =
+        (s == Screen::Stacks) ? (juce::Component*)stacks_.get () : (juce::Component*)play_.get ();
+    repaint (navBar_);   // active nav highlight tracks the visible screen
 
     if (current_ == target) return;
     if (current_ != nullptr) current_->setVisible (false);
@@ -1141,7 +844,6 @@ void AppShell::show (Screen s) {
 
 void AppShell::setLevels (float in, float out) {
     if (play_ != nullptr) play_->setLevels (in, out);
-    if (devices_ != nullptr) devices_->setLevels (in, out);
     if (std::abs (in - meterInPeak_) > 0.005f || std::abs (out - meterOutPeak_) > 0.005f) {
         meterInPeak_ = in;
         meterOutPeak_ = out;
@@ -1196,7 +898,6 @@ void AppShell::resized () {
     auto b = getLocalBounds ();
     // Bottom chrome: BROWSE / FAVORITES | status orb | DOWNLOADED / STACKS.
     navBar_ = b.removeFromBottom (juce::jmax (72, getHeight () / 12));
-    for (auto& r : navRects_) r = {};
     const int orbD = juce::jmin (58, navBar_.getHeight () - 10);
     orbRect_ = { navBar_.getCentreX () - orbD / 2, navBar_.getCentreY () - orbD / 2, orbD, orbD };
     {
@@ -1227,10 +928,7 @@ void AppShell::resized () {
         ioBufPill_ = pills.removeFromRight (70).withSizeKeepingCentre (70, 28);
     }
 
-    for (juce::Component* c : { (juce::Component*)play_.get (), (juce::Component*)edit_.get (),
-                                (juce::Component*)browse_.get (), (juce::Component*)library_.get (),
-                                (juce::Component*)live_.get (), (juce::Component*)devices_.get (),
-                                (juce::Component*)stacks_.get () })
+    for (juce::Component* c : { (juce::Component*)play_.get (), (juce::Component*)stacks_.get () })
         if (c != nullptr) c->setBounds (b);
 
     // The tuner overlay tracks the Play tuner panel, not the screen grid.

@@ -186,7 +186,7 @@ void PlayScreen::layout () {
 
     // No top bar (wordmark and settings gear retired — audio config lives
     // in the status-orb flyout now).
-    topBar_ = libRect_ = gearRect_ = liveTopRect_ = editTopRect_ = {};
+    topBar_ = {};
 
     // Strip above the card: the current view's title on the left; the
     // Filters pill (and, on browse, the gear-type dropdown) pushed right.
@@ -927,10 +927,9 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
     if (flipped_) {
         if (tap && pressPos_.y >= artRect_.getY ()   // filter strip taps never flip
             && !prevRect_.contains (pressPos_) && !nextRect_.contains (pressPos_) &&
-            !gearRect_.contains (pressPos_) && !tunerRect_.contains (pressPos_) &&
-            !dotsRect_.contains (pressPos_) && !viewRow_.contains (pressPos_) &&
-            !pairRowRect_.contains (pressPos_) && !demoRowRect_.contains (pressPos_) &&
-            !demoPlayRect_.contains (pressPos_)) {
+            !tunerRect_.contains (pressPos_) && !dotsRect_.contains (pressPos_) &&
+            !viewRow_.contains (pressPos_) && !pairRowRect_.contains (pressPos_) &&
+            !demoRowRect_.contains (pressPos_) && !demoPlayRect_.contains (pressPos_)) {
             toggleFlip ();
             return;
         }

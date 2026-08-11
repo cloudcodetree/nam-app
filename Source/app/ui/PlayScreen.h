@@ -49,13 +49,10 @@ public:
     // grows upward from here and leaves it exposed as the collapse handle.
     juce::Rectangle<int> tunerPanelBounds () const { return tunerRect_; }
 
-    std::function<void ()> onLibrary;
     std::function<void ()> onPrev, onNext;   // step through the collection
     // Fires when the user nears the END of the deck (last cards in swipe
     // view, bottom of list/grid): the owner appends the next results page.
     std::function<void ()> onDeckEndReached;
-    std::function<void ()> onSettings;        // top-bar gear -> audio settings
-    std::function<void ()> onEdit, onLive;    // top-bar shortcuts
     std::function<void ()> onTuner;           // tuner panel -> strobe tuner
     std::function<void (int)> onViewChange;   // 0 favorites · 1 downloaded · 2 browse
     std::function<void ()> onKeepToggle;      // heart tap / swipe-down keep
@@ -156,8 +153,7 @@ private:
     juce::Rectangle<int> deckItemRect (int i) const;   // list/grid geometry
     int deckContentHeight () const;
     void paintDeckPanel (juce::Graphics& g);
-    juce::Rectangle<int> libRect_, prevRect_, nextRect_, dotsRect_, tunerRect_, gearRect_,
-        editTopRect_, liveTopRect_,
+    juce::Rectangle<int> prevRect_, nextRect_, dotsRect_, tunerRect_,
         backBtnRect_,   // card-back return button
         cardEqRect_,    // card-front flip affordance (mixer icon)
         heartRect_,     // card-footer keep toggle

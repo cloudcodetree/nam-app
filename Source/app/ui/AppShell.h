@@ -9,11 +9,7 @@
 #include "net/Tone3000Api.h"
 #include "model/LibraryEntry.h"
 #include "app/ui/PlayScreen.h"
-#include "app/ui/EditScreen.h"
-#include "app/ui/BrowseScreen.h"
-#include "app/ui/LibraryScreen.h"
-#include "app/ui/LiveScreen.h"
-#include "app/ui/AudioSettingsScreen.h"
+#include "app/ui/AudioSettingsState.h"
 #include "app/ui/StacksScreen.h"
 #include "app/ui/TunerScreen.h"
 
@@ -127,25 +123,16 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
-    enum class Screen { Play, Edit, Library, Browse, Live, Devices, Stacks };
+    enum class Screen { Play, Stacks };
     void show (Screen s);
-    void toggleTuner ();   // expand/collapse the tuner overlay
-    void refreshDevices ();
-    void runBrowseSearch (juce::String query);
-    void pushBrowseResults ();   // apply sort + sync the screen
-    void runPlayBrowse ();       // structured search from filter state
+    void toggleTuner ();     // expand/collapse the tuner overlay
+    void runPlayBrowse ();   // structured search from filter state
     void stopAudition ();
-    void refreshCachedFlags ();
     void stepCollection (int delta);               // Play ‹ › through the Library
     juce::Rectangle<int> contentBounds () const;   // above the global chrome
 
     dsp::ToneEngine& engine_;
     std::unique_ptr<PlayScreen> play_;
-    std::unique_ptr<EditScreen> edit_;
-    std::unique_ptr<BrowseScreen> browse_;
-    std::unique_ptr<LibraryScreen> library_;
-    std::unique_ptr<LiveScreen> live_;
-    std::unique_ptr<AudioSettingsScreen> devices_;
     std::unique_ptr<StacksScreen> stacks_;
     std::unique_ptr<TunerScreen> tuner_;   // overlay above Play, not a screen
     // Invisible click-catcher under the tuner card: any tap outside the card
@@ -188,9 +175,8 @@ private:
     juce::Component* current_ = nullptr;
 
     BrowseServices svc_;
-    std::string auditionToneId_;   // engine still runs this tone after Browse
+    std::string auditionToneId_;   // engine still runs the last-auditioned tone
     int auditioningPack_ = -1, auditioningModel_ = -1;
-    bool browseLoadedOnce_ = false;
     int collectionIndex_ = -1;   // Play screen position in the Library
 
     // Global bottom chrome: persistent nav bar with a central status orb —
@@ -212,8 +198,6 @@ private:
     juce::Rectangle<int> ioTestRect_;               // TEST TONE toggle row
     bool testToneOn_ = false;
     bool ioPanelOpen_ = false;
-    std::array<juce::Rectangle<int>, 5> navRects_;
-    int activeTab_ = 0;   // 0 Play · 1 Edit · 2 Tones · 3 Live · 4 Setup (-1 none)
     float meterInPeak_ = 0.0f, meterOutPeak_ = 0.0f;
     bool inMuted_ = false, outMuted_ = false;
     MuteFn muteInput_, muteOutput_;
@@ -262,10 +246,6 @@ private:
     GetDevicesFn getDevices_;
     SelectDeviceFn selectInput_, selectOutput_, selectRate_, selectBuffer_;
     RescanFn rescanDevices_;
-    std::vector<nam::ToneInfo> browseResults_;    // display order (matches rows)
-    std::vector<nam::ToneInfo> browseUnsorted_;   // as received (trending order)
-    int browseSort_ = 0;                          // 0 trending · 1 most kept
-    std::vector<std::vector<nam::ModelInfo>> browseModels_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppShell)
 };
