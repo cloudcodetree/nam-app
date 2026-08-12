@@ -57,6 +57,15 @@ growth, god functions, unregistered sources) are MAJOR.
   shadow existing gestures, and hit tests must guard against empty rects
   (`empty.expanded(k)` creates a live region near the origin).
 
+## Product rules
+
+- **TONE3000 parity is free.** Any functionality tone3000.com offers its
+  users for free (search, filters, tone pages, audio previews, downloads,
+  favorites/collections) must be free in the app — the paywall may only
+  gate APP-NATIVE value adds (Stacks, view layouts, extra DI audition
+  tracks, future MIDI/looper/pedalboard). Gating a TONE3000-equivalent
+  feature is a review finding. The `/tone3000-parity` skill audits this.
+
 ## Security
 
 - `TONE3000_CLIENT_SECRET` (`t3k_cs_`) is never read, compiled, or logged;

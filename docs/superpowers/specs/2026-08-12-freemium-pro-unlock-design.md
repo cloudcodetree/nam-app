@@ -1,8 +1,17 @@
 # Freemium "Pro" unlock — design
 
-**Date:** 2026-08-12 · **Status:** approved (Chris, 2026-08-12)
+**Date:** 2026-08-12 · **Status:** approved (Chris, 2026-08-12); revised
+same day for the TONE3000-parity rule (see below).
 **Scope:** Android first (internal testing track). iOS port and public-launch
 polish are separate future specs.
+
+## Governing rule (added 2026-08-12, CLAUDE.md "Product rules")
+
+**Anything tone3000.com offers free is free in the app.** The site gives
+away search/filters, tone pages, audio previews, unlimited downloads, and
+favorites — so none of that may sit behind Pro. The paywall gates only
+APP-NATIVE features. This removed the originally-planned 10-save cap.
+The `/tone3000-parity` skill audits the boundary against the live site.
 
 ## Decision summary
 
@@ -18,22 +27,26 @@ polish are separate future specs.
 
 ## Product definition
 
-**Free forever**
+**Free forever** (everything TONE3000-equivalent, plus the playing core)
 - Live playing: full engine chain (model, cab/IR, gate, EQ, delay, reverb),
   quick settings, orb/engine/mute controls, tuner.
-- Browse + audition the entire TONE3000 catalog (infinite scroll, filters).
-- Up to **10 saved tones on device** (hearts + downloads combined — one
-  library, so the cap counts library entries of both types).
-- Swipe-card deck view; first **3 demo tracks**.
+- Browse + search + filters over the entire TONE3000 catalog (infinite
+  scroll) — site parity.
+- **Unlimited downloads, saves, and favorites** — site parity (the original
+  10-save cap is removed by the governing rule).
+- Base tone audition (hearing a tone before downloading is site parity;
+  the default DI track is free).
+- Swipe-card deck view.
 
-**Pro ($9.99 one-time)**
-- Unlimited saves/favorites.
-- **Stacks** (create/apply rigs).
-- Detail-list and grid **view layouts** (swipe cards remain free).
-- Full demo-track library.
+**Pro ($9.99 one-time)** — app-native only
+- **Stacks** (create/apply rigs — no site equivalent).
+- Detail-list and grid **view layouts** (app UI; swipe cards remain free).
+- The **extended DI audition track library** (auditioning through a CHOICE
+  of playing styles is an app enhancement; the site's previews are fixed
+  recordings — first track free, the rest Pro).
+- First claim on future app-native features (MIDI, looper, pedalboard).
 
-**Grandfathering:** an install already holding >10 library entries keeps them
-all; the cap only blocks NEW saves while free. Un-saving frees slots.
+**Grandfathering:** no longer needed — nothing caps saves.
 
 ## Architecture
 
@@ -44,19 +57,17 @@ Pure policy class — no billing, no JUCE:
 ```
 class Entitlements {
     void setPro(bool);            bool isPro() const;
-    // Save-cap policy: existing = current library count.
-    bool canSave(int existingEntries) const;      // pro || existing < kFreeSaveCap
+    // TONE3000-parity rule: saves/downloads/favorites are ALWAYS allowed.
     bool canUseStacks() const;                    // pro
     bool canUseLayout(int layoutMode) const;      // pro || layoutMode == 0
-    bool canUseDemoTrack(int index) const;        // pro || index < kFreeDemoTracks
-    static constexpr int kFreeSaveCap = 10;
-    static constexpr int kFreeDemoTracks = 3;
+    bool canUseDemoTrack(int index) const;        // pro || index == 0
+    static constexpr int kFreeDemoTracks = 1;
 };
 ```
 
-Headless tests land in the same commit (house TDD rule): cap boundary,
-grandfather semantics (existing > cap ⇒ existing entries untouched, canSave
-false), pro bypass, layout/demo gates.
+Headless tests land in the same commit (house TDD rule): pro bypass,
+layout gates, demo-track gate, and a regression pin: no API exists for
+capping saves (the parity rule made that a non-feature).
 
 ### Host billing wrapper (AndroidToneServices or new AndroidBilling.cpp TU)
 
@@ -82,10 +93,12 @@ show a lock glyph instead of hiding (discoverability).
 
 | Feature | Touchpoint | Behavior when free |
 |---|---|---|
-| 11th save | `onKeepToggle`/`onSaveToggle` (browse mode) before `svc_.keep/save` | paywall opens; no download starts |
 | Stacks | STACKS nav hit in AppShell `mouseDown` | paywall instead of `show(Stacks)` |
 | List/grid layouts | ViewType menu selection (PlayScreen reports; AppShell decides) | lock glyph on rows 1–3; selection opens paywall |
-| Demo tracks 4+ | Demo-track menu selection | lock glyph; selection opens paywall |
+| Demo tracks 2+ | Demo-track menu selection | lock glyph; selection opens paywall |
+
+Saves, downloads, hearts, browse, filters, and base audition have **no
+gate** (TONE3000-parity rule).
 
 Gating decisions live in AppShell (which owns services); PlayScreen stays
 presentation-only (receives `setProState(bool)` for lock glyphs).
@@ -126,7 +139,8 @@ passes.
   unavailable, try later" row; gates stay closed; cached Pro still honored.
 - Purchase interrupted/cancelled: paywall stays open, no state change.
 - Refund/revoke: next successful Play query clears `isPro` and the cache;
-  saved tones above the cap grandfather exactly like an old install.
+  saved tones are untouched (saves are never gated) — only Stacks/layouts/
+  extra demo tracks re-lock.
 
 ## Testing
 

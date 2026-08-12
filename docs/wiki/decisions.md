@@ -3,6 +3,14 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-12** Freemium direction: free app + one-time $9.99 Pro unlock
+  (no ads — ad SDKs fight the RT audio path and the audience pays for
+  tools). **TONE3000-parity rule**: anything the site offers free is free
+  in the app; Pro gates app-native only (Stacks, layouts, extra DI tracks,
+  future MIDI/looper). The rule killed the planned 10-save cap. JUCE
+  Personal tier, repo to go private pre-release, internal-testing launch
+  bar. Spec: docs/superpowers/specs/2026-08-12-freemium-pro-unlock-design.md;
+  audit skill: /tone3000-parity.
 - **2026-08-11** Structure cleanup: dead screens deleted (~2,400 lines —
   Edit/Browse/Library/Live/AudioSettings/Placeholder had no nav entry);
   god files split into purpose-named TUs (AppShellChrome, AndroidTone-
