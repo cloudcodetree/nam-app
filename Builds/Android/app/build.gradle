@@ -53,3 +53,18 @@ android {
         targetCompatibility JavaVersion.VERSION_17
     }
 }
+
+dependencies {
+    // Play Billing Library version JUCE 9.0.1's bundled JuceBillingClient.java
+    // (native/java/app/com/rmsl/juce/JuceBillingClient.java) targets -- matches
+    // extras/Projucer/Source/ProjectSaving/jucer_ProjectExport_Android.h's
+    // hardcoded Android-exporter dependency line for this JUCE tag. Billing spike
+    // re-spike, docs/business/billing-spike.md: JUCE's product-unlocking module
+    // resolves com/android/billingclient/api/* classes eagerly at
+    // System.loadLibrary time, so this jar must be on the classpath from the
+    // first launch, not just when a purchase flow runs.
+    implementation('com.android.billingclient:billing:9.1.0') {
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+        exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+    }
+}

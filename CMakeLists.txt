@@ -126,21 +126,24 @@ if(NAM_BUILD_APP)
             NamPlayerData
             NeuralAudio
             juce::juce_audio_utils
-            juce::juce_gui_extra)
+            juce::juce_gui_extra
+            juce::juce_product_unlocking)
         target_compile_definitions(NamPlayer PRIVATE
             JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
             JUCE_APPLICATION_NAME_STRING="NAM Player"
             # Publishable key only (parsed from .env above); "" if absent.
-            TONE3000_PUBLISHABLE_KEY="${T3K_PUB}")
-        # juce::juce_product_unlocking / JUCE_IN_APP_PURCHASES=1 deliberately
-        # NOT linked here. Billing spike (docs/business/billing-spike.md):
-        # linking it crashes every Android launch — JUCE's DECLARE_JNI_CLASS
-        # statics for com/android/billingclient/api/* resolve EAGERLY at
-        # System.loadLibrary time (initialiseAllClasses), not lazily when
-        # InAppPurchases is constructed. With no Play Billing jar on the
-        # classpath, that's a native abort before any UI, on every launch,
-        # whether or not the app ever calls InAppPurchases. Re-add only once
-        # a billing-library version path is chosen (see the spike doc).
+            TONE3000_PUBLISHABLE_KEY="${T3K_PUB}"
+            # Billing spike re-spike on JUCE 9.0.1 (docs/business/billing-spike.md):
+            # the 8.0.15 crash was JUCE's bundled JuceBillingClient.java calling
+            # the removed no-arg enablePendingPurchases() while no Play Billing
+            # jar shipped in the APK, and JUCE's DECLARE_JNI_CLASS statics for
+            # com/android/billingclient/api/* resolve EAGERLY at
+            # System.loadLibrary time. JUCE 9.0.1 ships a GPB-9.1.0-era
+            # JuceBillingClient.java (uses PendingPurchasesParams) and
+            # Builds/Android/app/build.gradle now ships the matching
+            # com.android.billingclient:billing:9.1.0 jar, so eager JNI
+            # resolution has a real classpath to resolve against.
+            JUCE_IN_APP_PURCHASES=1)
     else()
         # --- Desktop app target (macOS/Windows/Linux) ---
         juce_add_gui_app(NamPlayer

@@ -3,6 +3,17 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-13** JUCE 9.0.1 migration path taken (Task 2b, re-spike GO —
+  docs/business/billing-spike.md): bumped `GIT_TAG` for both build trees.
+  Headless suite (JUCE-free) unaffected; desktop target compiled with zero
+  source changes; Android needed one fix (`NamLookAndFeel.cpp`'s
+  `FontOptions().withTypeface(...)` now asserts in JUCE 9 — switched to the
+  `FontOptions(Typeface::Ptr)` constructor). `juce::juce_product_unlocking`
+  + `JUCE_IN_APP_PURCHASES=1` re-linked on Android alongside
+  `com.android.billingclient:billing:9.1.0` (the version JUCE 9.0.1's
+  bundled `JuceBillingClient.java` targets, per the Projucer Android
+  exporter). Verified on-device: clean launch, no JNI abort, no assertion
+  spam. Task 3 unblocked.
 - **2026-08-13** Billing spike verdict: NO-GO on JUCE 8.0.15's stock
   Android IAP as pinned (docs/business/billing-spike.md). Its precompiled
   `JuceBillingClient` targets Play Billing Library 7.0.0 — already past

@@ -6,9 +6,17 @@ builds, and determine whether JUCE's bundled Android in-app-purchase
 implementation can actually ship against Google's current Play Billing
 Library requirement.
 
-**Verdict: NO-GO on JUCE 8.0.15's stock Android IAP path, as pinned today.**
-Task 3 should not proceed on the assumption that `juce::InAppPurchases`
-works out of the box on Android. See "Path forward" below.
+**Original verdict (Task 2): NO-GO on JUCE 8.0.15's stock Android IAP path,
+as pinned then.** Task 3 was told not to proceed on the assumption that
+`juce::InAppPurchases` works out of the box on Android. See "Path forward"
+below for the options weighed at the time.
+
+**Superseded by Task 2b: GO on JUCE 9.0.1.** The app now builds on JUCE
+`9.0.1` with `juce::juce_product_unlocking` linked and
+`com.android.billingclient:billing:9.1.0` on the Gradle classpath — see
+"JUCE 9.0.1 re-spike (Task 2b) — GO" below for what changed and the
+on-device evidence. The NO-GO narrative and "Path forward" section are kept
+below as the historical record of why the upgrade was needed.
 
 **The CMake change from this spike (linking `juce::juce_product_unlocking`
 + `JUCE_IN_APP_PURCHASES=1`) has been reverted.** An earlier draft of this
@@ -98,6 +106,111 @@ Because the failure mode is a silent runtime crash rather than a build
 error, the Gradle override was **reverted** — `Builds/Android/app/build.gradle`
 is unchanged from before this spike. Shipping the override as-is would look
 green in CI and break on-device.
+
+## JUCE 9.0.1 re-spike (Task 2b) — GO
+
+Task 2 ended NO-GO on JUCE 8.0.15 and named option 1 (upgrade to `9.0.1`)
+the front-runner. Task 2b executed that upgrade as its own migration, then
+re-ran this spike's pass condition (link the module, add the matching
+Billing Library jar, launch on-device) against the new tree.
+
+**Migration, Step 1-3 (`CMakeLists.txt` `GIT_TAG 8.0.15` → `9.0.1`):**
+
+- Both build trees (desktop CMake preset, Android Gradle/CMake) re-fetch
+  JUCE at `9.0.1` (commit `e18f7f506c0b96f2c738a0bcd7fe6467a5005ad8`,
+  2026-08-10).
+- The headless suite (`nam_tests`) is JUCE-free by design (CLAUDE.md
+  invariant) and was unaffected — 102 cases / 379,266 assertions green,
+  unchanged from before the bump.
+- The desktop `NamPlayer` target compiled **with zero source changes**.
+- The Android `NamPlayer` target needed exactly **one fix**:
+  `Source/app/ui/NamLookAndFeel.cpp`'s `displayFont()`/`uiFont()` built
+  fonts via `juce::FontOptions().withTypeface(typeface)`. JUCE 9's
+  `FontOptions::withTypeface()` now asserts `style.isEmpty()`, and a
+  default-constructed `FontOptions()`'s style is `"Regular"` (non-empty) —
+  so every call fired a `JUCE Assertion failure in juce_FontOptions.h:138`
+  (visible in `adb logcat`, dozens of times per frame, though not fatal
+  under RelWithDebInfo/NDEBUG). Fixed by switching to the
+  `FontOptions(Typeface::Ptr)` constructor, which sets `name`/`style` from
+  the typeface directly and never round-trips through the asserting
+  `withTypeface()` overload. Confirmed via `adb logcat`: assertion spam
+  gone after the fix, app renders identically (screenshot evidence below).
+- This was built and launched (Step 2/3) **before** touching billing at
+  all, to isolate "does the JUCE 9 migration itself work" from "does
+  billing work on JUCE 9" — it does; the Hi-Fi UI renders correctly with
+  no startup crash.
+
+**Re-spike, Step 4 (billing re-added):**
+
+- `CMakeLists.txt`'s Android target now links `juce::juce_product_unlocking`
+  and defines `JUCE_IN_APP_PURCHASES=1` (previously reverted — see
+  "Startup-crash finding" above).
+- `Builds/Android/app/build.gradle` now has a `dependencies` block adding
+  `implementation('com.android.billingclient:billing:9.1.0') { exclude
+  group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'/'jdk8' }` —
+  **9.1.0**, not 8.x, found by grepping the JUCE 9.0.1 checkout's own
+  Projucer Android exporter
+  (`extras/Projucer/Source/ProjectSaving/jucer_ProjectExport_Android.h:940`:
+  `implementation('com.android.billingclient:billing:9.1.0')`), i.e. the
+  exact version JUCE's own project generator would have wired in for this
+  tag. This matches the "GPB 9.1.0" support referenced in commit
+  `1b58549d6c`'s message.
+- Confirmed directly against the JUCE 9.0.1 checkout that the runtime break
+  this spike originally found is actually fixed, not just newer:
+  `modules/juce_product_unlocking/native/java/app/com/rmsl/juce/JuceBillingClient.java`
+  now calls
+  `BillingClient.newBuilder(context).enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())`
+  — the modern parameterized overload — not the no-arg
+  `enablePendingPurchases()` that Billing Library 8+ removed and that
+  crashed 8.0.15's precompiled shim. (This Java file is still not compiled
+  by our build — JUCE embeds it as a precompiled DEX blob in
+  `juce_InAppPurchases_android.cpp`, same as before — but its *source*,
+  which the embedded bytecode was built from, now targets the version we're
+  shipping.)
+- The vendored Java shell (`Builds/Android/app/src/main/java/com/rmsl/juce`)
+  did **not** need re-vendoring: `JuceBillingClient.java` was never part of
+  the vendored tree (it ships precompiled), and the app builds/launches
+  identically with the existing vendored files — JUCE 9 relocated some
+  upstream native-java sources into new subdirectories
+  (`native/javacore/...`, `native/javaopt/...` replacing the JUCE-8-era
+  `native/java/app/...` layout) but that's a source-tree reorg on JUCE's
+  side, not an API JuceActivity.java/Java.java must expose differently; our
+  two local patches (performance-guard code, removed
+  appOnResume/appNewIntent calls) remain untouched and the build proves
+  they still link.
+- **Build:** `assembleDebug` → BUILD SUCCESSFUL with the module, define, and
+  Gradle dependency all in place. Per-entry APK inspection (`zipfile`)
+  confirms the billing library actually packaged:
+  `classes3.dex` (8,070,412 bytes) plus billing resource entries
+  (`res/xml/com_android_billingclient_phenotype.xml`,
+  `res/raw/com_android_billingclient_registration_info.binarypb`, etc.) —
+  consistent with the +2.6 MB estimate from the original spike's probe.
+- **Launch (the actual pass condition — eager JNI resolution against a real
+  classpath):** installed and launched on `emulator-5554`
+  (`com.namplayer.app/com.rmsl.juce.JuceActivity`). Process stayed alive
+  (`adb shell pidof` returned a pid after launch, not empty), the Hi-Fi UI
+  rendered correctly (screenshot evidence), and `adb logcat -d` after
+  launch shows **no** `FATAL EXCEPTION`, no `AndroidRuntime` crash trace, no
+  `JNI DETECTED ERROR`, and no billing-related error — the eager
+  `DECLARE_JNI_CLASS` resolution for all `com/android/billingclient/api/*`
+  classes (the exact mechanism that aborted every launch on 8.0.15 with no
+  jar present) now succeeds because the jar is on the classpath. This is
+  the on-device verification the original spike's "Path forward" section
+  said was still owed (a build pass alone was not sufficient evidence
+  before, and still wouldn't be — this time the launch was actually
+  checked).
+
+**Verdict: GO for Task 3.** `juce::InAppPurchases` is linked with a
+policy-compliant (Billing Library 9.1.0, well above Google's v8 floor),
+JNI-compatible (JUCE 9.0.1's rebuilt `JuceBillingClient`) billing library on
+Android, verified by an actual on-device launch rather than a build pass.
+Task 3 can build real purchase-flow code (`InAppPurchases::getInstance()` —
+note JUCE 9 also made `InAppPurchases` a singleton, a further breaking
+change from 8.0.15's constructible-object API, per JUCE's
+`BREAKING_CHANGES.md`) against this tree. Exercising an actual purchase
+call end-to-end (not just constructing/resolving the JNI classes) is still
+Task 3's job, not this migration's — this re-spike's scope was the
+migration + confirming eager JNI resolution no longer aborts, both done.
 
 ## Startup-crash finding: linking the module *without* a billing jar also crashes
 
@@ -235,11 +348,14 @@ Given `9.0.1` is already tagged, option 1 is the front-runner, but "just
 bump the tag" undersells it — treat it as its own scoped migration task,
 not a rider on Task 3.
 
-**Nothing from this spike ships enabled.** `CMakeLists.txt`'s Android
-target links neither `juce::juce_product_unlocking` nor
-`JUCE_IN_APP_PURCHASES=1` (reverted — see "Startup-crash finding" above),
-and `Builds/Android/app/build.gradle` has no billing-library dependency.
-Re-adding both together is part of whichever path above gets chosen; until
-then, linking the module alone is a startup crash, and no Billing Library
-version available today (7.0.0 or 8.0.0+) is simultaneously policy-
-compliant and JNI-compatible with JUCE 8.0.15's precompiled shim.
+**Nothing from Task 2's spike shipped enabled at the time this section was
+written.** `CMakeLists.txt`'s Android target linked neither
+`juce::juce_product_unlocking` nor `JUCE_IN_APP_PURCHASES=1` (reverted —
+see "Startup-crash finding" above), and `Builds/Android/app/build.gradle`
+had no billing-library dependency. Linking the module alone was a startup
+crash, and no Billing Library version available under JUCE 8.0.15 (7.0.0 or
+8.0.0+) was simultaneously policy-compliant and JNI-compatible with its
+precompiled shim. **Task 2b (see "JUCE 9.0.1 re-spike" above) took option 1
+from the list above, and both are now linked/enabled on JUCE 9.0.1**, with
+on-device verification that the eager-JNI-resolution abort this section
+describes no longer reproduces.
