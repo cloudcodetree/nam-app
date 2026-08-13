@@ -3,6 +3,21 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-13** Release engineering scaffolded (Task 6):
+  `signingConfigs.release` in `Builds/Android/app/build.gradle` reads
+  `NAMPLAYER_UPLOAD_STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD` from
+  `~/.gradle/gradle.properties` and is a `hasProperty`-gated no-op when
+  absent, so `assembleDebug`/`bundleRelease` both keep working on a machine
+  with no keystore (verified: `bundleRelease` → BUILD SUCCESSFUL, unsigned
+  `.aab`). Confirmed `-DCMAKE_BUILD_TYPE=RelWithDebInfo` (set once in
+  `defaultConfig`) governs the native build for release too, not just
+  debug — neither buildType overrides it. `versionName` moved to
+  `1.0.0-internal.1` for the internal-testing track. Privacy policy
+  (`docs/legal/privacy-policy.md`) and the Play Console runbook
+  (`docs/business/play-release-checklist.md`) flag two open blockers before
+  any *public* listing: the repo going private (Task 7, ordered before any
+  store upload) and the "NAM" naming/trademark question — both fine to
+  defer for internal testing.
 - **2026-08-13** Pro lock-glyph state now seeded from the entitlement disk
   cache synchronously in `AndroidAudioApp::initBilling()`, right after the
   cache read and before the async `restoreProductsBoughtList` round trip

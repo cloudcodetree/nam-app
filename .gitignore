@@ -19,3 +19,11 @@ Builds/Android/app/.cxx/
 Builds/Android/local.properties
 Builds/Android/build/
 .gradle/
+
+# Signing keystores -- NEVER commit (upload key lives in ~/keystores/, path
+# + passwords in ~/.gradle/gradle.properties; see Builds/Android/app/build.gradle
+# and docs/business/play-release-checklist.md)
+*.jks
+*.keystore
+Builds/Android/*.jks
+Builds/Android/**/*.jks

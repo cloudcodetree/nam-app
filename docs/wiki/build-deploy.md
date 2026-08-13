@@ -42,6 +42,39 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradl
   session — use the `/adb-qr` skill (PNG QR + auto-pair watcher).
   `adb -s <ip:port> install -r <apk>`.
 
+## Release builds (Task 6, docs/business/play-release-checklist.md)
+
+```
+cd Builds/Android
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradlew bundleRelease
+```
+
+- `versionCode`/`versionName` live in `Builds/Android/app/build.gradle`
+  (`defaultConfig`); bump `versionCode` every upload.
+- Signing is a `hasProperty` no-op: `signingConfigs.release` only exists (and
+  `buildTypes.release` only attaches it) when all four
+  `NAMPLAYER_UPLOAD_STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD`
+  properties are present in `~/.gradle/gradle.properties` (never in the
+  repo). No keystore on the machine → `bundleRelease` still reports
+  **BUILD SUCCESSFUL**, producing an *unsigned* `.aab` at
+  `app/build/outputs/bundle/release/app-release.aab` — good enough to prove
+  the build graph but not uploadable to Play Console. Verified both states
+  are reachable; only the unsigned path has been exercised so far (no
+  keystore generated yet).
+- **RelWithDebInfo applies to release too**, not just debug: the CMake
+  arguments (`-DCMAKE_BUILD_TYPE=RelWithDebInfo`) live in `defaultConfig`,
+  and neither `buildTypes.debug` nor `buildTypes.release` overrides them —
+  confirmed by inspecting `app/.cxx/RelWithDebInfo/*/arm64-v8a/CMakeCache.txt`
+  (`CMAKE_BUILD_TYPE:STRING=RelWithDebInfo`) after both an `assembleDebug`
+  and a `bundleRelease` run: both land in the same `RelWithDebInfo` `.cxx`
+  folder, never a plain `Release`/`Debug` one. (A stale `app/.cxx/Debug/`
+  folder from an earlier experiment predates this and is untouched by
+  current builds — gitignored, harmless, safe to `rm -rf` if it's ever
+  confusing.) Do not add a per-buildType `CMAKE_BUILD_TYPE` override.
+- Keystore generation, Play Console steps, and the `pro_unlock` product
+  setup are documented end-to-end in
+  `docs/business/play-release-checklist.md`.
+
 ## Desktop + tests
 
 ```
