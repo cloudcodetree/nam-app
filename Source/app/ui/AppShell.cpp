@@ -292,10 +292,17 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     ioScrim_.onUpAt = [this] (juce::Point<int> p) { handleIoUpAt (p); };
     addChildComponent (moreScrim_);
     moreScrim_.onTapAt = [this] (juce::Point<int> p) {
-        // Single row for now: DOWNLOADED (the deck moved out of the nav).
-        if (moreOpen_ && moreRect_.reduced (6).contains (p)) {
+        // DOWNLOADED (the deck moved out of the nav) + a TEMP Task 4 debug
+        // row that opens the paywall for emulator verification (removed in
+        // Task 5's commit).
+        if (moreOpen_ && moreDownloadedRect_.contains (p)) {
             closeMoreMenu ();
             setDeckMode (1);
+            return;
+        }
+        if (moreOpen_ && morePaywallDebugRect_.contains (p)) {
+            closeMoreMenu ();
+            openPaywall ("debug");
             return;
         }
         closeMoreMenu ();
@@ -749,6 +756,54 @@ void AppShell::setAudioDeviceService (GetDevicesFn get, SelectDeviceFn selectInp
     selectBuffer_ = std::move (selectBuffer);
 }
 
+void AppShell::setProServices (std::function<bool ()> isPro, std::function<void (DoneFn)> purchase,
+                               std::function<void (DoneFn)> restore) {
+    isPro_ = std::move (isPro);
+    purchasePro_ = std::move (purchase);
+    restorePro_ = std::move (restore);
+}
+
+void AppShell::openPaywall (const juce::String& reason) {
+    if (paywall_ == nullptr) {
+        paywall_ = std::make_unique<PaywallPanel> ();
+        addChildComponent (*paywall_);
+        paywall_->onClose = [this] { paywall_->setVisible (false); };
+        paywall_->onBuy = [this] {
+            if (!purchasePro_) return;
+            paywall_->setBusy (true);
+            purchasePro_ ([this] (bool, juce::String status) {
+                if (paywall_ == nullptr) return;
+                paywall_->setBusy (false);
+                paywall_->setStatus (status);
+                refreshProState ();
+            });
+        };
+        paywall_->onRestore = [this] {
+            if (!restorePro_) return;
+            paywall_->setBusy (true);
+            restorePro_ ([this] (bool, juce::String status) {
+                if (paywall_ == nullptr) return;
+                paywall_->setBusy (false);
+                paywall_->setStatus (status);
+                refreshProState ();
+            });
+        };
+    }
+    paywall_->setBusy (false);
+    paywall_->setStatus ({});
+    paywall_->setReason (reason);
+    paywall_->setBounds (contentBounds ());
+    paywall_->setVisible (true);
+    paywall_->toFront (false);
+}
+
+void AppShell::refreshProState () {
+    const bool pro = isPro_ && isPro_ ();
+    // Task 5: push lock-glyph state to PlayScreen
+    if (pro && paywall_ != nullptr) paywall_->setVisible (false);
+    repaint ();
+}
+
 bool AppShell::handleBackButton () {
     if (tunerOpen_) {
         toggleTuner ();
@@ -798,6 +853,7 @@ void AppShell::toggleTuner () {
 void AppShell::show (Screen s) {
     closeIoPanel ();
     closeMoreMenu ();
+    if (paywall_ != nullptr) paywall_->setVisible (false);
 
     // The tuner overlay belongs to Play: navigating anywhere closes it.
     if (tunerOpen_ && s != Screen::Play) {
@@ -930,6 +986,7 @@ void AppShell::resized () {
 
     for (juce::Component* c : { (juce::Component*)play_.get (), (juce::Component*)stacks_.get () })
         if (c != nullptr) c->setBounds (b);
+    if (paywall_ != nullptr) paywall_->setBounds (contentBounds ());
 
     // The tuner overlay tracks the Play tuner panel, not the screen grid.
     if (tuner_ != nullptr && tunerOpen_) {

@@ -10,6 +10,7 @@
 #include "model/LibraryEntry.h"
 #include "app/ui/PlayScreen.h"
 #include "app/ui/AudioSettingsState.h"
+#include "app/ui/PaywallPanel.h"
 #include "app/ui/StacksScreen.h"
 #include "app/ui/TunerScreen.h"
 
@@ -117,6 +118,17 @@ public:
                                 SelectDeviceFn selectOutput, RescanFn rescan = {},
                                 SelectDeviceFn selectRate = {}, SelectDeviceFn selectBuffer = {});
 
+    // Pro entitlement: isPro() reads current state; purchase/restore call the
+    // store and report back through DoneFn (bool ok, String status). The
+    // paywall UI owns disabling BUY/RESTORE while a call is outstanding — a
+    // second tap before the first callback lands would drop it.
+    void setProServices (std::function<bool ()> isPro, std::function<void (DoneFn)> purchase,
+                         std::function<void (DoneFn)> restore);
+    // Re-reads isPro() and closes the paywall if it now reports Pro. Called
+    // after setProServices wiring fires and whenever the host's billing
+    // listener observes a state change (purchase finished, restore landed).
+    void refreshProState ();
+
     void resized () override;
     void paint (juce::Graphics&) override;
     void paintOverChildren (juce::Graphics&) override;   // I/O mute panel
@@ -189,6 +201,9 @@ private:
     // ⋯ menu: small overlay above the nav's right corner (house overlay style).
     bool moreOpen_ = false;
     juce::Rectangle<int> moreRect_;
+    // TEMP Task 4: second row rect for the debug paywall trigger; removed
+    // (along with moreRect_'s second-row layout) in Task 5's commit.
+    juce::Rectangle<int> moreDownloadedRect_, morePaywallDebugRect_;
     ClickAway moreScrim_;
     void openMoreMenu ();
     void closeMoreMenu ();
@@ -246,6 +261,12 @@ private:
     GetDevicesFn getDevices_;
     SelectDeviceFn selectInput_, selectOutput_, selectRate_, selectBuffer_;
     RescanFn rescanDevices_;
+
+    // Pro unlock: paywall overlay + the host's billing services.
+    void openPaywall (const juce::String& reason);
+    std::unique_ptr<PaywallPanel> paywall_;
+    std::function<bool ()> isPro_;
+    std::function<void (DoneFn)> purchasePro_, restorePro_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppShell)
 };

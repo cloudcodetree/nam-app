@@ -49,9 +49,7 @@ struct AndroidAudioApp::BillingListener : juce::InAppPurchases::Listener {
             if (p.purchase.productIds.contains(kProProductId)) owned = true;
         owner.entitlements_.setPro(owned);
         owner.persistEntitlement(owned);
-#if 0   // wired in Task 4: AppShell::refreshProState lands with the UI work
         if (owner.shell_ != nullptr) owner.shell_->refreshProState();
-#endif
     }
 
     void productPurchaseFinished(const PurchaseInfo& info, bool success,
@@ -66,9 +64,7 @@ struct AndroidAudioApp::BillingListener : juce::InAppPurchases::Listener {
             owner.purchaseDone_ = nullptr;
             done(ownsPro, statusDescription);
         }
-#if 0   // wired in Task 4: AppShell::refreshProState lands with the UI work
         if (owner.shell_ != nullptr) owner.shell_->refreshProState();
-#endif
     }
 };
 

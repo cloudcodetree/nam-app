@@ -193,12 +193,9 @@ AndroidAudioApp::AndroidAudioApp() {
                                   [this] { rescanAudioDevices(); },
                                   [this](const juce::String& label) { selectSampleRate(label); },
                                   [this](const juce::String& label) { selectBufferSize(label); });
-#if 0   // wired in Task 4: AppShell::setProServices + refreshProState land with the UI work
-    shell_->setProServices(
-        [this] { return entitlements_.isPro(); },
-        [this](AppShell::DoneFn done) { purchasePro(std::move(done)); },
-        [this](AppShell::DoneFn done) { restorePurchases(std::move(done)); });
-#endif
+    shell_->setProServices([this] { return entitlements_.isPro(); },
+                           [this](AppShell::DoneFn done) { purchasePro(std::move(done)); },
+                           [this](AppShell::DoneFn done) { restorePurchases(std::move(done)); });
     initBilling();
 
     // 1 input (guitar) / 2 output. JUCE requests RECORD_AUDIO on input open.

@@ -326,14 +326,13 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
         g.fillRoundedRectangle (moreRect_.toFloat (), 14.0f);
         g.setColour (nam::ui::col::inkA (0.18f));
         g.drawRoundedRectangle (moreRect_.toFloat ().reduced (0.5f), 14.0f, 1.0f);
-        auto rrow = moreRect_.reduced (6);
         const bool active = (current_ == play_.get () && deckMode_ == 1);
         if (active) {
             g.setColour (nam::ui::col::accentA (0.10f));
-            g.fillRoundedRectangle (rrow.toFloat (), 9.0f);
+            g.fillRoundedRectangle (moreDownloadedRect_.toFloat (), 9.0f);
         }
         // Down-arrow-into-tray icon + label (DOWNLOADED lives here now).
-        auto in = rrow.reduced (14, 10);
+        auto in = moreDownloadedRect_.reduced (14, 10);
         const auto ib = in.removeFromLeft (18).toFloat ().withSizeKeepingCentre (16.0f, 16.0f);
         g.setColour (active ? nam::ui::col::accent : nam::ui::col::inkA (0.7f));
         const float cx = ib.getCentreX ();
@@ -346,6 +345,13 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
         g.setFont (nam::ui::uiFont (13.0f, true));
         g.setColour (active ? nam::ui::col::accent : nam::ui::col::inkA (0.85f));
         g.drawText ("Downloaded", in.withTrimmedLeft (12), juce::Justification::centredLeft, false);
+
+        // TEMP Task 4: debug trigger for the paywall overlay (removed in
+        // Task 5's commit alongside AndroidAudioApp's #if 0 wiring cleanup).
+        g.setFont (nam::ui::uiFont (13.0f, true));
+        g.setColour (nam::ui::col::accentA (0.85f));
+        g.drawText ("Paywall (debug)", morePaywallDebugRect_.reduced (14, 10).withTrimmedLeft (30),
+                    juce::Justification::centredLeft, false);
     }
 }
 
@@ -363,8 +369,14 @@ void AppShell::closeIoPanel () {
 
 void AppShell::openMoreMenu () {
     // Content-sized, right-anchored above the nav (house overlay style).
-    constexpr int rowH = 46, w = 210;
-    moreRect_ = { getWidth () - w - 12, navBar_.getY () - rowH - 20, w, rowH + 12 };
+    // TEMP Task 4: a second "PAYWALL (DEBUG)" row is appended below
+    // DOWNLOADED for emulator verification; removed in Task 5's commit.
+    constexpr int rowH = 46, w = 210, numRows = 2;
+    moreRect_ = { getWidth () - w - 12, navBar_.getY () - rowH * numRows - 20, w,
+                  rowH * numRows + 12 };
+    auto rows = moreRect_.reduced (6);
+    moreDownloadedRect_ = rows.removeFromTop (rowH);
+    morePaywallDebugRect_ = rows.removeFromTop (rowH);
     moreOpen_ = true;
     moreScrim_.setBounds (contentBounds ());
     moreScrim_.setVisible (true);

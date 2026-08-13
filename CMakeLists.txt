@@ -98,6 +98,7 @@ if(NAM_BUILD_APP)
             Source/app/ui/PlayScreen.cpp
             Source/app/ui/PlayScreenDeck.cpp
             Source/app/ui/AppShellDeck.cpp
+            Source/app/ui/PaywallPanel.cpp
             Source/app/ui/StacksScreen.cpp
             Source/app/ui/TunerScreen.cpp
             Source/app/ui/AppShell.cpp
