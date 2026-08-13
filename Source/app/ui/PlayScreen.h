@@ -80,7 +80,11 @@ public:
     void setFilterGroups (std::vector<FilterGroup> groups);
     std::function<void (const std::vector<FilterGroup>&)> onFilterGroupsChanged;
     std::function<void (int)> onSelectPair;   // PAIR pick (into setPairChoices)
+    // Demo-track picker tap: the owner gates tracks beyond the first and
+    // decides whether to apply it via applyDemoTrack() (same owner-confirmed
+    // pattern as onViewTypeSelect, so a vetoed pick never desyncs the label).
     std::function<void (int)> onSelectDemoTrack;
+    void applyDemoTrack (int index);
     std::function<void ()> onToggleDemo;   // play/stop demo of current card
     // Card-back slider moved: (param index, normalised 0..1). The owner maps
     // to engine ranges (mirrors the EDIT screen mappings).

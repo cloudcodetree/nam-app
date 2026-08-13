@@ -180,11 +180,14 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     };
 
     play_->onSelectDemoTrack = [this] (int i) {
-        // The first DI track is free; the rest of the library is Pro.
+        // The first DI track is free; the rest of the library is Pro. Gate
+        // BEFORE applying so a vetoed pick never desyncs the DEMO AUDIO
+        // label from the track actually loaded.
         if (i > 0 && isPro_ && !isPro_ ()) {
             openPaywall ("The full DI track library");
             return;
         }
+        play_->applyDemoTrack (i);
         if (svc_.setDemoTrack) svc_.setDemoTrack (i, [] (bool) {});
     };
 

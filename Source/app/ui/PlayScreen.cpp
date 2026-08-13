@@ -118,6 +118,15 @@ void PlayScreen::setProState (bool pro) {
     repaint (menuRect_);
 }
 
+void PlayScreen::applyDemoTrack (int index) {
+    // Demo track selection is reachable from both the card-back dropdown
+    // (demoRowRect_) and the list-view expanded row (a locally-computed
+    // rect in deckExpandedRects) — repaint broadly rather than risk a
+    // stale-rect miss on the row that isn't currently on-screen.
+    demoSel_ = index;
+    repaint ();
+}
+
 void PlayScreen::applyViewType (int mode) {
     layoutMode_ = mode;
     flipped_ = false;   // card back has no meaning off-card
@@ -863,8 +872,11 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
                         if (onSelectPair) onSelectPair (i);
                         break;
                     case Menu::Demo:
-                        demoSel_ = i;
+                        // Owner-confirmed, like ViewType: a gated pick must not
+                        // desync the DEMO AUDIO label from the track that's
+                        // actually loaded (AppShell may veto with the paywall).
                         if (onSelectDemoTrack) onSelectDemoTrack (i);
+                        else applyDemoTrack (i);
                         break;
                     case Menu::ViewType:
                         if (onViewTypeSelect) onViewTypeSelect (i);
