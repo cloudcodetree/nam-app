@@ -22,9 +22,10 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradl
   frame, independent of `svc wifi/data enable|disable`. So it can't hold
   a simulated "offline returning Pro user" state long enough to eyeball —
   the async correction always wins the race before a screenshot lands.
-  To test Pro-entitlement UI in isolation, hand-seed
-  `run-as com.namplayer.app cat 'NAM Player/entitlement.json'`
-  (`{"pro": true}`) and temporarily short-circuit
+  To test Pro-entitlement UI in isolation, hand-seed the cache —
+  `run-as com.namplayer.app sh -c 'mkdir -p "NAM Player" && echo
+  "{\"pro\": true}" > "NAM Player/entitlement.json"'` — and temporarily
+  short-circuit
   `AndroidAudioApp::initBilling()` right after its cache-seed/refresh
   (never commit the stub) — real offline-Pro billing behavior needs a
   device with Play Services actually installed.
