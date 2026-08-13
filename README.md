@@ -74,11 +74,7 @@ cp .env.example .env
 
 ## Credits & dependencies
 
-- [Neural Amp Modeler](https://github.com/sdatkinson/neural-amp-modeler) — Steven Atkinson
-- [NeuralAudio](https://github.com/mikeoliphant/NeuralAudio) (MIT) — real-time NAM inference
-- [TONE3000](https://www.tone3000.com/) — tone catalog + API
-- [JUCE](https://juce.com/) — cross-platform app/audio framework
-- [dr_wav](https://github.com/mackron/dr_libs) (public domain), [PicoSHA2](https://github.com/okdshin/PicoSHA2) (MIT), [nlohmann/json](https://github.com/nlohmann/json) (MIT)
+This app plays [Neural Amp Modeler](https://www.neuralampmodeler.com/) captures — the NAM model format and inference approach are Steven Atkinson's work — via [`mikeoliphant/NeuralAudio`](https://github.com/mikeoliphant/NeuralAudio) for real-time inference, and downloads tones through [TONE3000](https://www.tone3000.com/)'s catalog and public API. [JUCE](https://juce.com/) provides the cross-platform app/audio framework. See [`LICENSE`](LICENSE) for the complete, authoritative inventory of every third-party component the app compiles or links, with copyright holders and license terms for each.
 
 ## License
 
