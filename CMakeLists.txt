@@ -19,7 +19,7 @@ if(NAM_BUILD_APP)
     # --- JUCE ---
     FetchContent_Declare(JUCE
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-        GIT_TAG 8.0.15)
+        GIT_TAG 9.0.1)
     FetchContent_MakeAvailable(JUCE)
 
     # --- Melatonin Inspector (DevTools-style live UI inspector; debug only) ---

@@ -16,11 +16,14 @@ static juce::Typeface::Ptr workSansTypeface () {
 }
 
 juce::Font displayFont (float height) {
-    return juce::Font (juce::FontOptions ().withTypeface (caslonTypeface ()).withHeight (height));
+    // FontOptions(Typeface::Ptr) sets name/style from the typeface directly;
+    // chaining FontOptions().withTypeface(...) instead would assert in JUCE 9
+    // because the default-constructed style ("Regular") is non-empty.
+    return juce::Font (juce::FontOptions (caslonTypeface ()).withHeight (height));
 }
 
 juce::Font uiFont (float height, bool semibold) {
-    juce::Font f (juce::FontOptions ().withTypeface (workSansTypeface ()).withHeight (height));
+    juce::Font f (juce::FontOptions (workSansTypeface ()).withHeight (height));
     return semibold ? f.boldened () : f;
 }
 
