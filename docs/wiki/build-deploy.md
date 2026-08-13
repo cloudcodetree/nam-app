@@ -22,12 +22,16 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradl
   frame, independent of `svc wifi/data enable|disable`. So it can't hold
   a simulated "offline returning Pro user" state long enough to eyeball —
   the async correction always wins the race before a screenshot lands.
-  To test Pro-entitlement UI in isolation, hand-seed the cache (one
-  physical line — copying it pre-wrapped from raw markdown splits the
-  `sh -c` script and silently no-ops the write):
+  To test Pro-entitlement UI in isolation, hand-seed the cache. `adb
+  shell` joins ALL of its arguments with plain spaces before handing
+  them to the device's `sh -c` — so the whole `run-as ...` script must
+  arrive as a single already-quoted argument, or the device shell parses
+  your `&&`/`>` itself and the write silently no-ops. Wrap the entire
+  thing in one pair of double quotes (verified working verbatim,
+  `adb -s emulator-5554` swap for your device):
 
   ```
-  adb shell run-as com.namplayer.app sh -c 'mkdir -p "NAM Player" && echo "{\"pro\": true}" > "NAM Player/entitlement.json"'
+  adb shell "run-as com.namplayer.app sh -c 'echo \"{\\\"pro\\\": true}\" > \"NAM Player/entitlement.json\"'"
   ```
 
   ...then temporarily short-circuit `AndroidAudioApp::initBilling()`
