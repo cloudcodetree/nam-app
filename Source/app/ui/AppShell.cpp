@@ -763,15 +763,26 @@ void AppShell::setProServices (std::function<bool ()> isPro, std::function<void 
     restorePro_ = std::move (restore);
 }
 
+void AppShell::setProPriceText (juce::String price) {
+    if (price.isEmpty ()) return;   // ignore a malformed/empty store answer
+    proPriceText_ = "UNLOCK " + kDotSep + " " + price;
+    if (paywall_ != nullptr) paywall_->setPriceText (proPriceText_);
+}
+
 void AppShell::openPaywall (const juce::String& reason) {
     if (paywall_ == nullptr) {
         paywall_ = std::make_unique<PaywallPanel> ();
         addChildComponent (*paywall_);
         paywall_->onClose = [this] { paywall_->setVisible (false); };
         paywall_->onBuy = [this] {
-            if (!purchasePro_) return;
+            // proCallInFlight_ also gates the buttons themselves (see below),
+            // but a defensive re-check here means a stray onBuy call can
+            // never fire a second purchaseProduct() while one is unresolved.
+            if (!purchasePro_ || proCallInFlight_) return;
+            proCallInFlight_ = true;
             paywall_->setBusy (true);
             purchasePro_ ([this] (bool, juce::String status) {
+                proCallInFlight_ = false;
                 if (paywall_ == nullptr) return;
                 paywall_->setBusy (false);
                 paywall_->setStatus (status);
@@ -779,9 +790,11 @@ void AppShell::openPaywall (const juce::String& reason) {
             });
         };
         paywall_->onRestore = [this] {
-            if (!restorePro_) return;
+            if (!restorePro_ || proCallInFlight_) return;
+            proCallInFlight_ = true;
             paywall_->setBusy (true);
             restorePro_ ([this] (bool, juce::String status) {
+                proCallInFlight_ = false;
                 if (paywall_ == nullptr) return;
                 paywall_->setBusy (false);
                 paywall_->setStatus (status);
@@ -789,9 +802,14 @@ void AppShell::openPaywall (const juce::String& reason) {
             });
         };
     }
-    paywall_->setBusy (false);
-    paywall_->setStatus ({});
+    // A prior purchase/restore may still be outstanding from before the
+    // sheet was dismissed — reopening must NOT re-arm BUY/RESTORE while that
+    // call's DoneFn hasn't landed yet (it would let a second tap fire a
+    // second store call and drop the first callback).
+    paywall_->setBusy (proCallInFlight_);
+    if (!proCallInFlight_) paywall_->setStatus ({});
     paywall_->setReason (reason);
+    if (proPriceText_.isNotEmpty ()) paywall_->setPriceText (proPriceText_);
     paywall_->setBounds (contentBounds ());
     paywall_->setVisible (true);
     paywall_->toFront (false);

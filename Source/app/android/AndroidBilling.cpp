@@ -41,6 +41,16 @@ struct AndroidAudioApp::BillingListener : juce::InAppPurchases::Listener {
     explicit BillingListener(AndroidAudioApp& o) : owner(o) {}
     AndroidAudioApp& owner;
 
+    // Product (price/title/description) is a sibling of Listener nested
+    // directly under InAppPurchases, not under Listener itself, so unlike
+    // PurchaseInfo it does NOT resolve unqualified via base-class lookup —
+    // needs the explicit juce::InAppPurchases:: qualification here.
+    void productsInfoReturned(const juce::Array<juce::InAppPurchases::Product>& products) override {
+        for (const auto& p : products)
+            if (p.identifier == kProProductId && owner.shell_ != nullptr)
+                owner.shell_->setProPriceText(p.price);
+    }
+
     void purchasesListRestored(const juce::Array<PurchaseInfo>& purchases, bool success,
                                const juce::String& /*statusDescription*/) override {
         if (!success) return;   // keep cached state on query failure
@@ -75,10 +85,20 @@ void AndroidAudioApp::initBilling() {
     billingListener_ = std::make_unique<BillingListener>(*this);
     auto* iap = juce::InAppPurchases::getInstance();
     iap->addListener(billingListener_.get());
-    iap->restoreProductsBoughtList(false);   // async ownership query
+    iap->restoreProductsBoughtList(false);            // async ownership query
+    iap->getProductsInformation({ kProProductId });   // async: paywall price label
 }
 
 void AndroidAudioApp::purchasePro(std::function<void(bool, juce::String)> done) {
+    // Refuse to start a second purchase while one is still unresolved: a
+    // fresh purchasePro() call would overwrite purchaseDone_ and silently
+    // strand the first caller's callback forever (nothing else ever invokes
+    // the one it replaced). The paywall UI already guards against a second
+    // tap, but this is the host-side backstop for any other caller.
+    if (purchaseDone_) {
+        if (done) done(false, "A purchase is already in progress");
+        return;
+    }
     purchaseDone_ = std::move(done);
     juce::InAppPurchases::getInstance()->purchaseProduct(kProProductId);
 }

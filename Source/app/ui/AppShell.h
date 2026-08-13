@@ -128,6 +128,11 @@ public:
     // after setProServices wiring fires and whenever the host's billing
     // listener observes a state change (purchase finished, restore landed).
     void refreshProState ();
+    // Store's localized price for the Pro product (e.g. "$9.99"), pushed by
+    // the host once its getProductsInformation() query returns. Replaces
+    // the paywall's static placeholder; safe to call before the paywall has
+    // ever been opened (cached and applied on the next/current open).
+    void setProPriceText (juce::String price);
 
     void resized () override;
     void paint (juce::Graphics&) override;
@@ -267,6 +272,15 @@ private:
     std::unique_ptr<PaywallPanel> paywall_;
     std::function<bool ()> isPro_;
     std::function<void (DoneFn)> purchasePro_, restorePro_;
+    // True from the moment BUY/RESTORE is tapped until its DoneFn fires —
+    // survives the sheet being dismissed and reopened, so a re-opened
+    // paywall shows the correct busy state instead of re-arming the buttons
+    // over an unresolved store call.
+    bool proCallInFlight_ = false;
+    // Store-localized price ("UNLOCK · $9.99" until the host's product-info
+    // query lands), cached so a paywall opened before the query resolves
+    // still gets the real price once it arrives.
+    juce::String proPriceText_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AppShell)
 };
