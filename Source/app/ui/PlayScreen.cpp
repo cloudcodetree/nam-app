@@ -22,6 +22,27 @@ juce::Path heartPath (juce::Rectangle<float> b) {
                           .translated (b.getX (), b.getY ()));
     return p;
 }
+
+// Vector padlock (rounded-rect body + arc shackle) for gated Pro menu rows.
+void drawLockGlyph (juce::Graphics& g, juce::Rectangle<float> b, juce::Colour c) {
+    g.setColour (c);
+    const float bodyH = b.getHeight () * 0.52f;
+    const juce::Rectangle<float> body (b.getX () + b.getWidth () * 0.14f, b.getBottom () - bodyH,
+                                       b.getWidth () * 0.72f, bodyH);
+    g.fillRoundedRectangle (body, body.getWidth () * 0.22f);
+
+    const float rx = b.getWidth () * 0.26f;
+    const float ry = b.getHeight () * 0.26f;
+    const float cx = b.getCentreX ();
+    const float cy = body.getY ();
+    juce::Path shackle;
+    shackle.addCentredArc (cx, cy, rx, ry, 0.0f, -juce::MathConstants<float>::halfPi,
+                           juce::MathConstants<float>::halfPi, true);
+    shackle.lineTo (cx + rx, body.getY () + 2.0f);
+    shackle.startNewSubPath (cx - rx, cy);
+    shackle.lineTo (cx - rx, body.getY () + 2.0f);
+    g.strokePath (shackle, juce::PathStrokeType (juce::jmax (1.2f, b.getWidth () * 0.11f)));
+}
 }   // namespace
 
 PlayScreen::PlayScreen () { setOpaque (true); }
@@ -89,6 +110,21 @@ void PlayScreen::setDeckView (int v) {
     gearSel_ = 0;   // fresh filter state per view (owner re-sends groups)
     layout ();
     repaint ();
+}
+
+void PlayScreen::setProState (bool pro) {
+    if (pro_ == pro) return;
+    pro_ = pro;
+    repaint (menuRect_);
+}
+
+void PlayScreen::applyViewType (int mode) {
+    layoutMode_ = mode;
+    flipped_ = false;   // card back has no meaning off-card
+    flip_ = 0.0f;
+    deckScroll_ = 0.0f;
+    deckExpanded_ = -1;
+    layout ();
 }
 
 void PlayScreen::notifyFilters () {
@@ -784,11 +820,18 @@ void PlayScreen::paint (juce::Graphics& g) {
                 g.fillRoundedRectangle (row.toFloat (), 9.0f);
             }
             auto in = row.reduced (12, 0);
+            // Rows 1+ of the layout picker and demo-track list are Pro; row 0
+            // (swipe cards / first DI track) always stays free.
+            const bool gated = !pro_ && (menu_ == Menu::ViewType || menu_ == Menu::Demo) && i > 0;
+            const auto lockR = gated ? in.removeFromRight (26) : juce::Rectangle<int> ();
             text (sel ? juce::String::fromUTF8 ("\xE2\x9C\x93") : juce::String (),
                   uiFont (12.0f, false), col::accentAlt, in.removeFromLeft (18),
                   juce::Justification::centredLeft);
             text (menuOptions_[i], uiFont (13.0f, sel), sel ? col::accentAlt : col::inkA (0.85f),
                   in, juce::Justification::centredLeft);
+            if (gated)
+                drawLockGlyph (g, lockR.toFloat ().withSizeKeepingCentre (14.0f, 14.0f),
+                               col::inkA (0.4f));
         }
         g.restoreState ();
         if (menuContentH_ > menuRect_.getHeight ()) {
@@ -824,12 +867,8 @@ void PlayScreen::mouseUp (const juce::MouseEvent& e) {
                         if (onSelectDemoTrack) onSelectDemoTrack (i);
                         break;
                     case Menu::ViewType:
-                        layoutMode_ = i;
-                        flipped_ = false;   // card back has no meaning off-card
-                        flip_ = 0.0f;
-                        deckScroll_ = 0.0f;
-                        deckExpanded_ = -1;
-                        layout ();
+                        if (onViewTypeSelect) onViewTypeSelect (i);
+                        else applyViewType (i);
                         break;
                     default: break;
                 }

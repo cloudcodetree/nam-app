@@ -30,6 +30,9 @@ public:
     // (amp cards pair a cab; cab cards pair an amp; etc).
     void setPairChoices (juce::String label, juce::StringArray names, int sel);
     void setDeckView (int v);   // 0 favorites · 1 browse (reflect)
+    // Pro entitlement (owner/AppShell decides; this only repaints lock
+    // glyphs on gated menu rows — presentation only, no gating logic here).
+    void setProState (bool pro);
 
     // Deck contents for the non-card layouts (detail list / grids). The
     // owner pushes the whole visible deck; `active` highlights the tone the
@@ -55,8 +58,12 @@ public:
     std::function<void ()> onDeckEndReached;
     std::function<void ()> onTuner;           // tuner panel -> strobe tuner
     std::function<void (int)> onViewChange;   // 0 favorites · 1 downloaded · 2 browse
-    std::function<void ()> onKeepToggle;      // heart tap / swipe-down keep
-    std::function<void ()> onSaveToggle;      // download button (save / remove)
+    // Layout picker tap (0 swipe · 1 list · 2/3 grid): the owner gates
+    // non-swipe modes and decides whether to apply it via applyViewType().
+    std::function<void (int)> onViewTypeSelect;
+    void applyViewType (int mode);         // apply an already-gated layout choice
+    std::function<void ()> onKeepToggle;   // heart tap / swipe-down keep
+    std::function<void ()> onSaveToggle;   // download button (save / remove)
     // Gear dropdown (browse strip): owner supplies choices (index 0 = all);
     // selection index is reported back.
     void setGearChoices (juce::StringArray names);
@@ -137,6 +144,10 @@ private:
     juce::Rectangle<int> topBar_, hero_, artRect_, textRect_, transportRect_, metersRow_;
     // Deck layout: 0 swipe cards · 1 detail list · 2 two-col grid · 3 four-col.
     int layoutMode_ = 0;
+    // Pro entitlement for lock glyphs. Defaults unlocked to match the "null
+    // service = ungated" convention (desktop/dev builds) until AppShell's
+    // first setProState() call lands.
+    bool pro_ = true;
     std::vector<DeckItem> deckItems_;
     int activeIdx_ = -1;
     // List view: the tapped row expands inline with the DEMO AUDIO + PAIR

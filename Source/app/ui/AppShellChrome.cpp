@@ -345,13 +345,6 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
         g.setFont (nam::ui::uiFont (13.0f, true));
         g.setColour (active ? nam::ui::col::accent : nam::ui::col::inkA (0.85f));
         g.drawText ("Downloaded", in.withTrimmedLeft (12), juce::Justification::centredLeft, false);
-
-        // TEMP Task 4: debug trigger for the paywall overlay (removed in
-        // Task 5's commit alongside AndroidAudioApp's #if 0 wiring cleanup).
-        g.setFont (nam::ui::uiFont (13.0f, true));
-        g.setColour (nam::ui::col::accentA (0.85f));
-        g.drawText ("Paywall (debug)", morePaywallDebugRect_.reduced (14, 10).withTrimmedLeft (30),
-                    juce::Justification::centredLeft, false);
     }
 }
 
@@ -369,14 +362,11 @@ void AppShell::closeIoPanel () {
 
 void AppShell::openMoreMenu () {
     // Content-sized, right-anchored above the nav (house overlay style).
-    // TEMP Task 4: a second "PAYWALL (DEBUG)" row is appended below
-    // DOWNLOADED for emulator verification; removed in Task 5's commit.
-    constexpr int rowH = 46, w = 210, numRows = 2;
+    constexpr int rowH = 46, w = 210, numRows = 1;
     moreRect_ = { getWidth () - w - 12, navBar_.getY () - rowH * numRows - 20, w,
                   rowH * numRows + 12 };
     auto rows = moreRect_.reduced (6);
     moreDownloadedRect_ = rows.removeFromTop (rowH);
-    morePaywallDebugRect_ = rows.removeFromTop (rowH);
     moreOpen_ = true;
     moreScrim_.setBounds (contentBounds ());
     moreScrim_.setVisible (true);
@@ -554,8 +544,12 @@ void AppShell::mouseDown (const juce::MouseEvent& e) {
         return;
     }
     if (navStacksRect_.contains (p)) {
-        show (Screen::Stacks);
-        repaint (navBar_);
+        if (!isPro_ || isPro_ ()) {
+            show (Screen::Stacks);
+            repaint (navBar_);
+        } else {
+            openPaywall (juce::String::fromUTF8 ("Stacks \xE2\x80\x94 build and switch full rigs"));
+        }
         return;
     }
     if (navMoreRect_.contains (p)) {

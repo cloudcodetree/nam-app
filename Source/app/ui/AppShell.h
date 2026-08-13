@@ -206,9 +206,7 @@ private:
     // ⋯ menu: small overlay above the nav's right corner (house overlay style).
     bool moreOpen_ = false;
     juce::Rectangle<int> moreRect_;
-    // TEMP Task 4: second row rect for the debug paywall trigger; removed
-    // (along with moreRect_'s second-row layout) in Task 5's commit.
-    juce::Rectangle<int> moreDownloadedRect_, morePaywallDebugRect_;
+    juce::Rectangle<int> moreDownloadedRect_;
     ClickAway moreScrim_;
     void openMoreMenu ();
     void closeMoreMenu ();

@@ -64,6 +64,17 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
 
     play_->onViewChange = [this] (int v) { setDeckMode (v); };
 
+    // Layout picker (swipe / list / grid): list & grid are Pro (mode 0 is
+    // the free swipe-card view). Gate before applying so a free tap never
+    // silently switches layout underneath the paywall.
+    play_->onViewTypeSelect = [this] (int mode) {
+        if (mode != 0 && isPro_ && !isPro_ ()) {
+            openPaywall ("List & grid layouts");
+            return;
+        }
+        play_->applyViewType (mode);
+    };
+
     // Infinite browse: nearing the deck's end (scroll or swipe) appends the
     // next TONE3000 results page. Local decks already hold everything.
     play_->onDeckEndReached = [this] { fetchMoreBrowse (); };
@@ -169,6 +180,11 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     };
 
     play_->onSelectDemoTrack = [this] (int i) {
+        // The first DI track is free; the rest of the library is Pro.
+        if (i > 0 && isPro_ && !isPro_ ()) {
+            openPaywall ("The full DI track library");
+            return;
+        }
         if (svc_.setDemoTrack) svc_.setDemoTrack (i, [] (bool) {});
     };
 
@@ -292,17 +308,10 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     ioScrim_.onUpAt = [this] (juce::Point<int> p) { handleIoUpAt (p); };
     addChildComponent (moreScrim_);
     moreScrim_.onTapAt = [this] (juce::Point<int> p) {
-        // DOWNLOADED (the deck moved out of the nav) + a TEMP Task 4 debug
-        // row that opens the paywall for emulator verification (removed in
-        // Task 5's commit).
+        // DOWNLOADED: the deck moved out of the nav and lives here now.
         if (moreOpen_ && moreDownloadedRect_.contains (p)) {
             closeMoreMenu ();
             setDeckMode (1);
-            return;
-        }
-        if (moreOpen_ && morePaywallDebugRect_.contains (p)) {
-            closeMoreMenu ();
-            openPaywall ("debug");
             return;
         }
         closeMoreMenu ();
@@ -761,6 +770,7 @@ void AppShell::setProServices (std::function<bool ()> isPro, std::function<void 
     isPro_ = std::move (isPro);
     purchasePro_ = std::move (purchase);
     restorePro_ = std::move (restore);
+    refreshProState ();   // push the initial lock-glyph state to PlayScreen
 }
 
 void AppShell::setProPriceText (juce::String price) {
@@ -817,8 +827,11 @@ void AppShell::openPaywall (const juce::String& reason) {
 
 void AppShell::refreshProState () {
     const bool pro = isPro_ && isPro_ ();
-    // Task 5: push lock-glyph state to PlayScreen
     if (pro && paywall_ != nullptr) paywall_->setVisible (false);
+    // Lock glyphs: a null service means ungated (desktop/dev builds), same
+    // convention as the gate checks above, so PlayScreen must see "unlocked"
+    // rather than the isPro_() default of false.
+    if (play_) play_->setProState (!isPro_ || pro);
     repaint ();
 }
 
