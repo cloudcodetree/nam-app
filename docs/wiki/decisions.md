@@ -3,6 +3,17 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-13** License swapped from the GPLv3 plan to proprietary
+  (Task 7): `LICENSE` now "Copyright © 2026 Chris Harper, all rights
+  reserved" with a third-party-components note (NeuralAudio MIT, RTNeural
+  BSD-3, Eigen MPL2, JUCE Personal tier, dr_wav public-domain/MIT-0,
+  PicoSHA2 MIT, nlohmann/json MIT — all verified present in the dependency
+  tree); `README.md` license section updated to match. TONE3000 email and
+  NAM-naming decision note drafted (`docs/business/tone3000-email-draft.md`,
+  `docs/business/nam-naming-note.md`) — both unsent/undecided, Chris acts
+  on them manually. **Repo-visibility change (public → private) is NOT
+  done** — gated on Chris confirming in-session per the plan; still
+  blocks the first store build per `docs/business/play-release-checklist.md`.
 - **2026-08-13** Release engineering scaffolded (Task 6):
   `signingConfigs.release` in `Builds/Android/app/build.gradle` reads
   `NAMPLAYER_UPLOAD_STORE_FILE/STORE_PASSWORD/KEY_ALIAS/KEY_PASSWORD` from
