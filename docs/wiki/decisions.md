@@ -3,6 +3,16 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-13** Billing spike verdict: NO-GO on JUCE 8.0.15's stock
+  Android IAP as pinned (docs/business/billing-spike.md). Its precompiled
+  `JuceBillingClient` targets Play Billing Library 7.0.0 — already past
+  Google's v8+ floor — but bumping the Gradle dependency to v8 breaks that
+  same precompiled shim at runtime (calls the no-arg
+  `enablePendingPurchases()`, removed in v8). Linking the module with no
+  billing jar present also crashes every launch (JUCE's JNI classes
+  resolve eagerly at `System.loadLibrary` time, not lazily). JUCE `9.0.1`
+  (tagged 2026-08-10) carries the GPB 9.1.0 fix; path decision (JUCE 8→9
+  migration vs. hand-rolled JNI shim) pending before Task 3.
 - **2026-08-13** Launch model adopted (business-advisor assessment,
   docs/business/2026-08-13): single $9.99 Pro unlock at launch; à-la-carte
   begins only when Looper ships as SKU #2; **first-rig-free** soft paywall
