@@ -28,8 +28,13 @@ void AndroidAudioApp::persistEntitlement(bool pro) {
     auto* obj = new juce::DynamicObject();
     obj->setProperty("pro", pro);
     const auto f = entitlementCacheFile();
-    f.getParentDirectory().createDirectory();
-    f.replaceWithText(juce::JSON::toString(juce::var(obj)));
+    const bool dirOk = f.getParentDirectory().createDirectory().wasOk();
+    const bool wroteOk = dirOk && f.replaceWithText(juce::JSON::toString(juce::var(obj)));
+    // Fail safe, not stale: if the write didn't land, delete rather than
+    // leave a possibly-stale cache behind — an absent cache seeds not-pro
+    // (corrected upward by the next successful store round-trip), while a
+    // stale pro=true cache would wrongly re-grant Pro after a refund.
+    if (!wroteOk) f.deleteFile();
 }
 
 struct AndroidAudioApp::BillingListener : juce::InAppPurchases::Listener {
