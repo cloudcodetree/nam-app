@@ -16,6 +16,18 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradl
   RECORD_AUDIO (`pm grant com.namplayer.app android.permission.RECORD_AUDIO`)
   or the duplex stream dies. NAM can't run real-time under QEMU — auditions
   pre-render offline there.
+- This AVD ships **no Google Play Services/Play Store** — `BillingClient`
+  fails to bind and every `juce::InAppPurchases` call self-resolves to
+  "not owned" within the same event-loop tick as the activity's first
+  frame, independent of `svc wifi/data enable|disable`. So it can't hold
+  a simulated "offline returning Pro user" state long enough to eyeball —
+  the async correction always wins the race before a screenshot lands.
+  To test Pro-entitlement UI in isolation, hand-seed
+  `run-as com.namplayer.app cat 'NAM Player/entitlement.json'`
+  (`{"pro": true}`) and temporarily short-circuit
+  `AndroidAudioApp::initBilling()` right after its cache-seed/refresh
+  (never commit the stub) — real offline-Pro billing behavior needs a
+  device with Play Services actually installed.
 - Phone (Samsung S25 Ultra): wireless adb; the connect port changes every
   session — use the `/adb-qr` skill (PNG QR + auto-pair watcher).
   `adb -s <ip:port> install -r <apk>`.

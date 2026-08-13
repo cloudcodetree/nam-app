@@ -3,6 +3,16 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-13** Pro lock-glyph state now seeded from the entitlement disk
+  cache synchronously in `AndroidAudioApp::initBilling()`, right after the
+  cache read and before the async `restoreProductsBoughtList` round trip
+  (`AndroidBilling.cpp`). Previously the only `refreshProState()` call tied
+  to service wiring ran *before* the cache seed, so a returning Pro user
+  launching offline saw every gated row padlocked until (if ever) the store
+  round trip corrected it. Found by task review of the freemium-gates
+  commits (505a881/e02fcde); see build-deploy.md for the `nam_test` AVD
+  quirk (no Play Services) that masks this bug on-device unless you
+  hand-seed the cache and stub the billing call.
 - **2026-08-13** JUCE 9.0.1 migration path taken (Task 2b, re-spike GO —
   docs/business/billing-spike.md): bumped `GIT_TAG` for both build trees.
   Headless suite (JUCE-free) unaffected; desktop target compiled with zero
