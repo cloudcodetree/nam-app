@@ -83,8 +83,7 @@ cp .env.example .env
 ## License
 
 Proprietary — © 2026 Chris Harper. All rights reserved. See
-[`LICENSE`](LICENSE). [JUCE](https://juce.com/) is used under its
-Personal-tier commercial license (not the GPLv3 path). Third-party
-components (NeuralAudio MIT, RTNeural BSD-3, Eigen MPL2, dr_wav
-public-domain/MIT-0, PicoSHA2 MIT, nlohmann/json MIT) remain under their
-own licenses — see `LICENSE` for the full list.
+[`LICENSE`](LICENSE) for the full text, including the required attribution
+list for every third-party component the app compiles or links (not
+duplicated here to avoid the two lists drifting apart). [JUCE](https://juce.com/)
+is used under its Personal-tier commercial license (not the GPLv3 path).

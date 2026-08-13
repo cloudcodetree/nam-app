@@ -43,6 +43,10 @@ source rather than in this repo.
   COPYING.* files). https://eigen.tuxfamily.org
 - **JUCE** (fetched at build time) — JUCE license, used under the Personal
   tier. https://juce.com/
+- **Melatonin Inspector** (fetched at build time, desktop builds only —
+  `if(NOT ANDROID)` in `CMakeLists.txt`; not part of the Android build the
+  app currently ships) — MIT License, Copyright (c) 2021 Sudara Williams.
+  https://github.com/sudara/melatonin_inspector
 - **dr_wav** (`extern/dr_wav`) — public domain, or MIT-0 at your option,
   Copyright (c) David Reid. https://github.com/mackron/dr_libs
 - **PicoSHA2** (`extern/picosha2`) — MIT License.

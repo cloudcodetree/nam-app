@@ -12,8 +12,13 @@ direction is chosen, reversed, or a constraint is discovered.
   compiled/linked (not just vendored) — the pre-push reviewer caught an
   initial pass that missed NeuralAmpModelerCore and math_approx despite
   both being unconditionally built into the NeuralAudio target
-  (`extern/NeuralAudio/NeuralAudio/CMakeLists.txt`); fixed same-commit.
-  `README.md` license section updated to match. TONE3000 email and
+  (`extern/NeuralAudio/NeuralAudio/CMakeLists.txt`); fixed same-commit. A
+  second review pass then caught Melatonin Inspector (MIT, Sudara
+  Williams) missing too — fetched unconditionally on desktop (non-Android)
+  builds regardless of build type, despite a stale "debug only" CMake
+  comment; added to LICENSE. README's license section no longer itemizes
+  third-party components at all (it now just points at `LICENSE`) so the
+  two lists can't drift apart again. TONE3000 email and
   NAM-naming decision note drafted (`docs/business/tone3000-email-draft.md`,
   `docs/business/nam-naming-note.md`) — both unsent/undecided, Chris acts
   on them manually. **Repo-visibility change (public → private) is NOT
