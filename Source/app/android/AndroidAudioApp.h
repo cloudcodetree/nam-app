@@ -1,10 +1,12 @@
 #pragma once
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <juce_product_unlocking/juce_product_unlocking.h>
 #include <array>
 #include <atomic>
 #include <memory>
 #include <vector>
 #include "dsp/ToneEngine.h"
+#include "model/Entitlements.h"
 #include "model/NamModel.h"
 #include "model/LibraryStore.h"
 #include "app/Tone3000Auth.h"
@@ -118,6 +120,18 @@ private:
     static juce::File tokenStoreFile();
     static std::string defaultLibraryDir();
     static long long nowSeconds();
+
+    // Pro entitlement (message thread only). Play is the source of truth;
+    // the cache file is a fallback for offline launches, never a grant.
+    nam::Entitlements entitlements_;
+    void initBilling();
+    void purchasePro(std::function<void(bool, juce::String)> done);
+    void restorePurchases(std::function<void(bool, juce::String)> done);
+    static juce::File entitlementCacheFile();   // appdata "NAM Player/entitlement.json"
+    void persistEntitlement(bool pro);
+    std::function<void(bool, juce::String)> purchaseDone_;   // in-flight callback
+    struct BillingListener;                                  // defined in AndroidBilling.cpp
+    std::unique_ptr<juce::InAppPurchases::Listener> billingListener_;
 
     nam::ui::NamLookAndFeel laf_;
     dsp::ToneEngine engine_;

@@ -93,6 +93,7 @@ if(NAM_BUILD_APP)
             Source/app/android/AndroidAudioApp.cpp
             Source/app/android/AndroidToneServices.cpp
             Source/app/android/AndroidAudioAudition.cpp
+            Source/app/android/AndroidBilling.cpp
             Source/app/ui/NamLookAndFeel.cpp
             Source/app/ui/PlayScreen.cpp
             Source/app/ui/PlayScreenDeck.cpp
