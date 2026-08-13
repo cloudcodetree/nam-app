@@ -163,6 +163,31 @@ git commit -m "chore: billing spike — juce_product_unlocking wired, version ve
 
 ---
 
+### Task 2b: JUCE 9.0.1 migration + billing re-spike (added after Task 2's NO-GO)
+
+**Context:** Task 2 found JUCE 8.0.15's Android IAP unshippable (embedded
+shim targets Play Billing 7.0.0; Google's floor is v8+; Gradle-only bumps
+crash at runtime). JUCE 9.0.1 (tagged 2026-08-10, same licensing/price as
+JUCE 8 — $0) contains the GPB 9.1.0 update (commit 1b58549). Chris chose
+the upgrade path. Reference: docs/business/billing-spike.md.
+
+**Files:**
+- Modify: `CMakeLists.txt` (`FetchContent_Declare(JUCE ... GIT_TAG 9.0.1)`; re-add `juce::juce_product_unlocking` + `JUCE_IN_APP_PURCHASES=1` to the Android target ONLY after the migration builds)
+- Modify: `Builds/Android/app/build.gradle` (add the Play Billing dependency version JUCE 9.0.1 expects — find it the way Task 2 did: grep the JUCE 9 checkout's Projucer Android exporter / module docs for `com.android.billingclient:billing:`)
+- Modify: whatever `Source/` files JUCE 9 API changes break (fix minimally, matching surrounding style; clang-format each)
+- Create: append a "JUCE 9.0.1 re-spike" section to `docs/business/billing-spike.md`
+
+**Interfaces:**
+- Produces: a tree on JUCE 9.0.1 where (1) the FULL headless suite passes, (2) the Android app builds AND launches on the emulator without crashing (adb screenshot as evidence), (3) `juce::InAppPurchases` is linked with the billing jar present so Task 3 can build on it. Desktop target must still configure (build it if the environment allows; at minimum `cmake --preset default` configures).
+
+- [ ] **Step 1: Bump the tag, build headless tests, fix breakage until green** (`cmake --preset default --target nam_tests`; full suite must pass)
+- [ ] **Step 2: Android build without billing** (confirm the migration alone is clean)
+- [ ] **Step 3: Emulator launch + screenshot** (app renders; no startup crash)
+- [ ] **Step 4: Re-add billing module + define + matching Gradle billing dependency; rebuild; emulator launch again** (eager JNI now resolves against the shipped jar — THIS is the re-spike's pass condition)
+- [ ] **Step 5: Document in billing-spike.md (GO verdict for Task 3 if step 4 passed), update docs/wiki/decisions.md (path chosen: JUCE 9.0.1), clang-format, commit** (`chore: JUCE 9.0.1 migration — billing re-spike GO`)
+
+---
+
 ### Task 3: Host billing wrapper (AndroidBilling.cpp)
 
 **Files:**
