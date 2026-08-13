@@ -21,14 +21,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 This proprietary license covers Chris Harper's original source code only.
 The Software incorporates the following third-party components, each of
-which remains under its own license; their copyright notices and license
-terms are preserved in-tree alongside the component:
+which remains under its own license. Vendored/submoduled components carry
+their copyright notices and license terms in-tree alongside the code;
+components fetched at build time (JUCE, and JUCE's own bundled
+dependencies such as Oboe on Android) carry their notices in the fetched
+source rather than in this repo.
 
 - **NeuralAudio** (`extern/NeuralAudio`) — MIT License, Copyright (c) 2024
   Mike Oliphant. https://github.com/mikeoliphant/NeuralAudio
+- **NeuralAmpModelerCore** (`extern/NeuralAudio/deps/NeuralAmpModelerCore`)
+  — MIT License, Copyright (c) 2023 Steven Atkinson.
+  https://github.com/sdatkinson/NeuralAmpModelerCore
 - **RTNeural** (`extern/NeuralAudio/deps/RTNeural`) — BSD 3-Clause License,
   Copyright (c) 2020 jatinchowdhury18.
   https://github.com/jatinchowdhury18/RTNeural
+- **math_approx** (`extern/NeuralAudio/deps/math_approx`) — BSD 3-Clause
+  License, Copyright (c) 2024 jatinchowdhury18.
+  https://github.com/jatinchowdhury18/math_approx
 - **Eigen** (vendored under `extern/NeuralAudio/deps/...`) — Mozilla Public
   License 2.0 (MPL2; portions BSD/Apache-2.0, see the component's own
   COPYING.* files). https://eigen.tuxfamily.org

@@ -5,10 +5,15 @@ direction is chosen, reversed, or a constraint is discovered.
 
 - **2026-08-13** License swapped from the GPLv3 plan to proprietary
   (Task 7): `LICENSE` now "Copyright © 2026 Chris Harper, all rights
-  reserved" with a third-party-components note (NeuralAudio MIT, RTNeural
-  BSD-3, Eigen MPL2, JUCE Personal tier, dr_wav public-domain/MIT-0,
-  PicoSHA2 MIT, nlohmann/json MIT — all verified present in the dependency
-  tree); `README.md` license section updated to match. TONE3000 email and
+  reserved" with a third-party-components note (NeuralAudio MIT,
+  NeuralAmpModelerCore MIT, RTNeural BSD-3, math_approx BSD-3, Eigen MPL2,
+  JUCE Personal tier, dr_wav public-domain/MIT-0, PicoSHA2 MIT,
+  nlohmann/json MIT). Each entry was checked against what's actually
+  compiled/linked (not just vendored) — the pre-push reviewer caught an
+  initial pass that missed NeuralAmpModelerCore and math_approx despite
+  both being unconditionally built into the NeuralAudio target
+  (`extern/NeuralAudio/NeuralAudio/CMakeLists.txt`); fixed same-commit.
+  `README.md` license section updated to match. TONE3000 email and
   NAM-naming decision note drafted (`docs/business/tone3000-email-draft.md`,
   `docs/business/nam-naming-note.md`) — both unsent/undecided, Chris acts
   on them manually. **Repo-visibility change (public → private) is NOT
