@@ -71,6 +71,26 @@ void drawPill (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour fill, j
     }
 }
 
+void drawLockGlyph (juce::Graphics& g, juce::Rectangle<float> b, juce::Colour c) {
+    g.setColour (c);
+    const float bodyH = b.getHeight () * 0.52f;
+    const juce::Rectangle<float> body (b.getX () + b.getWidth () * 0.14f, b.getBottom () - bodyH,
+                                       b.getWidth () * 0.72f, bodyH);
+    g.fillRoundedRectangle (body, body.getWidth () * 0.22f);
+
+    const float rx = b.getWidth () * 0.26f;
+    const float ry = b.getHeight () * 0.26f;
+    const float cx = b.getCentreX ();
+    const float cy = body.getY ();
+    juce::Path shackle;
+    shackle.addCentredArc (cx, cy, rx, ry, 0.0f, -juce::MathConstants<float>::halfPi,
+                           juce::MathConstants<float>::halfPi, true);
+    shackle.lineTo (cx + rx, body.getY () + 2.0f);
+    shackle.startNewSubPath (cx - rx, cy);
+    shackle.lineTo (cx - rx, body.getY () + 2.0f);
+    g.strokePath (shackle, juce::PathStrokeType (juce::jmax (1.2f, b.getWidth () * 0.11f)));
+}
+
 // --- LookAndFeel ------------------------------------------------------------
 NamLookAndFeel::NamLookAndFeel () {
     setColour (juce::Slider::backgroundColourId, col::inkA (0.12f));

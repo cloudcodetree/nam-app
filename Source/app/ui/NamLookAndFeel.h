@@ -39,6 +39,10 @@ void paintHeroBackground (juce::Graphics& g, juce::Rectangle<int> bounds, bool w
 void drawPill (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour fill, juce::Colour stroke,
                float strokeWidth = 1.0f);
 
+// Vector padlock (rounded-rect body + arc shackle) for gated Pro rows —
+// screens that gate a feature draw this instead of an emoji/unicode glyph.
+void drawLockGlyph (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour c);
+
 // --- LookAndFeel: faders, and default typeface -----------------------------
 class NamLookAndFeel : public juce::LookAndFeel_V4 {
 public:

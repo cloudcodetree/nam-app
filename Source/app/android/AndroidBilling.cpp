@@ -82,6 +82,12 @@ void AndroidAudioApp::initBilling() {
     // Seed from cache so an offline launch keeps Pro unlocked.
     const auto parsed = juce::JSON::parse(entitlementCacheFile().loadFileAsString());
     if (auto* obj = parsed.getDynamicObject()) entitlements_.setPro(bool(obj->getProperty("pro")));
+    // setProServices() (called just before this, in the ctor) already wired
+    // isPro_ against a default-constructed entitlements_ (pro=false); push
+    // the real cache-seeded value now so PlayScreen's lock glyphs reflect a
+    // returning Pro user immediately, not just after the async store round
+    // trip (which never lands at all if the device is offline).
+    if (shell_ != nullptr) shell_->refreshProState();
     billingListener_ = std::make_unique<BillingListener>(*this);
     auto* iap = juce::InAppPurchases::getInstance();
     iap->addListener(billingListener_.get());
