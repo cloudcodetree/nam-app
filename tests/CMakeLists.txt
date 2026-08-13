@@ -20,6 +20,7 @@ add_executable(nam_tests
     test_pkce.cpp
     test_tone3000api.cpp
     test_delay.cpp
+    test_entitlements.cpp
     test_reverb.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/IrLoader.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryStore.cpp
