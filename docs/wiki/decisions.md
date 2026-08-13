@@ -3,6 +3,19 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-13** Launch model adopted (business-advisor assessment,
+  docs/business/2026-08-13): single $9.99 Pro unlock at launch; à-la-carte
+  begins only when Looper ships as SKU #2; **first-rig-free** soft paywall
+  at public launch (hard gate OK for internal testing); tier-picker, bundle,
+  7-day trial, Cloud Sync all cut; MIDI foot control = Pro (free-basic-MIDI
+  idea rejected); "own v1" kept as internal economics, never store copy.
+  Time-sensitive: TONE3000 partnership email now; resolve "NAM" naming
+  before any public impression.
+- **2026-08-13** Multi-controller support direction locked (wiki
+  controllers.md): transport-agnostic control layer; BLE/USB MIDI first
+  (Chocolate Plus), Spark proprietary-BLE adapter second, HID third.
+  Foot-control v1 design approved (ControlMap JUCE-free + MIDI transport +
+  learn-by-doing panel).
 - **2026-08-12** Freemium direction: free app + one-time $9.99 Pro unlock
   (no ads — ad SDKs fight the RT audio path and the audience pays for
   tools). **TONE3000-parity rule**: anything the site offers free is free

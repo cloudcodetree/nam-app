@@ -39,14 +39,24 @@ The `/tone3000-parity` skill audits the boundary against the live site.
 - Swipe-card deck view.
 
 **Pro ($9.99 one-time)** — app-native only
-- **Stacks** (create/apply rigs — no site equivalent).
+- **Stacks beyond the first rig** (2026-08-13 revision, business-advisor
+  assessment adopted): every user gets ONE rig free forever; saving a
+  SECOND rig is the paywall moment at public launch. (Internal testing may
+  ship the simpler hard nav gate first; the swap to first-rig-free is a
+  public-launch requirement.)
 - Detail-list and grid **view layouts** (app UI; swipe cards remain free).
-- The **extended DI audition track library** (auditioning through a CHOICE
-  of playing styles is an app enhancement; the site's previews are fixed
-  recordings — first track free, the rest Pro).
-- First claim on future app-native features (MIDI, looper, pedalboard).
+- The **extended DI audition track library** (first track free, rest Pro).
+- **MIDI foot control when it ships** (app-native per wiki controllers.md —
+  the design-board idea of free basic MIDI is explicitly rejected).
+- Future modules (Looper etc.) become their OWN one-time SKUs — that is
+  the moment à-la-carte legitimately begins. Never re-charge for versions.
 
-**Grandfathering:** no longer needed — nothing caps saves.
+**Explicitly cut at launch** (assessment, docs/business/2026-08-13):
+onboarding tier-picker, Performer bundle, 7-day trial (the free tier IS
+the trial), Cloud Sync (v2, post-backend, the only future subscription).
+
+**Grandfathering:** nothing caps saves. A Pro refund/revoke re-locks
+rigs 2+ for EDITING but never deletes them.
 
 ## Architecture
 
@@ -58,9 +68,10 @@ Pure policy class — no billing, no JUCE:
 class Entitlements {
     void setPro(bool);            bool isPro() const;
     // TONE3000-parity rule: saves/downloads/favorites are ALWAYS allowed.
-    bool canUseStacks() const;                    // pro
+    bool canSaveRig(int existingRigs) const;      // pro || existingRigs < 1
     bool canUseLayout(int layoutMode) const;      // pro || layoutMode == 0
     bool canUseDemoTrack(int index) const;        // pro || index == 0
+    static constexpr int kFreeRigs = 1;
     static constexpr int kFreeDemoTracks = 1;
 };
 ```
@@ -93,7 +104,8 @@ show a lock glyph instead of hiding (discoverability).
 
 | Feature | Touchpoint | Behavior when free |
 |---|---|---|
-| Stacks | STACKS nav hit in AppShell `mouseDown` | paywall instead of `show(Stacks)` |
+| 2nd rig (public launch) | StacksScreen `onCreate` / `onSlotPicked` into a 2nd stack | first rig fully usable; creating/saving a 2nd opens the paywall ("Your first rig stays free forever") |
+| Stacks (internal testing only) | STACKS nav hit in AppShell `mouseDown` | hard gate acceptable pre-public |
 | List/grid layouts | ViewType menu selection (PlayScreen reports; AppShell decides) | lock glyph on rows 1–3; selection opens paywall |
 | Demo tracks 2+ | Demo-track menu selection | lock glyph; selection opens paywall |
 
