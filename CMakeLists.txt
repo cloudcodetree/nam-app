@@ -126,12 +126,19 @@ if(NAM_BUILD_APP)
             NamPlayerData
             NeuralAudio
             juce::juce_audio_utils
-            juce::juce_gui_extra)
+            juce::juce_gui_extra
+            juce::juce_product_unlocking)
         target_compile_definitions(NamPlayer PRIVATE
             JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
             JUCE_APPLICATION_NAME_STRING="NAM Player"
             # Publishable key only (parsed from .env above); "" if absent.
-            TONE3000_PUBLISHABLE_KEY="${T3K_PUB}")
+            TONE3000_PUBLISHABLE_KEY="${T3K_PUB}"
+            # Billing spike (docs/business/billing-spike.md): enables
+            # juce::InAppPurchases. JUCE's CMake Android flow does NOT inject
+            # the Play Billing Library into Gradle (that only happens via the
+            # Projucer exporter) — see Builds/Android/app/build.gradle for the
+            # manually-added dependency this requires.
+            JUCE_IN_APP_PURCHASES=1)
     else()
         # --- Desktop app target (macOS/Windows/Linux) ---
         juce_add_gui_app(NamPlayer
