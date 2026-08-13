@@ -31,7 +31,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home ./gradl
   `adb -s emulator-5554` swap for your device):
 
   ```
-  adb shell "run-as com.namplayer.app sh -c 'echo \"{\\\"pro\\\": true}\" > \"NAM Player/entitlement.json\"'"
+  adb shell "run-as com.namplayer.app sh -c 'mkdir -p \"NAM Player\" && echo \"{\\\"pro\\\": true}\" > \"NAM Player/entitlement.json\"'"
   ```
 
   ...then temporarily short-circuit `AndroidAudioApp::initBilling()`
