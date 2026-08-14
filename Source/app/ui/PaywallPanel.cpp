@@ -65,13 +65,19 @@ int PaywallPanel::computeContentHeight () const {
 void PaywallPanel::layout () {
     contentH_ = computeContentHeight ();
     const int w = juce::jmin (380, getWidth () - 32);
-    const int maxH = getHeight () * 55 / 100;   // overlay rule: height-capped
-    const int h = juce::jmin (contentH_, juce::jmax (0, maxH));
+    // Modal: fills most of the screen (72–88% — capped, never full screen);
+    // when taller than the content, the slack pushes the CTA block down so
+    // features read at the top and the buttons sit near the thumb.
+    const int maxH = getHeight () * 88 / 100;
+    const int minH = getHeight () * 72 / 100;
+    const int h = juce::jmin (juce::jmax (contentH_, minH), juce::jmax (0, maxH));
     panelRect_ = { getWidth () / 2 - w / 2, getHeight () - h - 12, w, h };
+    const int slack = juce::jmax (0, h - contentH_);
 
     const int innerX = kPad;
     const int innerW = w - kPad * 2;
-    int y = kPad + kHandleH + kGap + kTitleH + kReasonH + kGap + kCheckRowH * kNumChecks + kGap;
+    int y =
+        kPad + kHandleH + kGap + kTitleH + kReasonH + kGap + kCheckRowH * kNumChecks + kGap + slack;
     buyRect_ = { innerX, y, innerW, kButtonH };
     y += kButtonH + kButtonGap;
     restoreRect_ = { innerX, y, innerW, kButtonH };
@@ -85,6 +91,10 @@ void PaywallPanel::layout () {
 void PaywallPanel::resized () { layout (); }
 
 void PaywallPanel::paint (juce::Graphics& g) {
+    // Scrim over the whole shell (nav included) — nothing behind the modal
+    // reads as tappable until it's dismissed.
+    g.fillAll (juce::Colours::black.withAlpha (0.55f));
+
     g.setColour (juce::Colour (0xf214101f));
     g.fillRoundedRectangle (panelRect_.toFloat (), 14.0f);
     g.setColour (col::inkA (0.18f));
@@ -138,7 +148,6 @@ void PaywallPanel::paint (juce::Graphics& g) {
     g.setFont (uiFontTracked (12.0f, true));
     g.setColour (busy_ ? col::inkOnAccent.withAlpha (0.6f) : col::inkOnAccent);
     g.drawText (busy_ ? "UNLOCKING..." : priceText_, buy, juce::Justification::centred, false);
-    y += kButtonH + kButtonGap;
 
     // RESTORE ghost pill.
     auto restore = S (restoreRect_);
@@ -148,18 +157,16 @@ void PaywallPanel::paint (juce::Graphics& g) {
     g.setColour (busy_ ? col::inkA (0.3f) : col::inkA (0.7f));
     g.drawText (busy_ ? "RESTORING..." : "RESTORE PURCHASE", restore, juce::Justification::centred,
                 false);
-    y += kButtonH + kGap;
 
     g.setFont (uiFont (12.0f, false));
     g.setColour (col::inkA (0.45f));
     g.drawText ("not now", S (notNowRect_), juce::Justification::centred, false);
-    y += kNotNowH;
 
     if (status_.isNotEmpty ()) {
         g.setFont (uiFont (11.0f, false));
         g.setColour (col::inkA (0.5f));
-        g.drawText (status_, S ({ kPad, y, innerW, kStatusH }), juce::Justification::centred,
-                    false);
+        g.drawText (status_, S ({ kPad, notNowRect_.getBottom (), innerW, kStatusH }),
+                    juce::Justification::centred, false);
     }
 
     g.restoreState ();

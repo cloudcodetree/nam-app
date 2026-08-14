@@ -837,7 +837,7 @@ void AppShell::openPaywall (const juce::String& reason) {
     if (!proCallInFlight_) paywall_->setStatus ({});
     paywall_->setReason (reason);
     if (proPriceText_.isNotEmpty ()) paywall_->setPriceText (proPriceText_);
-    paywall_->setBounds (contentBounds ());
+    paywall_->setBounds (getLocalBounds ());
     paywall_->setVisible (true);
     paywall_->toFront (false);
 }
@@ -1041,7 +1041,7 @@ void AppShell::resized () {
 
     for (juce::Component* c : { (juce::Component*)play_.get (), (juce::Component*)stacks_.get () })
         if (c != nullptr) c->setBounds (b);
-    if (paywall_ != nullptr) paywall_->setBounds (contentBounds ());
+    if (paywall_ != nullptr) paywall_->setBounds (getLocalBounds ());
 
     // The tuner overlay tracks the Play tuner panel, not the screen grid.
     if (tuner_ != nullptr && tunerOpen_) {
