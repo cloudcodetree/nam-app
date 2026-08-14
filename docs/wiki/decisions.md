@@ -3,6 +3,21 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-14** Freemium Pro-unlock plan complete (26d2ae4..54bd747, 25
+  commits): entitlements core, JUCE 9.0.1 + Play Billing 9.1.0, billing
+  wrapper w/ offline cache, paywall sheet, gates (STACKS/layouts/demo
+  tracks), release scaffold, legal docs, kSoftPaywall flag (committed
+  internal/hard-gate). Final whole-branch review: internal-testing ready
+  after Chris's gates (repo private, keystore, phone verification of
+  JUCE 9 audio + live billing, TONE3000 email, NAM naming). Public-flip
+  work list (do WITH the kSoftPaywall flip): defer restore's DoneFn to
+  purchasesListRestored; gate rig-2+ EDITING for lapsed Pro
+  (grandfathering spec); route live gates through Entitlements::
+  canUseLayout/canUseDemoTrack; extract AppShellPro.cpp (AppShell.cpp
+  ~1046 lines); "still waiting on Google Play…" state for pending
+  purchases; re-check data-safety wording; hedge naming-note fair-use
+  claim. Why ledgered here: the SDD workspace (gitignored) is deleted at
+  plan completion — this list is the durable copy.
 - **2026-08-13** License swapped from the GPLv3 plan to proprietary
   (Task 7): `LICENSE` now "Copyright © 2026 Chris Harper, all rights
   reserved" with a third-party-components note (NeuralAudio MIT,
