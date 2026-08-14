@@ -42,6 +42,11 @@ if(NAM_BUILD_APP)
     # client secret (TONE3000_CLIENT_SECRET) is never parsed or injected here --
     # a native OAuth2 PKCE client must not embed it.
     set(T3K_PUB "")
+    # Dev switch: NAM_GATES_ENABLED=0 in .env disables ALL Pro gating
+    # (paywall, nav/layout/demo/rig gates, lock glyphs) for day-to-day
+    # development. Absent or any other value => gates ON — a store build
+    # can never ship ungated by omission.
+    set(NAM_GATES 1)
     if(EXISTS "${CMAKE_SOURCE_DIR}/.env")
         file(STRINGS "${CMAKE_SOURCE_DIR}/.env" _envlines)
         foreach(_l ${_envlines})
@@ -49,7 +54,15 @@ if(NAM_BUILD_APP)
                 set(T3K_PUB "${CMAKE_MATCH_1}")
                 string(STRIP "${T3K_PUB}" T3K_PUB)
             endif()
+            if(_l MATCHES "^NAM_GATES_ENABLED=[ \t]*0[ \t]*$")
+                set(NAM_GATES 0)
+            endif()
         endforeach()
+        # Re-run configure when .env changes so toggling the switch (or
+        # rotating the key) takes effect on the next build, not the next
+        # manual reconfigure.
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+            "${CMAKE_SOURCE_DIR}/.env")
     endif()
 
     if(ANDROID)
@@ -135,6 +148,8 @@ if(NAM_BUILD_APP)
             JUCE_APPLICATION_NAME_STRING="NAM Player"
             # Publishable key only (parsed from .env above); "" if absent.
             TONE3000_PUBLISHABLE_KEY="${T3K_PUB}"
+            # Pro-gating dev switch (parsed from .env above); 1 if absent.
+            NAM_GATES_ENABLED=${NAM_GATES}
             # Billing spike re-spike on JUCE 9.0.1 (docs/business/billing-spike.md):
             # the 8.0.15 crash was JUCE's bundled JuceBillingClient.java calling
             # the removed no-arg enablePendingPurchases() while no Play Billing
@@ -186,7 +201,9 @@ if(NAM_BUILD_APP)
             JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
             JUCE_APPLICATION_NAME_STRING="NAM Player"
             # Publishable key only (see T3K_PUB above); "" if .env is absent.
-            TONE3000_PUBLISHABLE_KEY="${T3K_PUB}")
+            TONE3000_PUBLISHABLE_KEY="${T3K_PUB}"
+            # Pro-gating dev switch (see NAM_GATES above); 1 if absent.
+            NAM_GATES_ENABLED=${NAM_GATES})
     endif()
 endif()
 

@@ -25,6 +25,17 @@
 //   SECOND rig instead. Flip this one constant at public launch.
 constexpr bool kSoftPaywall = false;
 
+// Master switch for ALL Pro gating (nav/layout/demo/rig gates + lock
+// glyphs), driven by the build: set NAM_GATES_ENABLED=0 in .env to develop
+// with everything unlocked (CMake injects it; see the .env parse at the
+// repo root CMakeLists). Absent or any other value => gates ON, so a store
+// build can never ship ungated by omission. The billing wrapper itself
+// stays live either way; only the gates consult this.
+#ifndef NAM_GATES_ENABLED
+#define NAM_GATES_ENABLED 1
+#endif
+constexpr bool kGatesEnabled = (NAM_GATES_ENABLED != 0);
+
 // Cross-platform app shell: owns every screen and swaps the visible one on
 // navigation. Holds the shared dsp::ToneEngine so screens drive it. The
 // Android/desktop/iOS shells each just host one AppShell.

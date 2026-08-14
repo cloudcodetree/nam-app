@@ -69,7 +69,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     // the free swipe-card view). Gate before applying so a free tap never
     // silently switches layout underneath the paywall.
     play_->onViewTypeSelect = [this] (int mode) {
-        if (mode != 0 && isPro_ && !isPro_ ()) {
+        if (kGatesEnabled && mode != 0 && isPro_ && !isPro_ ()) {
             openPaywall ("List & grid layouts");
             return;
         }
@@ -184,7 +184,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         // The first DI track is free; the rest of the library is Pro. Gate
         // BEFORE applying so a vetoed pick never desyncs the DEMO AUDIO
         // label from the track actually loaded.
-        if (i > 0 && isPro_ && !isPro_ ()) {
+        if (kGatesEnabled && i > 0 && isPro_ && !isPro_ ()) {
             openPaywall ("The full DI track library");
             return;
         }
@@ -243,7 +243,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         // free users reach Stacks, so creation of a SECOND rig is gated
         // here instead. Policy lives in Entitlements, not this UI layer;
         // isPro_ null stays ungated (desktop convention).
-        if (kSoftPaywall && isPro_) {
+        if (kGatesEnabled && kSoftPaywall && isPro_) {
             nam::Entitlements ent;
             ent.setPro (isPro_ ());
             if (!ent.canSaveRig ((int)stackList_.size ())) {
@@ -848,7 +848,7 @@ void AppShell::refreshProState () {
     // Lock glyphs: a null service means ungated (desktop/dev builds), same
     // convention as the gate checks above, so PlayScreen must see "unlocked"
     // rather than the isPro_() default of false.
-    if (play_) play_->setProState (!isPro_ || pro);
+    if (play_) play_->setProState (!kGatesEnabled || !isPro_ || pro);
     repaint ();
 }
 

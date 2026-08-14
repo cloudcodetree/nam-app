@@ -3,6 +3,11 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-14** Pro gating became an .env build switch: `NAM_GATES_ENABLED=0`
+  disables paywall/gates/lock-glyphs for development (CMake injects it, same
+  pattern as the publishable key; .env changes now retrigger configure).
+  Absent or 1 = gates ON — fail-safe for store builds. Re-enabling is on the
+  internal-testing checklist. Why: day-to-day dev kept hitting the gates.
 - **2026-08-14** Stripe + federated login (Google etc.) DEFERRED to the
   "app gets a backend" milestone (Cloud Sync or the Web/PWA version —
   whichever is green-lit first). Why: Play policy requires Play Billing

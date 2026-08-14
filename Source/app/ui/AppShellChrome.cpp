@@ -548,7 +548,7 @@ void AppShell::mouseDown (const juce::MouseEvent& e) {
         // rig is free and creation of a second one is gated instead (see
         // stacks_->onCreate in AppShell.cpp). Until then this nav hit stays
         // the hard gate, matching the Task 5 internal-testing config.
-        if (kSoftPaywall || !isPro_ || isPro_ ()) {
+        if (!kGatesEnabled || kSoftPaywall || !isPro_ || isPro_ ()) {
             show (Screen::Stacks);
             repaint (navBar_);
         } else {
