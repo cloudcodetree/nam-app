@@ -853,6 +853,13 @@ void AppShell::refreshProState () {
 }
 
 bool AppShell::handleBackButton () {
+    // Same dismissal as the sheet's own close button (onClose): busy state
+    // deliberately survives this per the timeout fix, it just stops being
+    // shown until the sheet is reopened.
+    if (paywall_ != nullptr && paywall_->isVisible ()) {
+        paywall_->setVisible (false);
+        return true;
+    }
     if (tunerOpen_) {
         toggleTuner ();
         return true;

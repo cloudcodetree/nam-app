@@ -70,11 +70,39 @@ struct AndroidAudioApp::BillingListener : juce::InAppPurchases::Listener {
             owner.persistEntitlement(true);
         }
         if (owner.purchaseDone_) {
+            if (owner.purchaseTimeout_) owner.purchaseTimeout_->cancel();
             auto done = std::move(owner.purchaseDone_);
             owner.purchaseDone_ = nullptr;
             done(ownsPro, statusDescription);
         }
         if (owner.shell_ != nullptr) owner.shell_->refreshProState();
+    }
+};
+
+// JUCE 9's JuceBillingClient.java connectAndExecute() drops the queued
+// runnable when onBillingSetupFinished() returns non-OK, and
+// launchBillingFlow()'s returned BillingResult is ignored — for
+// BILLING_UNAVAILABLE / not-signed-into-Play devices (the emulator has no
+// Play Services), productPurchaseFinished() never fires. Without this,
+// purchaseDone_ (and the paywall's busy state, which deliberately survives
+// close/reopen) would be wedged for the rest of the session. Message
+// thread only, one-shot: stopTimer() first thing in the callback, and the
+// listener cancels us on a normal resolution.
+struct AndroidAudioApp::PurchaseTimeoutImpl : AndroidAudioApp::PurchaseTimeout,
+                                              private juce::Timer {
+    explicit PurchaseTimeoutImpl(AndroidAudioApp& o) : owner(o) {}
+    AndroidAudioApp& owner;
+
+    void arm() override { startTimer(45000); }
+    void cancel() override { stopTimer(); }
+
+    void timerCallback() override {
+        stopTimer();
+        if (!owner.purchaseDone_) return;   // already resolved by the listener
+        auto done = std::move(owner.purchaseDone_);
+        owner.purchaseDone_ = nullptr;
+        // Em dash via fromUTF8 (non-ASCII glyphs house rule).
+        done(false, juce::String::fromUTF8("Store unavailable \xE2\x80\x94 try again later"));
     }
 };
 
@@ -106,6 +134,9 @@ void AndroidAudioApp::purchasePro(std::function<void(bool, juce::String)> done) 
         return;
     }
     purchaseDone_ = std::move(done);
+    if (purchaseTimeout_ == nullptr)
+        purchaseTimeout_ = std::make_unique<AndroidAudioApp::PurchaseTimeoutImpl>(*this);
+    purchaseTimeout_->arm();
     juce::InAppPurchases::getInstance()->purchaseProduct(kProProductId);
 }
 

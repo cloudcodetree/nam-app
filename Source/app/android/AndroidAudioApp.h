@@ -132,6 +132,21 @@ private:
     std::function<void(bool, juce::String)> purchaseDone_;   // in-flight callback
     struct BillingListener;                                  // defined in AndroidBilling.cpp
     std::unique_ptr<juce::InAppPurchases::Listener> billingListener_;
+    // BILLING_UNAVAILABLE / not-signed-into-Play: JuceBillingClient.java
+    // never calls back in that case, so purchaseDone_ would otherwise be
+    // held forever. Resolves it once, ~45s after purchasePro() arms it, if
+    // the real listener callback hasn't landed by then. A tiny interface
+    // (not a plain forward-declared struct) so this header's unique_ptr
+    // destructor doesn't need the juce::Timer-deriving implementation
+    // (AndroidBilling.cpp) to be complete — same trick billingListener_
+    // above gets for free from juce::InAppPurchases::Listener.
+    struct PurchaseTimeout {
+        virtual ~PurchaseTimeout() = default;
+        virtual void arm() = 0;      // (re)start the 45s countdown
+        virtual void cancel() = 0;   // stop it (a real answer already landed)
+    };
+    struct PurchaseTimeoutImpl;   // defined in AndroidBilling.cpp; needs owner_ access
+    std::unique_ptr<PurchaseTimeout> purchaseTimeout_;
 
     nam::ui::NamLookAndFeel laf_;
     dsp::ToneEngine engine_;
