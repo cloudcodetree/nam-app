@@ -3,6 +3,15 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-14** Stripe + federated login (Google etc.) DEFERRED to the
+  "app gets a backend" milestone (Cloud Sync or the Web/PWA version —
+  whichever is green-lit first). Why: Play policy requires Play Billing
+  for in-app digital goods; Stripe makes Chris the merchant of record
+  (tax/refunds/backend/accounts) for ~$0.90 more per $9.99 sale; and
+  federated login has no feature behind it while the app has no server —
+  it would only degrade the "no data collected" privacy story (and
+  obligate Sign in with Apple on iOS). Revisit both as ONE decision at
+  that milestone; TONE3000 OAuth stays a service link, never app identity.
 - **2026-08-14** Freemium Pro-unlock plan complete (26d2ae4..54bd747, 25
   commits): entitlements core, JUCE 9.0.1 + Play Billing 9.1.0, billing
   wrapper w/ offline cache, paywall sheet, gates (STACKS/layouts/demo
