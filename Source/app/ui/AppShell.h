@@ -14,6 +14,17 @@
 #include "app/ui/StacksScreen.h"
 #include "app/ui/TunerScreen.h"
 
+// Soft-paywall strategy for Stacks (Task 8, freemium Pro-unlock). Shared by
+// AppShell.cpp (rig-creation gate) and AppShellChrome.cpp (STACKS nav gate)
+// so both touchpoints flip together.
+//   false (current/internal-testing default): the STACKS nav button itself
+//   is hard-gated in AppShellChrome.cpp -- free users never reach the
+//   screen, matching the Task 5 config as shipped.
+//   true (public-launch config): the nav gate lets everyone in; the first
+//   rig is free and AppShell.cpp's stacks_->onCreate gates creation of a
+//   SECOND rig instead. Flip this one constant at public launch.
+constexpr bool kSoftPaywall = false;
+
 // Cross-platform app shell: owns every screen and swaps the visible one on
 // navigation. Holds the shared dsp::ToneEngine so screens drive it. The
 // Android/desktop/iOS shells each just host one AppShell.

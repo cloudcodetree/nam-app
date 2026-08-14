@@ -1,6 +1,7 @@
 #include "app/ui/AppShell.h"
 #include "app/ui/DemoTrackCatalog.h"
 #include "app/ui/NamLookAndFeel.h"
+#include "model/Entitlements.h"
 
 #include <algorithm>
 #include <cmath>
@@ -238,6 +239,19 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     };
     // --- Stacks: user-built rigs; every slot picks live from TONE3000 ----
     stacks_->onCreate = [this] {
+        // Public-launch config only (kSoftPaywall): the nav gate above lets
+        // free users reach Stacks, so creation of a SECOND rig is gated
+        // here instead. Policy lives in Entitlements, not this UI layer;
+        // isPro_ null stays ungated (desktop convention).
+        if (kSoftPaywall && isPro_) {
+            nam::Entitlements ent;
+            ent.setPro (isPro_ ());
+            if (!ent.canSaveRig ((int)stackList_.size ())) {
+                openPaywall (juce::String::fromUTF8 (
+                    "Your first rig stays free forever \xE2\x80\x94 Pro adds unlimited rigs"));
+                return;
+            }
+        }
         StacksScreen::Stack st;
         st.name = "STACK " + juce::String ((int)stackList_.size () + 1);
         stackList_.push_back (std::move (st));
