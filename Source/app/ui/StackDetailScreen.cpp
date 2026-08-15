@@ -6,19 +6,62 @@ using namespace nam::ui;
 
 namespace {
 const juce::String kBackGlyph = juce::String::fromUTF8 ("\xE2\x80\xB9");   // ‹
-const juce::String kEllipsis = juce::String::fromUTF8 ("\xE2\x80\xA6");    // …
 }   // namespace
 
-StackDetailScreen::StackDetailScreen () { setOpaque (true); }
+StackDetailScreen::StackDetailScreen () {
+    setOpaque (true);
+    addAndMakeVisible (editView_);
+    addChildComponent (picker_);
+    addChildComponent (itemSheet_);
+    wireChildren ();
+}
+
+void StackDetailScreen::wireChildren () {
+    editView_.onAddGear = [this] (nam::GearType t) {
+        if (onAddGear) onAddGear (t);
+    };
+    editView_.onRemoveStack = [this] {
+        if (onRemoveStack) onRemoveStack ();
+    };
+    editView_.onChanged = [this] (nam::Stack st) {
+        stack_ = st;
+        if (onChanged) onChanged (idx_, st);
+    };
+    editView_.onOpenItem = [this] (juce::String uid) {
+        const auto* it = findItem (uid);
+        if (it != nullptr) itemSheet_.open (*it);
+    };
+}
+
+const nam::ChainItem* StackDetailScreen::findItem (const juce::String& uid) const {
+    for (const auto& it : stack_.chain)
+        if (juce::String (it.uid) == uid) return &it;
+    return nullptr;
+}
 
 void StackDetailScreen::setStack (const nam::Stack& stack, int idx) {
     stack_ = stack;
     idx_ = idx;
+    editView_.setStack (stack_, idx_);
+    if (itemSheet_.isVisible ()) {
+        // Keep an open sheet in sync across a repush (e.g. right after a
+        // bypass/FS/channel edit) so its pills reflect the new state; if
+        // the item itself was removed from under it, close instead of
+        // showing stale data for a uid that no longer exists.
+        const auto* it = findItem (itemSheet_.currentUid ());
+        if (it != nullptr) itemSheet_.open (*it);
+        else itemSheet_.close ();
+    }
     repaint ();
 }
 
 void StackDetailScreen::selectTab (bool perform) {
     performTab_ = perform;
+    editView_.setVisible (!performTab_);   // PERFORM shows its own placeholder, not EDIT's content
+    if (performTab_) {
+        picker_.close ();
+        itemSheet_.close ();
+    }
     if (onTabChanged) onTabChanged (performTab_);
     repaint ();
 }
@@ -36,6 +79,9 @@ void StackDetailScreen::layout () {
     nameRect_ = tabRow;
 
     bodyRect_ = b.reduced (20, 12);
+    editView_.setBounds (bodyRect_);
+    picker_.setBounds (getLocalBounds ());
+    itemSheet_.setBounds (getLocalBounds ());
 }
 
 void StackDetailScreen::resized () { layout (); }
@@ -62,11 +108,13 @@ void StackDetailScreen::paint (juce::Graphics& g) {
     tabPill (editTabRect_, "EDIT", !performTab_);
     tabPill (performTabRect_, "PERFORM", performTab_);
 
-    g.setFont (uiFont (13.0f, false));
-    g.setColour (col::inkA (0.35f));
-    g.drawText (performTab_ ? "PERFORM " + kEllipsis + " coming soon"
-                            : "EDIT " + kEllipsis + " coming next task",
-                bodyRect_, juce::Justification::centred, false);
+    if (performTab_) {
+        const juce::String ellipsis = juce::String::fromUTF8 ("\xE2\x80\xA6");
+        g.setFont (uiFont (13.0f, false));
+        g.setColour (col::inkA (0.35f));
+        g.drawText ("PERFORM " + ellipsis + " coming soon", bodyRect_, juce::Justification::centred,
+                    false);
+    }
 }
 
 void StackDetailScreen::mouseDown (const juce::MouseEvent& e) {

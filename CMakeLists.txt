@@ -115,6 +115,10 @@ if(NAM_BUILD_APP)
             Source/app/ui/StackWidgets.cpp
             Source/app/ui/StacksHomeScreen.cpp
             Source/app/ui/StackDetailScreen.cpp
+            Source/app/ui/StackEditView.cpp
+            Source/app/ui/StackEditViewPaint.cpp
+            Source/app/ui/StackGearPicker.cpp
+            Source/app/ui/StackItemSheet.cpp
             Source/app/ui/TunerScreen.cpp
             Source/app/ui/AppShell.cpp
             Source/app/ui/AppShellChrome.cpp

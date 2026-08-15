@@ -3,6 +3,14 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Stack deletion now lives in Detail → EDIT's guided view: a
+  REMOVE STACK row at the bottom opens an inline confirm ("Remove
+  '{name}'?" / REMOVE / CANCEL); confirming erases from `AppShell::stackList_`,
+  persists, and navigates back to Home. Closes the "no delete UI" MAJOR
+  ledgered below (Task 2) — the binding visual spec still shows no delete
+  control on Home itself, so deletion is Detail-only for now, matching the
+  spec's own scope decision (`2026-08-14-stacks-redesign-phase-a-design.md`:
+  "Stack deletion lives in Detail → EDIT as a REMOVE STACK row").
 - **2026-08-15** Stacks Home replaces the fixed-6-slot `StacksScreen`
   accordion; `AppShell` now holds `std::vector<nam::Stack>` (v2 ordered-chain
   model via `StackModel`, v1 files migrate transparently on load, next save

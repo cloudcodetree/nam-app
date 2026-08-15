@@ -288,6 +288,20 @@ private:
     void pushStacks ();
     void wireStacksScreens ();   // Home/Detail callbacks
     void openStackDetail (int idx, bool perform);
+    // What a StackGearPicker pick means: a brand-new chain item (canAdd
+    // gated), a new channel appended to an existing amp item, or a
+    // wholesale replacement of an existing item's gear. Set whenever
+    // AppShellStacks.cpp opens the picker; read back once onPicked fires.
+    enum class GearPickerMode { Add, AddChannel, Swap };
+    GearPickerMode gearPickerMode_ = GearPickerMode::Add;
+    juce::String gearPickerTargetUid_;   // AddChannel/Swap target; empty for Add
+    void openGearPicker (nam::GearType hint, GearPickerMode, juce::String targetUid);
+    void wireGearPicker ();   // picker()/itemSheet() overlay callbacks
+    void applyGearPick (nam::GearType tab, nam::ToneInfo tone);   // picker()'s onPicked
+    // Finds the open Detail stack's chain item by uid, runs `fn` on it,
+    // then persists + repushes -- the shared tail of every item-sheet edit
+    // (bypass/fs/channel). No-ops if the stack or item no longer exists.
+    void mutateItem (juce::String uid, std::function<void (nam::ChainItem&)> fn);
     void openOrbPanel ();      // gear icon on Stacks -> same entry point as the orb tap
     void pushPairChoices ();   // PAIR row matches the card's gear
     std::vector<nam::LibraryEntry> keptModelsSorted () const;

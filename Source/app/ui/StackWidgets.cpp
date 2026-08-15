@@ -100,4 +100,81 @@ void drawStacksBrandHeader (juce::Graphics& g, juce::Rectangle<int> bounds,
     drawGearIcon (g, gearRect.toFloat ().reduced (10.0f), col::inkA (0.7f));
 }
 
+void drawFsBadge (juce::Graphics& g, juce::Rectangle<int> r, int fs) {
+    const auto b = r.toFloat ();
+    const bool assigned = fs > 0;
+    g.setColour (assigned ? col::accentA (0.16f) : juce::Colours::transparentBlack);
+    g.fillEllipse (b);
+    g.setColour (assigned ? col::accent : col::inkA (0.22f));
+    g.drawEllipse (b.reduced (0.75f), 1.2f);
+    g.setFont (uiFont (juce::jmin (b.getWidth (), b.getHeight ()) * 0.42f, true));
+    g.setColour (assigned ? col::accent : col::inkA (0.4f));
+    g.drawText (assigned ? juce::String (fs) : juce::String::fromUTF8 ("\xE2\x80\x94"),   // —
+                r, juce::Justification::centred, false);
+}
+
+juce::Colour seededHue (const juce::String& seed) {
+    const int h = std::abs (seed.hashCode ()) % 100;
+    return col::accent.withRotatedHue ((float)h / 100.0f);
+}
+
+void drawStompCardChrome (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour hue, bool on) {
+    const auto b = r.toFloat ();
+    juce::ColourGradient grad (hue.withAlpha (0.28f), b.getX (), b.getY (),
+                               hue.darker (0.6f).withAlpha (0.10f), b.getX (), b.getBottom (),
+                               false);
+    g.setGradientFill (grad);
+    g.fillRoundedRectangle (b, 12.0f);
+    g.setColour (col::inkA (0.14f));
+    g.drawRoundedRectangle (b.reduced (0.5f), 12.0f, 1.0f);
+
+    // LED, top-left: a soft glow wash behind a bright core when on.
+    const auto led = juce::Rectangle<float> (b.getX () + 10.0f, b.getY () + 10.0f, 8.0f, 8.0f);
+    if (on) {
+        g.setColour (col::meterLime.withAlpha (0.35f));
+        g.fillEllipse (led.expanded (4.0f));
+    }
+    g.setColour (on ? col::meterLime : col::inkA (0.2f));
+    g.fillEllipse (led);
+
+    // Three decorative knob rings along the card's lower third.
+    const float ringD = juce::jmin (16.0f, b.getWidth () * 0.22f);
+    const float y = b.getBottom () - ringD - 12.0f;
+    const float gap = (b.getWidth () - ringD * 3.0f) / 4.0f;
+    g.setColour (col::inkA (0.28f));
+    for (int i = 0; i < 3; ++i) {
+        const float x = b.getX () + gap + (float)i * (ringD + gap);
+        g.drawEllipse (x, y, ringD, ringD, 1.2f);
+    }
+}
+
+void drawGrilleStrip (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour c) {
+    g.saveState ();
+    juce::Path clip;
+    clip.addRoundedRectangle (r.toFloat (), 8.0f);
+    g.reduceClipRegion (clip);
+    g.setColour (c);
+    constexpr float spacing = 7.0f, thickness = 1.4f;
+    const float span = (float)(r.getWidth () + r.getHeight ());
+    for (float x = -(float)r.getHeight (); x < span; x += spacing) {
+        g.drawLine ((float)r.getX () + x, (float)r.getBottom (),
+                    (float)r.getX () + x + r.getHeight (), (float)r.getY (), thickness);
+    }
+    g.restoreState ();
+}
+
+void drawConePair (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour c) {
+    const float d = (float)juce::jmin (r.getWidth () / 2 - 2, r.getHeight ());
+    const float y = r.getCentreY () - d * 0.5f;
+    for (int i = 0; i < 2; ++i) {
+        const float x = (float)r.getX () + (float)i * (d + 4.0f);
+        g.setColour (c.withAlpha (0.7f));
+        g.drawEllipse (x, y, d, d, 1.4f);
+        g.setColour (c.withAlpha (0.35f));
+        g.drawEllipse (x + d * 0.28f, y + d * 0.28f, d * 0.44f, d * 0.44f, 1.2f);
+        g.setColour (c.withAlpha (0.6f));
+        g.fillEllipse (x + d * 0.44f, y + d * 0.44f, d * 0.12f, d * 0.12f);
+    }
+}
+
 }   // namespace nam::ui

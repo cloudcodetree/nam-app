@@ -30,4 +30,26 @@ void drawGearIcon (juce::Graphics&, juce::Rectangle<float>, juce::Colour);
 void drawStacksBrandHeader (juce::Graphics&, juce::Rectangle<int> bounds,
                             juce::Rectangle<int> gearRect);
 
+// Circular footswitch-assignment badge (~26px): accent ring + filled digit
+// when `fs` is assigned (1..8); dim outline + em-dash otherwise (0).
+void drawFsBadge (juce::Graphics&, juce::Rectangle<int>, int fs);
+
+// A colour distinct per chain item, derived from `seed` (its uid) by
+// rotating the hue of `col::accent` -- no new hex values, just a palette
+// transform, so per-pedal variety stays within the "colours from col only"
+// rule.
+juce::Colour seededHue (const juce::String& seed);
+
+// Stomp-box card chrome (pedal cards + full-width POST rows share this
+// body): gradient fill tinted `hue`, LED dot (glowing lime when `on`, dim
+// otherwise), three decorative knob rings. Caller draws name/FS badge on
+// top of this.
+void drawStompCardChrome (juce::Graphics&, juce::Rectangle<int>, juce::Colour hue, bool on);
+
+// Decorative diagonal hatch/grille strip -- the AMP card's new visual motif.
+void drawGrilleStrip (juce::Graphics&, juce::Rectangle<int>, juce::Colour);
+
+// Two ring "speaker cone" glyphs -- the CAB row's motif.
+void drawConePair (juce::Graphics&, juce::Rectangle<int>, juce::Colour);
+
 }   // namespace nam::ui
