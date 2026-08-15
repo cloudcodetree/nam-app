@@ -80,6 +80,24 @@ direction is chosen, reversed, or a constraint is discovered.
   (same fallback existed pre-batch, this batch's discard-on-nav-away
   policy just added a consequence to it) -- both are real but small
   enough to track rather than block on.
+  **Review round 3** (same-day, VERDICT PASS, no BLOCKER/MAJOR) stress-
+  tested the round-2 fixes against a hand-edited multi-amp/uid-less-item
+  file and found the remaining gap is real but the reviewer's own read was
+  "file for the next batch": `applyAmpCycle`'s `targetUid` overloads empty
+  `juce::String` as both "use first amp" and "a legitimate item uid" (an
+  item with no `"uid"` key parses to `""`, since `assignMissingStackUids`
+  only mints STACK uids, never item ones) -- closing it fully means
+  minting item uids at parse the same way, a bigger change than this
+  batch's scope. Also flagged: cycling a non-Phase-A-reachable second amp
+  would desync the STOMP label from the single-model engine truth on the
+  next re-apply (same "unreachable via `canAdd`'s one-amp cap" carve-out);
+  the legacy cab-fs zeroing (round 2) is silent to the end user with no
+  release-note surfacing; `AppShellPerform.cpp` sits at 396/400 lines
+  (no violation, flagged for the next feature landing there); and the
+  `applyAmpCycle`/`targetUid` branch itself is untested (unreachable
+  in-app, so neither the headless suite nor a device run exercises it --
+  accepted under the JUCE-UI-has-no-harness carve-out). None fixed;
+  tracked here as the reviewer suggested rather than in a fourth round.
 - **2026-08-15** Pre-launch hardening batch landed (9df1dc9..8a759c5, 5
   commits): `Stack.uid` replacing every (index,name) async revalidation
   with (index,uid) (TDD, `StackModel::nextStackUid`/`assignMissingStackUids`
