@@ -715,14 +715,6 @@ bool AppShell::handleBackButton () {
         toggleTuner ();
         return true;
     }
-    // The create wizard is a screen-level child of stacksHome_, not its own
-    // Screen -- closing it never persists anything (nothing writes until
-    // SAVE), so this is a plain dismiss, no confirm, same as the paywall
-    // check above. Checked before the Detail overlay chain below since both
-    // live under Screen::Stacks and only one of Home/Detail is current_ at
-    // a time.
-    if (current_ == stacksHome_.get () && stacksHome_ != nullptr && stacksHome_->closeWizard ())
-        return true;
     // An open Detail overlay (item sheet / gear picker / EDIT's REMOVE
     // STACK confirm) dismisses first, same as the paywall above -- without
     // this, back-ing out of an open confirm and reopening a DIFFERENT
@@ -730,15 +722,6 @@ bool AppShell::handleBackButton () {
     if (current_ == stacksDetail_.get () && stacksDetail_ != nullptr &&
         stacksDetail_->closeTopOverlay ())
         return true;
-    // PERFORM is a stage view within Detail, not its own screen: back exits
-    // it to EDIT first, same "peel the overlay before popping the screen"
-    // shape as the check above.
-    // Only once EDIT is showing does the chain below get to pop to Home.
-    if (current_ == stacksDetail_.get () && stacksDetail_ != nullptr &&
-        stacksDetail_->isPerformTab ()) {
-        stacksDetail_->selectTab (false);
-        return true;
-    }
     // Stack detail backs out to Home first, matching its own ‹ chevron —
     // only a second back press (or one from Home) leaves Stacks for Play.
     if (current_ == stacksDetail_.get ()) {
@@ -788,28 +771,16 @@ void AppShell::toggleTuner () {
 }
 
 void AppShell::show (Screen s) {
-    // Same policy as handleBackButton's closeWizard() check: the create
-    // wizard is a screen-level child of stacksHome_, so the bottom nav
-    // staying tappable BEHIND it (BROWSE/FAVORITES/MORE all route through
-    // here) previously left it open -- with its in-progress draft -- for
-    // when Stacks was shown again, unlike hardware back which explicitly
-    // discards it. Any nav call that leaves Stacks now discards the same
-    // way, so both exits agree. No-op if the wizard isn't open or `s` stays
-    // Stacks (e.g. the STACKS nav button itself, which only re-shows Home).
-    if (s != Screen::Stacks && stacksHome_ != nullptr) stacksHome_->closeWizard ();
     closeIoPanel ();
     closeMoreMenu ();
     if (paywall_ != nullptr) paywall_->setVisible (false);
 
-    // The tuner overlay belongs to whichever screen opened it (Play, or --
-    // since the nav went live on PERFORM too -- PERFORM's TUNER switch).
-    // Only a same-screen Play re-selection is exempt from closing it; any
-    // other target (including Play when it was PERFORM that opened the
-    // tuner) must close it, or it's left floating behind the next opaque
-    // screen with tunerOpen_ still true -- a stray BACK press then
-    // "closes" a tuner nothing on screen shows, and Play's own tuner tap
-    // needs two presses to reopen it (found in review: PERFORM -> TUNER ->
-    // BROWSE used to leave exactly this behind).
+    // The tuner overlay belongs to Play, the only screen that opens it. Only
+    // a same-screen Play re-selection is exempt from closing it; any other
+    // target must close it, or it's left floating behind the next opaque
+    // screen with tunerOpen_ still true -- a stray BACK press then "closes"
+    // a tuner nothing on screen shows, and Play's own tuner tap needs two
+    // presses to reopen it.
     const bool sameScreenPlayReopen = (s == Screen::Play && current_ == play_.get ());
     if (tunerOpen_ && !sameScreenPlayReopen) {
         juce::Desktop::getInstance ().getAnimator ().cancelAnimation (tuner_.get (), false);
@@ -854,16 +825,15 @@ void AppShell::show (Screen s) {
         }
     }
 
-    // PERFORM tracks what's actually live by id (liveModelToneId_/
-    // liveIrToneId_, see AppShell.h) so a scene/AMP tap can skip a load
-    // that's already audible. Only PERFORM's own applies update those ids --
+    // Stacks tracks what's actually live by id (liveModelToneId_/
+    // liveIrToneId_, see AppShell.h) so applyStackToEngine can skip a load
+    // that's already audible. Only its own applies update those ids --
     // Play-side loads (loadModel_/loadIr_/setCab) don't, so without this a
-    // Play-side swap while PERFORM is off-screen leaves the ids stale and a
-    // later PERFORM re-entry skips the load it should make, silently
-    // leaving the wrong tone live under the stage view. Every Play-side
-    // load requires Play visible, so clearing both whenever Play becomes
-    // the nav target closes that gap; worst case is one redundant reload
-    // (harmless).
+    // Play-side swap while Stacks is off-screen leaves the ids stale and a
+    // later Stacks re-entry skips the load it should make, silently leaving
+    // the wrong tone live under the editor. Every Play-side load requires
+    // Play visible, so clearing both whenever Play becomes the nav target
+    // closes that gap; worst case is one redundant reload (harmless).
     if (s == Screen::Play) {
         liveModelToneId_.clear ();
         liveIrToneId_.clear ();

@@ -3,6 +3,50 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Stacks stripped to its bone: **a list of rigs, each an
+  ordered chain you edit. Nothing else.** Guided mode (PEDALS/AMP/POST
+  sections), the create wizard + its 3 built-in templates, CONTROLS/PERFORM
+  (the stage view, `StackPerformView`), scenes (`Scene`, `Stack::scenes`/
+  `activeScene`, `SceneApply`/`sceneApplyPlan`), routing
+  (`Stack::Routing`/`routing` -- SINGLE/A-B/STEREO), and footswitch
+  assignment (`ChainItem::fs`, the item sheet's FOOTSWITCH row) are all
+  deleted, not hidden. Chris's call: the surface had outgrown what the
+  engine can actually do (ONE model + ONE IR, no multi-node DSP chain) --
+  the guided/wizard/scenes/routing/footswitch scaffolding was UI for
+  features that don't exist yet, and it was the majority of the Stacks
+  code. Freeform (rename/reorder-anything, tap-to-edit) is now the ONLY
+  edit mode, so `StackEditView`'s freeform rows got the thumbnail
+  treatment guided cards used to have exclusively. "+ NEW STACK" mints an
+  empty rig and opens its editor directly instead of stepping through a
+  wizard. Deleted outright: `StackCreateWizard{,Input,Gear,Paint}.{h,cpp}`,
+  `StackTemplates.h`, `StackPerformView{,Paint}.{h,cpp}`,
+  `StacksHomeScreen::wizard_`/`onPerform`/the CONTROLS pill/the routing
+  badge, `StackDetailScreen::performView_`/`performTab_`/`selectTab`/
+  `isPerformTab`/`onTabChanged`/the EDIT-CONTROLS tab pill,
+  `StackEditView`'s guided layout/paint + the ROUTING pill row + the
+  FREEFORM toggle, `StackWidgets`' `drawFsBadge`/`drawStompCardChrome`/
+  `drawGrilleStrip`/`drawConePair`/`drawRoutingBadge`/`drawFwdTriangle`
+  (all became unused once their only callers went), and
+  `AppShell::wireCreateWizard`/`wirePerformView`/`applyScene`/
+  `applyAmpCycle`/`stepPerformStack`/`currentStack_` (traced to zero live
+  readers once the above went). `Source/app/ui/AppShellPerform.cpp` is
+  renamed `AppShellStackApply.cpp` -- it now holds only the apply
+  machinery (`applyStackToEngine`, `requestToneLoad`, `startToneLoad`,
+  `finishToneLoad`, `drainPendingToneApply`, `ApplyTimeout`, the two
+  pending slots, `findLocalEntry`), which survives verbatim since PERFORM
+  never owned it (see the entry below this one -- the apply already fires
+  from state transitions, not from `pushStacks()`). `StackModel`'s v2 JSON
+  keys shrank (`kStackKeys`: uid/name/chain; `kItemKeys`: drops "fs") so
+  parse's per-key `extra.erase(k)` no longer touches the retired fields --
+  an old file's "routing"/"scenes"/"activeScene"/"fs" values round-trip
+  untouched in `Stack::extra`/`ChainItem::extra` instead of being silently
+  dropped, verified in `tests/test_stack_model.cpp`'s round-trip test.
+  MUST-SURVIVE list (unchanged from before the strip): opening a rig and
+  every audible-truth edit still applies to the engine; gear thumbnails,
+  the gear picker, the item sheet (minus FOOTSWITCH), REMOVE STACK +
+  confirm, `stacks.json` v1→v2 migration + the `.bak` safety net, the Pro
+  gating predicates, and the amp-channel concept all stayed exactly as
+  they were.
 - **2026-08-15** "PERFORM" is now **CONTROLS** in the UI, and **EDIT is
   audible**: opening a rig (either tab) and every edit that changes the
   audible truth -- swap an amp, cycle a channel, pick a cab -- loads it into

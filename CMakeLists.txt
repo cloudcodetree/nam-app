@@ -114,22 +114,16 @@ if(NAM_BUILD_APP)
             Source/app/ui/PaywallPanel.cpp
             Source/app/ui/StackWidgets.cpp
             Source/app/ui/StacksHomeScreen.cpp
-            Source/app/ui/StackCreateWizard.cpp
-            Source/app/ui/StackCreateWizardInput.cpp
-            Source/app/ui/StackCreateWizardGear.cpp
-            Source/app/ui/StackCreateWizardPaint.cpp
             Source/app/ui/StackDetailScreen.cpp
             Source/app/ui/StackEditView.cpp
             Source/app/ui/StackEditViewPaint.cpp
             Source/app/ui/StackGearPicker.cpp
             Source/app/ui/StackItemSheet.cpp
-            Source/app/ui/StackPerformView.cpp
-            Source/app/ui/StackPerformViewPaint.cpp
             Source/app/ui/TunerScreen.cpp
             Source/app/ui/AppShell.cpp
             Source/app/ui/AppShellChrome.cpp
             Source/app/ui/AppShellStacks.cpp
-            Source/app/ui/AppShellPerform.cpp
+            Source/app/ui/AppShellStackApply.cpp
             Source/app/ui/AppShellStackThumbs.cpp
             Source/dsp/ToneEngine.cpp
             Source/dsp/PitchDetector.cpp

@@ -56,170 +56,11 @@ void StackEditView::layout () {
     auto b = getLocalBounds ();
     if (b.isEmpty ()) return;
 
-    // 4px top margin so the FREEFORM pill's .expanded(4) hit test doesn't
-    // poke a few px above y=0 -- review finding: any part of an expanded
-    // hit rect outside getLocalBounds() is dead in JUCE (the parent gets
-    // the event and StackDetailScreen doesn't forward it), so padding a
-    // target flush against the component's own top edge silently does
-    // nothing for that sliver.
-    b.removeFromTop (4);
-    // Row 1: "ROUTING" micro-label + FREEFORM toggle. Row 2: the three
-    // routing pills, each sized to its own label text (never a fixed
-    // shared width -- at this component's width a 3-way equal split left
-    // no room for "STEREO", which clipped to "STERE"). Both rows are the
-    // same 36px tall so FREEFORM and the routing pills read as one
-    // consistent pill family (review finding: FREEFORM alone at 36px next
-    // to 28px routing pills looked like a mismatched pair) and FREEFORM's
-    // effective (.expanded(4)) touch target clears the codebase's own
-    // >=44px bar.
-    auto labelRow = b.removeFromTop (36);
-    routingLabelRect_ = labelRow.withWidth (62);
-    freeformToggleRect_ = labelRow.removeFromRight (100);
-
-    routingPillsRowRect_ = b.removeFromTop (36);
-    {
-        auto row = routingPillsRowRect_;
-        const char* labels[3] = { "SINGLE", "A/B", "STEREO" };
-        const auto font = uiFontTracked (8.0f, true);
-        int x = row.getX ();
-        for (int i = 0; i < 3; ++i) {
-            const int pw = (int)juce::GlyphArrangement::getStringWidth (font, labels[i]) + 22;
-            routingPillRects_[(size_t)i] = { x, row.getY (), pw, row.getHeight () };
-            x += pw + 8;
-        }
-    }
-    b.removeFromTop (4);
-
     contentArea_ = b;
-    if (freeform_) layoutFreeform (contentArea_);
-    else layoutGuided (contentArea_);
-}
-
-// The AMP card block on its own -- pulled out of layoutGuided (review
-// finding: that function had grown past the ~60-line house rule once this
-// card's row-count pre-pass landed inline). Sizes ampCardRect_/
-// ampChannelPillRects_ for `amp` (nullptr = empty "+ ADD AMP" slot) at the
-// given top `y`; returns the y just past the card (caller adds its own
-// section gap).
-int StackEditView::layoutAmpCard (const nam::ChainItem* amp, int w, int y) {
-    ampChannelPillRects_.clear ();
-    if (amp == nullptr) {
-        ampUid_ = {};
-        ampCardRect_ = { 0, y, w, 40 };
-        return y + 40;
-    }
-    ampUid_ = juce::String (amp->uid);
-    constexpr int pillH = 28, pillGap = 8;
-    // Matches paintGuided's card-content cursor exactly: reduced(14,10)
-    // top pad (10) + name/FS row (26) + gap (6) + grille (24) + gap (8)
-    // + "CH" label (12) = 86px before the pill row starts.
-    constexpr int topContentH = 86;
-    // Pill widths capped to the card's own width (a single very long
-    // channel name used to be able to overflow it horizontally on its
-    // own -- paintGuided elides the drawn text into whatever width it
-    // gets, but the pill rect itself still needs a ceiling). Row count
-    // computed up front so the card can size itself to fit every
-    // channel row instead of a fixed 128px that clipped the CH pills
-    // against the card's own bottom edge whenever channels wrapped.
-    std::vector<int> pillW;
-    pillW.reserve (amp->channels.size ());
-    int rows = 1, rowX = 0;
-    for (const auto& ch : amp->channels) {
-        const int pw =
-            juce::jmin (w - 8, juce::jmax (56, (int)juce::GlyphArrangement::getStringWidth (
-                                                   uiFont (10.0f, true), juce::String (ch.title)) +
-                                                   24));
-        pillW.push_back (pw);
-        if (rowX + pw > w && rowX > 0) {
-            ++rows;
-            rowX = 0;
-        }
-        rowX += pw + pillGap;
-    }
-    const int cardH = topContentH + rows * pillH + (rows - 1) * pillGap + 10;
-    ampCardRect_ = { 0, y, w, cardH };
-    int x = 0, rowY = y + topContentH;
-    for (size_t i = 0; i < amp->channels.size (); ++i) {
-        const int pw = pillW[i];
-        if (x + pw > w && x > 0) {
-            x = 0;
-            rowY += pillH + pillGap;
-        }
-        ampChannelPillRects_.push_back ({ x, rowY, pw, pillH });
-        x += pw + pillGap;
-    }
-    return y + cardH;
-}
-
-void StackEditView::layoutGuided (juce::Rectangle<int> content) {
-    const int w = content.getWidth ();
-    constexpr int headerH = 22, hintH = 16, ruleGap = 16, sectionGap = 22;
-    int y = 0;
-
-    pedalsHeaderRect_ = { 0, y, w - 76, headerH };
-    pedalsAddRect_ = { w - 72, y, 72, headerH };
-    y += headerH + hintH + ruleGap;
-    pedalCardRects_.clear ();
-    {
-        constexpr int cw = 88, ch = 112, gap = 10;
-        int x = 0, rowY = y;
-        bool any = false;
-        for (const auto& it : stack_.chain) {
-            if (it.type != nam::GearType::Pedal) continue;
-            any = true;
-            if (x + cw > w && x > 0) {
-                x = 0;
-                rowY += ch + gap;
-            }
-            pedalCardRects_.push_back ({ { x, rowY, cw, ch }, juce::String (it.uid) });
-            x += cw + gap;
-        }
-        y = any ? rowY + ch : y + 40;
-    }
-    y += sectionGap;
-
-    ampHeaderRect_ = { 0, y, w - 76, headerH };
-    const auto* amp = nam::StackModel::activeAmp (stack_);
-    ampAddRect_ =
-        amp == nullptr ? juce::Rectangle<int> (w - 72, y, 72, headerH) : juce::Rectangle<int> ();
-    y += headerH + ruleGap;
-    y = layoutAmpCard (amp, w, y);
-    y += 12;
-
-    const auto* cab = nam::StackModel::cabOf (stack_);
-    cabUid_ = cab != nullptr ? juce::String (cab->uid) : juce::String ();
-    cabRowRect_ = { 0, y, w, 52 };
-    cabAddRect_ = cab == nullptr ? cabRowRect_ : juce::Rectangle<int> ();
-    y += 52 + sectionGap;
-
-    postHeaderRect_ = { 0, y, w - 76, headerH };
-    postAddRect_ = { w - 72, y, 72, headerH };
-    y += headerH + hintH + ruleGap;
-    postRowRects_.clear ();
-    {
-        constexpr int rh = 56, gap = 8;
-        for (const auto& it : stack_.chain) {
-            if (it.type != nam::GearType::Post) continue;
-            postRowRects_.push_back ({ { 0, y, w, rh }, juce::String (it.uid) });
-            y += rh + gap;
-        }
-        if (postRowRects_.empty ()) y += 40;
-    }
-    y += sectionGap;
-
-    removeStackRect_ = { 0, y, w, 48 };
-    y += 48 + 20;
-
-    contentH_ = y;
-    scrollY_ =
-        juce::jlimit (0.0f, (float)juce::jmax (0, contentH_ - contentArea_.getHeight ()), scrollY_);
-}
-
-void StackEditView::layoutFreeform (juce::Rectangle<int> content) {
-    const int w = content.getWidth ();
-    int y = 32;   // hint band, no hit-test
 
     freeformRowRects_.clear ();
+    const int w = contentArea_.getWidth ();
+    int y = 32;   // hint band, no hit-test
     constexpr int rowH = 56, gap = 8, btnW = 30;
     for (const auto& it : stack_.chain) {
         FreeformRowRect fr;
@@ -273,63 +114,24 @@ void StackEditView::moveItem (const juce::String& uid, int delta) {
 }
 
 void StackEditView::handleContentTap (juce::Point<int> cp) {
-    if (freeform_) {
-        for (const auto& fr : freeformRowRects_) {
-            if (fr.upBtn.contains (cp)) {
-                moveItem (fr.uid, -1);
-                return;
-            }
-            if (fr.downBtn.contains (cp)) {
-                moveItem (fr.uid, 1);
-                return;
-            }
-            if (fr.body.contains (cp)) {
-                if (onOpenItem) onOpenItem (fr.uid);
-                return;
-            }
-        }
-        if (freeformAddRect_.contains (cp)) {
-            if (onAddGear) onAddGear (nam::GearType::Pedal);
+    for (const auto& fr : freeformRowRects_) {
+        if (fr.upBtn.contains (cp)) {
+            moveItem (fr.uid, -1);
             return;
         }
-        if (removeStackRect_.contains (cp)) openConfirm ();
-        return;
+        if (fr.downBtn.contains (cp)) {
+            moveItem (fr.uid, 1);
+            return;
+        }
+        if (fr.body.contains (cp)) {
+            if (onOpenItem) onOpenItem (fr.uid);
+            return;
+        }
     }
-
-    if (!pedalsAddRect_.isEmpty () && pedalsAddRect_.contains (cp)) {
+    if (freeformAddRect_.contains (cp)) {
         if (onAddGear) onAddGear (nam::GearType::Pedal);
         return;
     }
-    for (const auto& pc : pedalCardRects_)
-        if (pc.body.contains (cp)) {
-            if (onOpenItem) onOpenItem (pc.uid);
-            return;
-        }
-    if (!ampAddRect_.isEmpty () && ampAddRect_.contains (cp)) {
-        if (onAddGear) onAddGear (nam::GearType::Amp);
-        return;
-    }
-    if (!ampUid_.isEmpty () && ampCardRect_.contains (cp)) {
-        if (onOpenItem) onOpenItem (ampUid_);
-        return;
-    }
-    if (!cabAddRect_.isEmpty () && cabAddRect_.contains (cp)) {
-        if (onAddGear) onAddGear (nam::GearType::Cab);
-        return;
-    }
-    if (!cabUid_.isEmpty () && cabRowRect_.contains (cp)) {
-        if (onOpenItem) onOpenItem (cabUid_);
-        return;
-    }
-    if (!postAddRect_.isEmpty () && postAddRect_.contains (cp)) {
-        if (onAddGear) onAddGear (nam::GearType::Post);
-        return;
-    }
-    for (const auto& pr : postRowRects_)
-        if (pr.body.contains (cp)) {
-            if (onOpenItem) onOpenItem (pr.uid);
-            return;
-        }
     if (removeStackRect_.contains (cp)) openConfirm ();
 }
 
@@ -340,9 +142,6 @@ void StackEditView::mouseDown (const juce::MouseEvent& e) {
     pressedInContent_ = false;
 
     if (confirmOpen_) return;   // resolved entirely on mouseUp (simple tap dialog)
-    if (freeformToggleRect_.expanded (4).contains (p)) return;
-    for (int i = 0; i < 3; ++i)
-        if (routingPillRects_[(size_t)i].expanded (2).contains (p)) return;
 
     if (contentArea_.contains (p)) {
         pressedInContent_ = true;
@@ -381,17 +180,6 @@ void StackEditView::mouseUp (const juce::MouseEvent& e) {
     }
     if (!tap) return;
 
-    if (freeformToggleRect_.expanded (4).contains (p)) {
-        freeform_ = !freeform_;
-        layout ();
-        repaint ();
-        return;
-    }
-    for (int i = 0; i < 3; ++i)
-        if (routingPillRects_[(size_t)i].expanded (2).contains (p)) {
-            if (i != 0) showToast (*this, "A/B & stereo routing coming soon");
-            return;
-        }
     if (!contentArea_.contains (p)) return;
     handleContentTap ({ p.x - contentArea_.getX (), p.y - contentArea_.getY () + (int)scrollY_ });
 }

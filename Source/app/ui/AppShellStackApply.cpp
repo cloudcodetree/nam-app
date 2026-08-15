@@ -1,18 +1,20 @@
 #include "app/ui/AppShell.h"
 #include "app/ui/StackWidgets.h"
 
-// PERFORM tab apply wiring: wirePerformView() connects StackPerformView's
-// callbacks (AppShellStacks.cpp owns wireStacksScreens() itself and just
-// calls this) to applyStackToEngine, which onTabChanged below drives on every
-// EDIT->PERFORM transition. Split out of AppShellStacks.cpp per the
-// no-god-files rule -- it was pushing that file past 400 lines.
+// Stack-to-engine apply wiring: makes the open rig's active amp channel +
+// cab audible. Split out of AppShellStacks.cpp per the no-god-files rule --
+// it was pushing that file past 400 lines. Renamed from AppShellPerform.cpp
+// (2026-08-15 Stacks strip): PERFORM/CONTROLS, scenes, and routing are gone
+// -- editing IS the only surface now, so this file is purely the apply
+// machinery `openStackDetail`/`onChanged`/the item-sheet mutations in
+// AppShellStacks.cpp call directly.
 //
-// Engine truth (Phase A): ONE model + ONE IR. A tap is audible only when the
+// Engine truth (Phase A): ONE model + ONE IR. A load is audible only when the
 // target toneId differs from what's actually live (tracked here by id, see
-// AppShell.h); one nam::ToneInfo load is in flight at a time, a tap that
+// AppShell.h); one nam::ToneInfo load is in flight at a time, a request that
 // arrives mid-flight parks in the pending slot matching its resource type
 // (model vs IR -- see AppShell.h's pendingModelApply_/pendingIrApply_
-// comment), last tap wins within each slot, and both drain once the
+// comment), last request wins within each slot, and both drain once the
 // in-flight load completes.
 
 namespace {
@@ -46,50 +48,6 @@ struct AppShell::ApplyTimeoutImpl : AppShell::ApplyTimeout, private juce::Timer 
         owner.handleApplyTimeout (gen);
     }
 };
-
-void AppShell::wirePerformView () {
-    stacksDetail_->onTabChanged = [this] (bool) { applyStackToEngine (); };
-
-    auto& perf = stacksDetail_->performView ();
-    perf.onExit = [this] { stacksDetail_->selectTab (false); };
-    perf.onSceneTap = [this] (int sceneIdx) {
-        applyScene (stacksDetail_->currentIndex (), sceneIdx);
-    };
-    // Stomp bypass is STORED state only (Phase A has no multi-pedal DSP
-    // chain -- see decisions.md), so this is the same plain mutateItem
-    // wireGearPicker's onToggleBypass already uses; the unassigned-slot
-    // toast is handled entirely inside the view, this never fires for it.
-    // An amp assigned to a switch is the one exception: bypass isn't
-    // surfaced anywhere for an amp (the item sheet only offers it for
-    // pedal/post) and the wizard's own FS-mapping step documents an
-    // amp-mapped switch as "channel cycle" -- so a stomp tap on an amp
-    // uid routes to the same cycle applyAmpCycle already gives the AMP
-    // grid cell, instead of flipping an invisible/meaningless flag.
-    perf.onStompTap = [this] (juce::String uid) {
-        const int idx = stacksDetail_ != nullptr ? stacksDetail_->currentIndex () : -1;
-        if (idx >= 0 && idx < (int)stackList_.size ())
-            for (const auto& it : stackList_[(size_t)idx].chain)
-                if (juce::String (it.uid) == uid && it.type == nam::GearType::Amp) {
-                    // A single-channel amp has nothing to cycle TO --
-                    // applyAmpCycle's modulo is a no-op at n==1, which would
-                    // otherwise make the tap silently do nothing (no LED, no
-                    // title change, no toast) while still paying for a
-                    // stacks.json write. Toast instead, same pattern as the
-                    // unassigned-slot case in StackPerformView.
-                    if (it.channels.size () <= 1) {
-                        if (stacksDetail_ != nullptr)
-                            nam::ui::showToast (*stacksDetail_, "only one channel " + kEmDash +
-                                                                    " add more in EDIT");
-                    } else applyAmpCycle (idx, uid);   // this exact amp, not "first in chain"
-                    return;
-                }
-        mutateItem (uid, [] (nam::ChainItem& it) { it.bypassed = !it.bypassed; });
-    };
-    perf.onAmpCycle = [this] { applyAmpCycle (stacksDetail_->currentIndex ()); };
-    perf.onTuner = [this] { toggleTuner (); };
-    perf.onNextStack = [this] { stepPerformStack (+1); };
-    perf.onPrevStack = [this] { stepPerformStack (-1); };
-}
 
 bool AppShell::findLocalEntry (const nam::ToneInfo& tone, nam::LibraryEntry& out) const {
     if (tone.id.empty ()) return false;
@@ -214,15 +172,17 @@ void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<vo
     const auto title = tone.title;
     const auto format = tone.format;
 
-    // Wizard-built items store a LibraryEntry filename as toneId (see
-    // decisions.md) -- route those through the synchronous local
-    // model/IR load (instant, offline) instead of handing a filename to
-    // svc_.loadTone, which treats every id as a TONE3000 tone id. Resolve
-    // the SAME completion/pending-drain machinery (finishToneLoad) a
-    // network load would, so the in-flight/pending state doesn't desync.
-    // An id that no longer matches (entry deleted from the library) falls
-    // through to the network route below, which fails on the bogus id and
-    // hits the existing failure toast/revert.
+    // A chain item built by the now-retired create wizard stores a
+    // LibraryEntry filename as toneId, not a TONE3000 id (see decisions.md)
+    // -- such items can still exist in an on-disk stacks.json. Route those
+    // through the synchronous local model/IR load (instant, offline)
+    // instead of handing a filename to svc_.loadTone, which treats every id
+    // as a TONE3000 tone id. Resolves the SAME completion/pending-drain
+    // machinery (finishToneLoad) a network load would, so the in-flight/
+    // pending state doesn't desync. An id that no longer matches (entry
+    // deleted from the library) falls through to the network route below,
+    // which fails on the bogus id and hits the existing failure toast/
+    // revert.
     nam::LibraryEntry local;
     if (findLocalEntry (tone, local)) {
         if (format == "ir") {
@@ -237,7 +197,7 @@ void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<vo
     }
     // Real async route: arm the 30s watchdog so a callback that never fires
     // (network hang) can't wedge performApplyInFlight_ -- and with it,
-    // PERFORM -- forever. inFlightApply_ carries what handleApplyTimeout
+    // editing's audible apply -- forever. inFlightApply_ carries what handleApplyTimeout
     // needs to resolve this exact attempt as a failure through the SAME
     // finishToneLoad path (toast + revert + drain pendings) a real failed
     // callback would take.
@@ -289,112 +249,4 @@ void AppShell::applyStackToEngine () {
     const auto* cab = nam::StackModel::cabOf (st);
     if (cab != nullptr && !cab->toneId.empty () && cab->toneId != liveIrToneId_)
         requestToneLoad (idx, makeToneInfo (cab->toneId, cab->title, "ir"), {});
-}
-
-void AppShell::applyScene (int stackIdx, int sceneIdx) {
-    if (stackIdx < 0 || stackIdx >= (int)stackList_.size ()) return;
-    auto& st = stackList_[(size_t)stackIdx];
-    if (sceneIdx < 0 || sceneIdx >= (int)st.scenes.size ()) return;
-
-    const auto plan = nam::StackModel::sceneApplyPlan (st, sceneIdx);
-    const int prevScene = st.activeScene;
-    std::string ampUid;
-    int prevChannel = 0;
-    for (const auto& it : st.chain)
-        if (it.type == nam::GearType::Amp) {
-            ampUid = it.uid;
-            prevChannel = it.activeChannel;
-            break;
-        }
-
-    // STORED state (bypass map, activeScene, the amp's activeChannel index)
-    // applies immediately regardless of the audible load below -- Phase A's
-    // bypass is visual-only (no multi-pedal DSP chain exists), and the
-    // channel index mirrors what the scene calls for even before the load
-    // confirms it landed (reverted together with activeScene on failure).
-    st.activeScene = sceneIdx;
-    for (const auto& kv : plan.bypass)
-        for (auto& it : st.chain)
-            if (it.uid == kv.first) it.bypassed = kv.second;
-    if (!ampUid.empty ()) {
-        const auto& scene = st.scenes[(size_t)sceneIdx];
-        for (auto& it : st.chain)
-            if (it.uid == ampUid && !it.channels.empty ()) {
-                it.activeChannel =
-                    (scene.ampChannel >= 0 && scene.ampChannel < (int)it.channels.size ())
-                        ? scene.ampChannel
-                        : 0;
-                break;
-            }
-    }
-    saveStacksState ();
-    pushStacks ();
-
-    if (plan.modelToneId.empty () || plan.modelToneId == liveModelToneId_) return;
-    requestToneLoad (stackIdx, makeToneInfo (plan.modelToneId, plan.modelTitle, "nam"),
-                     [this, stackIdx, prevScene, ampUid, prevChannel] {
-                         if (stackIdx < 0 || stackIdx >= (int)stackList_.size ()) return;
-                         auto& s = stackList_[(size_t)stackIdx];
-                         s.activeScene = prevScene;
-                         if (!ampUid.empty ())
-                             for (auto& it : s.chain)
-                                 if (it.uid == ampUid) {
-                                     // The chain may have been edited (swap/remove
-                                     // channel) via EDIT while this load was in flight --
-                                     // clamp rather than persist an OOB activeChannel.
-                                     if (prevChannel >= 0 && prevChannel < (int)it.channels.size ())
-                                         it.activeChannel = prevChannel;
-                                     break;
-                                 }
-                     });
-}
-
-void AppShell::applyAmpCycle (int stackIdx, juce::String targetUid) {
-    if (stackIdx < 0 || stackIdx >= (int)stackList_.size ()) return;
-    auto& st = stackList_[(size_t)stackIdx];
-    for (auto& it : st.chain) {
-        if (it.type != nam::GearType::Amp) continue;
-        // targetUid empty (the SCENES-mode AMP cell, which assumes the
-        // Phase A one-amp-per-stack cap) matches the first amp found, same
-        // as before; a STOMP tap passes its own uid so a hand-edited/
-        // future multi-amp file cycles the amp actually mapped to the
-        // switch that was tapped, not whichever amp happens to be first.
-        if (targetUid.isNotEmpty () && juce::String (it.uid) != targetUid) continue;
-        if (it.channels.empty ()) return;
-        const std::string ampUid = it.uid;
-        const int prevChannel = it.activeChannel;
-        const int newChannel = (prevChannel + 1) % (int)it.channels.size ();
-        it.activeChannel = newChannel;
-        const auto toneId = it.channels[(size_t)newChannel].toneId;
-        const auto title = it.channels[(size_t)newChannel].title;
-        saveStacksState ();
-        pushStacks ();
-
-        if (toneId.empty () || toneId == liveModelToneId_) return;
-        requestToneLoad (stackIdx, makeToneInfo (toneId, title, "nam"),
-                         [this, stackIdx, ampUid, prevChannel] {
-                             if (stackIdx < 0 || stackIdx >= (int)stackList_.size ()) return;
-                             auto& s = stackList_[(size_t)stackIdx];
-                             for (auto& jt : s.chain)
-                                 if (jt.uid == ampUid) {
-                                     // Same clamp as applyScene's revert --
-                                     // the channel list may have been
-                                     // edited via EDIT while this load was
-                                     // in flight.
-                                     if (prevChannel >= 0 && prevChannel < (int)jt.channels.size ())
-                                         jt.activeChannel = prevChannel;
-                                     break;
-                                 }
-                         });
-        return;
-    }
-}
-
-void AppShell::stepPerformStack (int delta) {
-    if (stackList_.empty ()) return;
-    const int n = (int)stackList_.size ();
-    const int cur = stacksDetail_ != nullptr ? stacksDetail_->currentIndex () : currentStack_;
-    const int next = ((cur + delta) % n + n) % n;
-    currentStack_ = next;
-    openStackDetail (next, true);   // re-applies via openStackDetail
 }

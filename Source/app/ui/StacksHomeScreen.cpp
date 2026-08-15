@@ -13,20 +13,10 @@ juce::String countNoun (int n, const char* singular, const char* plural) {
 }
 }   // namespace
 
-StacksHomeScreen::StacksHomeScreen () {
-    setOpaque (true);
-    addChildComponent (wizard_);
-}
+StacksHomeScreen::StacksHomeScreen () { setOpaque (true); }
 
-bool StacksHomeScreen::closeWizard () {
-    if (!wizard_.isOpen ()) return false;
-    wizard_.close ();
-    return true;
-}
-
-void StacksHomeScreen::setStacks (std::vector<nam::Stack> stacks, int current) {
+void StacksHomeScreen::setStacks (std::vector<nam::Stack> stacks) {
     stacks_ = std::move (stacks);
-    current_ = current;
     layout ();
     repaint ();
 }
@@ -50,10 +40,7 @@ const juce::Image* StacksHomeScreen::thumbFor (const nam::Stack& st) const {
     return nullptr;
 }
 
-void StacksHomeScreen::resized () {
-    layout ();
-    wizard_.setBounds (getLocalBounds ());
-}
+void StacksHomeScreen::resized () { layout (); }
 
 juce::String StacksHomeScreen::metaLine (const nam::Stack& st) const {
     int pedals = 0, amps = 0;
@@ -62,8 +49,7 @@ juce::String StacksHomeScreen::metaLine (const nam::Stack& st) const {
         else if (it.type == nam::GearType::Amp) ++amps;
     }
     return countNoun (pedals, "pedal", "pedals") + " " + kDotSep + " " +
-           countNoun (amps, "amp", "amps") + " " + kDotSep + " " +
-           countNoun ((int)st.scenes.size (), "scene", "scenes");
+           countNoun (amps, "amp", "amps");
 }
 
 void StacksHomeScreen::layout () {
@@ -81,7 +67,6 @@ void StacksHomeScreen::layout () {
     for (size_t i = 0; i < stacks_.size (); ++i) {
         RowRect rr;
         rr.body = { 0, y, listArea_.getWidth (), rowH };
-        rr.performBtn = { listArea_.getWidth () - 108, y + rowH - 34, 92, 24 };
         rowRects_.push_back (rr);
         y += rowH + gap;
     }
@@ -100,8 +85,8 @@ void StacksHomeScreen::paintRigCard (juce::Graphics& g, size_t i, int dy) const 
     g.drawRoundedRectangle (body.toFloat ().reduced (0.5f), 14.0f, 1.0f);
 
     auto in = body.reduced (16, 10);
-    // Square thumb, full content height, at the card's left -- name/meta/
-    // badge/CONTROLS all reflow around it rather than being laid over it.
+    // Square thumb, full content height, at the card's left -- name/meta
+    // reflow around it rather than being laid over it.
     const int thumbSide = in.getHeight ();
     auto thumbR = in.removeFromLeft (thumbSide);
     in.removeFromLeft (12);
@@ -109,33 +94,14 @@ void StacksHomeScreen::paintRigCard (juce::Graphics& g, size_t i, int dy) const 
     drawGearThumb (g, thumbR, thumb != nullptr ? *thumb : juce::Image (), nam::GearType::Amp,
                    10.0f);
 
-    // Name row is untouched (badge already carves its own 66px off the
-    // right and never conflicted with CONTROLS -- it's a different row).
-    // Only the meta line spans the CONTROLS pill's row, so only IT needs a
-    // right bound: unbounded, a long pedal/amp/scene count ran straight
-    // under the pill (review finding, "0 scenes" swallowed by "CONTROLS").
     auto topRow = in.removeFromTop (in.getHeight () / 2 + 2);
-    auto badgeRect = topRow.removeFromRight (66).withSizeKeepingCentre (60, 18);
     g.setFont (uiFont (15.0f, true));
     g.setColour (col::ink);
     g.drawText (juce::String (st.name), topRow, juce::Justification::centredLeft, true);
-    drawRoutingBadge (g, badgeRect, st.routing);
 
-    const int performScreenX = rowRects_[i].performBtn.getX () + listArea_.getX ();
-    auto metaRect = in;
-    metaRect.setRight (juce::jmin (metaRect.getRight (), performScreenX - 10));
     g.setFont (uiFont (11.0f, false));
     g.setColour (col::inkA (0.45f));
-    g.drawText (metaLine (st), metaRect, juce::Justification::topLeft, true);
-
-    auto perform = rowRects_[i].performBtn.translated (listArea_.getX (), dy);
-    drawPill (g, perform.toFloat (), col::accentA (0.14f), col::accentA (0.5f));
-    g.setFont (uiFontTracked (9.0f, true));
-    g.setColour (col::accentAlt);
-    auto pin = perform.reduced (14, 0);
-    drawFwdTriangle (g, pin.removeFromLeft (7).withSizeKeepingCentre (6, 8).toFloat (),
-                     col::accentAlt);
-    g.drawText ("CONTROLS", pin, juce::Justification::centred, false);
+    g.drawText (metaLine (st), in, juce::Justification::topLeft, true);
 }
 
 void StacksHomeScreen::paint (juce::Graphics& g) {
@@ -172,7 +138,7 @@ void StacksHomeScreen::paint (juce::Graphics& g) {
                         juce::Justification::centredLeft, false);
             g.setFont (uiFont (11.0f, false));
             g.setColour (col::inkA (0.4f));
-            g.drawText ("build a rig from a template or from scratch", text,
+            g.drawText ("starts empty -- add gear in the editor", text,
                         juce::Justification::topLeft, true);
         }
     }
@@ -223,12 +189,7 @@ void StacksHomeScreen::mouseUp (const juce::MouseEvent& e) {
         return;
     }
     for (size_t i = 0; i < rowRects_.size (); ++i) {
-        const auto& row = rowRects_[i];
-        if (row.performBtn.contains (cp)) {
-            if (onPerform) onPerform ((int)i);
-            return;
-        }
-        if (row.body.contains (cp)) {
+        if (rowRects_[i].body.contains (cp)) {
             if (onOpen) onOpen ((int)i);
             return;
         }

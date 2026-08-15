@@ -27,26 +27,11 @@ GearType typeFromString(const std::string& s) {
     return GearType::Pedal;
 }
 
-std::string routingToString(Stack::Routing r) {
-    switch (r) {
-        case Stack::Routing::AB: return "ab";
-        case Stack::Routing::Stereo: return "stereo";
-        case Stack::Routing::Single:
-        default: return "single";
-    }
-}
+// --- v2 item/stack <-> json -------------------------------------------
 
-Stack::Routing routingFromString(const std::string& s) {
-    if (s == "ab") return Stack::Routing::AB;
-    if (s == "stereo") return Stack::Routing::Stereo;
-    return Stack::Routing::Single;
-}
-
-// --- v2 item/scene/stack <-> json -------------------------------------------
-
-constexpr std::array<const char*, 11> kItemKeys{ "uid",      "type",     "toneId",       "title",
-                                                 "format",   "gearTag",  "imageUrl",     "fs",
-                                                 "bypassed", "channels", "activeChannel" };
+constexpr std::array<const char*, 10> kItemKeys{ "uid",      "type",         "toneId",   "title",
+                                                 "format",   "gearTag",      "imageUrl", "bypassed",
+                                                 "channels", "activeChannel" };
 
 ChainItem itemFromJson(const json& cj) {
     ChainItem it;
@@ -57,13 +42,6 @@ ChainItem itemFromJson(const json& cj) {
     it.format = cj.value("format", std::string());
     it.gearTag = cj.value("gearTag", std::string());
     it.imageUrl = cj.value("imageUrl", std::string());
-    it.fs = cj.value("fs", 0);
-    // A cab footswitch is meaningless (nothing in the chain acts on it) and
-    // the item sheet no longer offers FS pills for a Cab -- zero it here so
-    // a file written by a prior build (or hand-edited) can't leave a stale
-    // fs permanently occupying a STOMP slot with no UI left to clear it.
-    // parse() is the one choke point every persisted file flows through.
-    if (it.type == GearType::Cab) it.fs = 0;
     it.bypassed = cj.value("bypassed", false);
     if (cj.contains("channels") && cj.at("channels").is_array())
         for (const auto& ch : cj.at("channels"))
@@ -87,7 +65,6 @@ json itemToJson(const ChainItem& it) {
     j["format"] = it.format;
     j["gearTag"] = it.gearTag;
     j["imageUrl"] = it.imageUrl;
-    j["fs"] = it.fs;
     j["bypassed"] = it.bypassed;
     json channels = json::array();
     for (const auto& ch : it.channels)
@@ -97,30 +74,12 @@ json itemToJson(const ChainItem& it) {
     return j;
 }
 
-Scene sceneFromJson(const json& sj) {
-    Scene sc;
-    sc.name = sj.value("name", std::string());
-    sc.ampChannel = sj.value("ampChannel", 0);
-    if (sj.contains("pedalBypass") && sj.at("pedalBypass").is_object())
-        for (auto it = sj.at("pedalBypass").begin(); it != sj.at("pedalBypass").end(); ++it)
-            sc.pedalBypass[it.key()] = it.value().is_boolean() ? it.value().get<bool>() : false;
-    return sc;
-}
-
-json sceneToJson(const Scene& sc) {
-    json pb = json::object();
-    for (const auto& kv : sc.pedalBypass) pb[kv.first] = kv.second;
-    return json{ { "name", sc.name }, { "ampChannel", sc.ampChannel }, { "pedalBypass", pb } };
-}
-
-constexpr std::array<const char*, 6> kStackKeys{ "uid",   "name",   "routing",
-                                                 "chain", "scenes", "activeScene" };
+constexpr std::array<const char*, 3> kStackKeys{ "uid", "name", "chain" };
 
 Stack stackFromJson(const json& sj) {
     Stack st;
     st.uid = sj.value("uid", std::string());
     st.name = sj.value("name", std::string());
-    st.routing = routingFromString(sj.value("routing", std::string("single")));
     // Per-item isolation: one malformed chain item (wrong field type) drops
     // only that item, not the whole stack.
     if (sj.contains("chain") && sj.at("chain").is_array())
@@ -132,16 +91,6 @@ Stack stackFromJson(const json& sj) {
                 // malformed item; skip it, keep the rest of the stack
             }
         }
-    if (sj.contains("scenes") && sj.at("scenes").is_array())
-        for (const auto& scj : sj.at("scenes")) {
-            if (!scj.is_object()) continue;
-            try {
-                st.scenes.push_back(sceneFromJson(scj));
-            } catch (const std::exception&) {
-                // malformed scene; skip it, keep the rest of the stack
-            }
-        }
-    st.activeScene = sj.value("activeScene", -1);
 
     json extra = sj.is_object() ? sj : json::object();
     for (const char* k : kStackKeys) extra.erase(k);
@@ -153,14 +102,9 @@ json stackToJson(const Stack& st) {
     json j = st.extra.is_object() ? st.extra : json::object();
     j["uid"] = st.uid;
     j["name"] = st.name;
-    j["routing"] = routingToString(st.routing);
     json chain = json::array();
     for (const auto& it : st.chain) chain.push_back(itemToJson(it));
     j["chain"] = chain;
-    json scenes = json::array();
-    for (const auto& sc : st.scenes) scenes.push_back(sceneToJson(sc));
-    j["scenes"] = scenes;
-    j["activeScene"] = st.activeScene;
     return j;
 }
 
@@ -288,7 +232,7 @@ void assignMissingStackUids(std::vector<Stack>& stacks) {
     for (auto& st : stacks)
         if (st.uid.empty()) st.uid = "s" + std::to_string(++nextN);
     // A hand-edited file can carry two stacks with the SAME explicit uid --
-    // the (index,uid) revalidation in AppShellPerform.cpp assumes
+    // the (index,uid) revalidation in AppShellStackApply.cpp assumes
     // uniqueness, so every occurrence past the first is re-minted fresh
     // rather than left to collide.
     std::vector<std::string> seen;
@@ -374,22 +318,6 @@ std::string StackModel::activeModelToneId(const Stack& stack) {
 std::string StackModel::activeIrToneId(const Stack& stack) {
     const ChainItem* cab = cabOf(stack);
     return cab != nullptr ? cab->toneId : std::string();
-}
-
-StackModel::SceneApply StackModel::sceneApplyPlan(const Stack& stack, int sceneIdx) {
-    SceneApply plan;
-    if (sceneIdx < 0 || sceneIdx >= (int)stack.scenes.size()) return plan;
-    const Scene& sc = stack.scenes[(size_t)sceneIdx];
-
-    const ChainItem* amp = activeAmp(stack);
-    if (amp != nullptr && !amp->channels.empty()) {
-        int ch =
-            (sc.ampChannel >= 0 && sc.ampChannel < (int)amp->channels.size()) ? sc.ampChannel : 0;
-        plan.modelToneId = amp->channels[(size_t)ch].toneId;
-        plan.modelTitle = amp->channels[(size_t)ch].title;
-    }
-    for (const auto& kv : sc.pedalBypass) plan.bypass.emplace_back(kv.first, kv.second);
-    return plan;
 }
 
 std::string StackModel::nextUid(const Stack& stack) {

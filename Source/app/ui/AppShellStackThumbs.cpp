@@ -2,17 +2,17 @@
 #include "app/ui/NamLookAndFeel.h"
 #include <functional>
 
-// Gear-thumbnail plumbing for the Stacks surfaces (Home rig cards, the EDIT
-// tab's AMP/CAB/PEDAL/POST cards, and StackGearPicker's result rows). Split
-// out of AppShellStacks.cpp/AppShellPerform.cpp (both already at the
-// 400-line cap) per the no-god-files rule.
+// Gear-thumbnail plumbing for the Stacks surfaces (Home rig cards, the
+// freeform EDIT view's chain rows, and StackGearPicker's result rows).
+// Split out of AppShellStacks.cpp/AppShellStackApply.cpp (both already at
+// the 400-line cap) per the no-god-files rule.
 //
-// Two id spaces feed this (see AppShellPerform.cpp's findLocalEntry, which
-// this reuses): items added via the EDIT picker carry a real TONE3000
-// numeric id (svc_.artworkForTone); items added by the create wizard carry a
-// LOCAL LibraryEntry filename (artwork_, after matching getModels_/
-// getIrs_). Picker rows are always the former -- live search results always
-// carry a real id.
+// Two id spaces feed this (see AppShellStackApply.cpp's findLocalEntry,
+// which this reuses): items added via the EDIT picker carry a real
+// TONE3000 numeric id (svc_.artworkForTone); items added by the now-retired
+// create wizard carry a LOCAL LibraryEntry filename (artwork_, after
+// matching getModels_/getIrs_). Picker rows are always the former -- live
+// search results always carry a real id.
 
 namespace {
 constexpr int kThumbSide = 160;   // matches AppShellDeck.cpp's thumbOf
@@ -28,7 +28,7 @@ juce::Image rescaleThumb (const juce::Image& full) {
 }
 }   // namespace
 
-// Same owner-backed juce::Timer shape as AppShellPerform.cpp's
+// Same owner-backed juce::Timer shape as AppShellStackApply.cpp's
 // ApplyTimeoutImpl, parametrized by a callback instead of a fixed owner
 // method so Home/EDIT and the picker can each get their own bounded budget
 // off one implementation. maxAttempts/intervalMs are per-instance: a picker
@@ -113,9 +113,10 @@ juce::Image AppShell::artworkForChainItem (const nam::ChainItem& it,
     return rescaleAndStoreThumb (id, full);
 }
 
-// Home rig cards (active amp, falling back to the cab) + EDIT's AMP/CAB/
-// PEDAL/POST cards for every known stack -- one pass covers both consumers
-// since both are cheap lookups against chain items already in memory.
+// Home rig cards (active amp, falling back to the cab) + the freeform EDIT
+// view's chain rows for every known stack -- one pass covers both
+// consumers since both are cheap lookups against chain items already in
+// memory.
 void AppShell::pushStackThumbs () {
     std::map<std::string, juce::Image> thumbs;
     bool anyMissing = false;

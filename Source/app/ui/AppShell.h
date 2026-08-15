@@ -287,9 +287,10 @@ private:
     // Stacks-surface gear thumbnails (AppShellStackThumbs.cpp): resolves
     // artwork for a chain item across BOTH id spaces -- real TONE3000 ids
     // (svc_.artworkForTone) and local LibraryEntry filenames minted by the
-    // create wizard (artwork_, after matching against getModels_/getIrs_ via
-    // findLocalEntry, same routing AppShellPerform.cpp's startToneLoad
-    // uses) -- plus live gear-picker rows (always real ids). Rescaled +
+    // now-retired create wizard (artwork_, after matching against
+    // getModels_/getIrs_ via findLocalEntry, same routing
+    // AppShellStackApply.cpp's startToneLoad uses) -- plus live gear-picker
+    // rows (always real ids). Rescaled +
     // cached the same bounded way AppShellDeck.cpp's thumbOf does. Per
     // CLAUDE.md, the Stacks screens stay presentation-only and nam::Stack
     // (JUCE-free) never carries a juce::Image -- this pushes a separate
@@ -341,14 +342,12 @@ private:
     // Persistence + Home/Detail wiring live in AppShellStacks.cpp; screen
     // orchestration (show/resized/handleBackButton) stays here.
     std::vector<nam::Stack> stackList_;
-    int currentStack_ = 0;            // last-opened rig (session-only)
     bool stacksShowDetail_ = false;   // which child is visible under Screen::Stacks
     void loadStacksState ();
     void saveStacksState ();
     void pushStacks ();
     void wireStacksScreens ();   // Home/Detail callbacks
-    void wireCreateWizard ();    // "+ NEW STACK" wizard callbacks (AppShellStacks.cpp)
-    void openStackDetail (int idx, bool perform);
+    void openStackDetail (int idx);
     // What a StackGearPicker pick means: a brand-new chain item (canAdd
     // gated), a new channel appended to an existing amp item, or a
     // wholesale replacement of an existing item's gear. Set whenever
@@ -365,39 +364,29 @@ private:
     void mutateItem (juce::String uid, std::function<void (nam::ChainItem&)> fn);
     void openOrbPanel ();   // gear icon on Stacks -> same entry point as the orb tap
 
-    // PERFORM tab apply wiring (AppShellStacks.cpp). Engine truth: ONE model
-    // + ONE IR; a scene/AMP tap is audible only when the target toneId
+    // Stack-to-engine apply wiring (AppShellStackApply.cpp). Engine truth:
+    // ONE model + ONE IR; an apply is audible only when the target toneId
     // differs from what's actually live (tracked here by id, not assumed
     // from stored state). Play-side loads (loadModel_/loadIr_/setCab) don't
     // update these ids directly -- AppShell::show() clears both whenever
     // Play becomes the nav target instead (every Play-side load requires
-    // Play visible), so a PERFORM re-entry after a Play-side swap always
+    // Play visible), so re-entering Stacks after a Play-side swap always
     // re-validates against the engine rather than trusting a stale id.
-    // Worst case is one redundant reload, which is harmless. Bypass +
-    // activeScene/activeChannel are STORED-state writes (visual LEDs only
-    // in Phase A -- no multi-pedal DSP chain exists yet) and always apply
-    // immediately, independent of whether the audible load below them
-    // succeeds.
+    // Worst case is one redundant reload, which is harmless. Bypass/
+    // activeChannel are STORED-state writes (visual only -- no multi-pedal
+    // DSP chain exists yet) and always apply immediately, independent of
+    // whether the audible load below them succeeds.
     std::string liveModelToneId_, liveIrToneId_;
-    void wirePerformView ();                        // performView() callbacks (AppShellPerform.cpp)
-    void applyStackToEngine ();                     // make the engine match the open rig
-    void applyScene (int stackIdx, int sceneIdx);   // SCENES switch tap
-    // AMP switch tap (SCENES mode) / amp-mapped STOMP switch tap. `targetUid`
-    // empty = first amp in the chain (SCENES mode's onAmpCycle, matching the
-    // Phase A one-amp-per-stack cap); non-empty = that specific amp uid (a
-    // STOMP tap), so a hand-edited/future multi-amp file cycles the amp the
-    // switch is actually mapped to, not whichever amp happens to be first.
-    void applyAmpCycle (int stackIdx, juce::String targetUid = {});
-    void stepPerformStack (int delta);   // setlist ‹ › / NEXT ▸ switch
+    void applyStackToEngine ();   // make the engine match the open rig
 
     // One in-flight nam::ToneInfo load at a time; a request that arrives
     // mid-flight parks in the slot matching its resource type (model vs IR,
     // by tone.format) rather than starting a second concurrent
-    // svc_.loadTone call. Two slots, not one -- applyStackToEngine issues a model
-    // load then an IR load back to back, so a NEXT/‹ › switch or a scene tap
-    // that lands while the first is still in flight must not let the IR
-    // request overwrite the parked model request (or vice versa). Each slot
-    // is still last-tap-wins for its own resource; startToneLoad's
+    // svc_.loadTone call. Two slots, not one -- applyStackToEngine issues a
+    // model load then an IR load back to back, so a rig switch or a gear
+    // edit that lands while the first is still in flight must not let the
+    // IR request overwrite the parked model request (or vice versa). Each
+    // slot is still last-tap-wins for its own resource; startToneLoad's
     // completion drains both (one at a time -- draining the second happens
     // on the next completion, since only one load runs at once).
     bool performApplyInFlight_ = false;
@@ -416,8 +405,8 @@ private:
     void requestToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
     void startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
     // 30s watchdog: if svc_.loadTone's async callback never fires (a network
-    // hang), performApplyInFlight_ would otherwise wedge forever and PERFORM
-    // with it. Mirrors AndroidBilling's PurchaseTimeout shape (owner-backed
+    // hang), performApplyInFlight_ would otherwise wedge forever and editing's
+    // audible apply with it. Mirrors AndroidBilling's PurchaseTimeout shape (owner-backed
     // one-shot juce::Timer behind an arm()/cancel() interface, so this
     // header's unique_ptr destructor doesn't need the Timer-deriving impl to
     // be complete) -- arm() here additionally carries the attempt's
@@ -429,18 +418,18 @@ private:
         virtual void arm (int generation) = 0;   // (re)start the 30s countdown
         virtual void cancel () = 0;              // stop it (the real callback already landed)
     };
-    struct ApplyTimeoutImpl;   // defined in AppShellPerform.cpp; needs owner access
+    struct ApplyTimeoutImpl;   // defined in AppShellStackApply.cpp; needs owner access
     std::unique_ptr<ApplyTimeout> applyTimeout_;
     int performApplyGen_ = 0;          // bumped once per startToneLoad attempt
     PendingToneApply inFlightApply_;   // network-route payload the watchdog resolves on timeout
     void handleApplyTimeout (int generation);   // ApplyTimeoutImpl's timerCallback
-    // Wizard-built chain items store a LibraryEntry id (filename) in
-    // ChainItem::toneId, not a TONE3000 tone id -- see decisions.md. Looks
-    // tone.id up against the local library (models via getModels_, IRs via
-    // getIrs_, picked by tone.format) so startToneLoad can route those
-    // loads synchronously/offline instead of handing a filename to
-    // svc_.loadTone. False (out untouched) if no getter is wired or no
-    // entry matches.
+    // A chain item built by the now-retired create wizard stores a
+    // LibraryEntry id (filename) in ChainItem::toneId, not a TONE3000 tone
+    // id -- see decisions.md. Looks tone.id up against the local library
+    // (models via getModels_, IRs via getIrs_, picked by tone.format) so
+    // startToneLoad can route those loads synchronously/offline instead of
+    // handing a filename to svc_.loadTone. False (out untouched) if no
+    // getter is wired or no entry matches.
     bool findLocalEntry (const nam::ToneInfo& tone, nam::LibraryEntry& out) const;
     // startToneLoad's completion: shared by the local (synchronous) and
     // network (svc_.loadTone callback) routes so both resolve the SAME
@@ -468,8 +457,8 @@ private:
     // Pro unlock: paywall overlay + the host's billing services.
     void openPaywall (const juce::String& reason);
     // Hides the sheet and re-derives nav-hidden the same way show() does,
-    // rather than leaving nav visible over PERFORM if that's what's
-    // underneath. Shared by all three dismiss sites (onClose, back button,
+    // rather than leaving nav visible over whatever screen is underneath.
+    // Shared by all three dismiss sites (onClose, back button,
     // refreshProState going Pro) so they can't drift out of sync again --
     // only onClose did this before the fix. No-op if the sheet was never
     // created.

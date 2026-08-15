@@ -6,10 +6,16 @@
 
 // Stacks surface plumbing: JSON persistence (v2 ordered-chain model, via
 // StackModel -- v1 fixed-slot files migrate transparently on first load),
-// the Home/Detail screen wiring, and the EDIT tab's gear-picker/item-sheet
+// the Home/Detail screen wiring, and the EDIT view's gear-picker/item-sheet
 // mutation logic. Split out of AppShell.cpp per the no-god-files rule;
 // AppShell.cpp keeps screen orchestration (show/resized/handleBackButton)
 // since those touch state this file doesn't own.
+//
+// Stripped 2026-08-15 (Chris): Stacks is now a list of rigs, each an
+// ordered chain you edit -- guided mode, the create wizard, CONTROLS/
+// PERFORM, scenes, routing, and footswitch assignment are gone. "+ NEW
+// STACK" creates an empty rig directly (see wireStacksScreens' onCreate)
+// instead of stepping through a wizard. See decisions.md.
 
 namespace {
 // GearType -> TONE3000 gear filter. Cab additionally scopes to format=ir.
@@ -36,7 +42,6 @@ nam::SearchParams gearSearchParams (nam::GearType t) {
 
 void AppShell::loadStacksState () {
     stackList_.clear ();
-    currentStack_ = 0;
     if (!svc_.loadStacksJson) return;
     const auto raw = svc_.loadStacksJson ();
     const auto rawStd = raw.toStdString ();
@@ -67,14 +72,14 @@ void AppShell::saveStacksState () {
 }
 
 void AppShell::pushStacks () {
-    if (stacksHome_ != nullptr) stacksHome_->setStacks (stackList_, currentStack_);
+    if (stacksHome_ != nullptr) stacksHome_->setStacks (stackList_);
     if (stacksDetail_ != nullptr) {
         // Refresh Detail too when it's showing one of these stacks, so an
-        // item-sheet edit (bypass/FS/channel/swap) or a freeform reorder is
+        // item-sheet edit (bypass/channel/swap) or a freeform reorder is
         // reflected immediately without re-navigating.
         const int idx = stacksDetail_->currentIndex ();
         if (idx >= 0 && idx < (int)stackList_.size ())
-            stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
+            stacksDetail_->setStack (stackList_[(size_t)idx], idx);
     }
     pushStackThumbs ();   // AppShellStackThumbs.cpp -- rig/card art alongside the data above
     // Deliberately NO applyStackToEngine() here. pushStacks is a RENDER
@@ -83,10 +88,10 @@ void AppShell::pushStacks () {
     // retry (toast storm, endless HTTP, flash churn; direct recursion when
     // a corrupt cache file fails synchronously). The apply is fired from
     // the specific state transitions that should cause one instead: opening
-    // a rig, switching tabs, and each edit that changes the audible truth.
+    // a rig and each edit that changes the audible truth.
 }
 
-void AppShell::openStackDetail (int idx, bool perform) {
+void AppShell::openStackDetail (int idx) {
     if (idx < 0 || idx >= (int)stackList_.size () || stacksDetail_ == nullptr) return;
     // A stale overlay from whatever stack was previously open must not
     // survive the switch (uid collisions across different stacks are
@@ -94,21 +99,14 @@ void AppShell::openStackDetail (int idx, bool perform) {
     stacksDetail_->picker ().close ();
     stacksDetail_->itemSheet ().close ();
     stacksShowDetail_ = true;
-    // With the SETLIST chips gone, "current" means the rig you last opened --
-    // CONTROLS' setlist stepping falls back to it when Detail has no index.
-    currentStack_ = idx;
-    stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
+    stacksDetail_->setStack (stackList_[(size_t)idx], idx);
     pushStackThumbs ();   // this path bypasses pushStacks(), which normally covers it
-    // show() BEFORE selectTab, and no applyStackToEngine() call here.
-    // selectTab fires onTabChanged, whose handler applies the rig; that
-    // apply is guarded on this screen being current_, which only show()
-    // makes true -- selecting first would apply while Play was still
-    // current_ and be dropped. Letting onTabChanged be the single trigger
-    // also keeps it to exactly ONE apply per open: an extra call here would
-    // park a duplicate load that the drain later starts against an
-    // already-live tone (an audible double-reload every time you open).
+    // show() BEFORE applyStackToEngine(): the apply is guarded on this
+    // screen being current_ (see AppShellStackApply.cpp's applyStackToEngine),
+    // which only show() makes true -- calling it first would apply while
+    // Play was still current_ and be dropped.
     show (Screen::Stacks);
-    stacksDetail_->selectTab (perform);
+    applyStackToEngine ();
 }
 
 void AppShell::openOrbPanel () {
@@ -138,10 +136,19 @@ void AppShell::wireStacksScreens () {
                 return;
             }
         }
-        stacksHome_->wizard ().open ((int)stackList_.size ());
+        // No wizard: "+ NEW STACK" mints an empty rig and opens its editor
+        // directly -- freeform IS the only edit mode now, so there's
+        // nothing left for a wizard to build up front.
+        nam::Stack st;
+        st.uid = nam::StackModel::nextStackUid (stackList_);
+        st.name = "New Rig";
+        stackList_.push_back (std::move (st));
+        const int idx = (int)stackList_.size () - 1;
+        saveStacksState ();
+        pushStacks ();
+        openStackDetail (idx);
     };
-    stacksHome_->onOpen = [this] (int i) { openStackDetail (i, false); };
-    stacksHome_->onPerform = [this] (int i) { openStackDetail (i, true); };
+    stacksHome_->onOpen = [this] (int i) { openStackDetail (i); };
 
     stacksDetail_->onBack = [this] {
         stacksShowDetail_ = false;
@@ -151,15 +158,12 @@ void AppShell::wireStacksScreens () {
         const int idx = stacksDetail_->currentIndex ();
         if (idx < 0 || idx >= (int)stackList_.size ()) return;
         stackList_.erase (stackList_.begin () + idx);
-        if (currentStack_ >= (int)stackList_.size ())
-            currentStack_ = juce::jmax (0, (int)stackList_.size () - 1);
         // Belt and braces alongside startToneLoad's own drain-time
-        // revalidation (AppShellPerform.cpp): a pending PERFORM apply
-        // parked mid-flight for the stack just removed (or any stack,
-        // since every index above `idx` just shifted down) must not
-        // resurrect against a since-reused index. Both slots -- a removal
-        // can land while either a model or an IR request (or both) is
-        // parked.
+        // revalidation (AppShellStackApply.cpp): a pending apply parked
+        // mid-flight for the stack just removed (or any stack, since every
+        // index above `idx` just shifted down) must not resurrect against a
+        // since-reused index. Both slots -- a removal can land while either
+        // a model or an IR request (or both) is parked.
         pendingModelApply_ = {};
         pendingIrApply_ = {};
         saveStacksState ();
@@ -179,39 +183,6 @@ void AppShell::wireStacksScreens () {
     };
 
     wireGearPicker ();
-    wirePerformView ();    // PERFORM tab: AppShellPerform.cpp
-    wireCreateWizard ();   // "+ NEW STACK" wizard, hosted by stacksHome_
-}
-
-void AppShell::wireCreateWizard () {
-    auto& wiz = stacksHome_->wizard ();
-    // Synchronous local-library reads -- same accessors keptModelsSorted()/
-    // the cab-choices code already use, no new service plumbing needed.
-    wiz.onFetchModels = [this] {
-        return getModels_ ? getModels_ () : std::vector<nam::LibraryEntry> ();
-    };
-    wiz.onFetchIrs = [this] { return getIrs_ ? getIrs_ () : std::vector<nam::LibraryEntry> (); };
-    wiz.onSave = [this] (nam::Stack st, juce::String toast) {
-        // Minted here (not by the wizard) since uniqueness needs the full
-        // stackList_ the wizard doesn't have -- existingStackCount alone
-        // could collide with a gap left by an earlier removal (e.g. "s1"
-        // deleted, "s3" remains: a count-based mint would reissue "s3").
-        // Covers both doSave (guided build) and pickTemplate -- both funnel
-        // through this one onSave callback.
-        st.uid = nam::StackModel::nextStackUid (stackList_);
-        stackList_.push_back (std::move (st));
-        currentStack_ = (int)stackList_.size () - 1;
-        saveStacksState ();
-        pushStacks ();
-        openStackDetail (currentStack_, false);
-        // The wizard composes the exact toast text itself (spec copy when
-        // the FS map is complete, a truthful "{n} action(s) not
-        // foot-switchable" variant otherwise) since it's the only place
-        // that knows the switch-assignment state; empty means a template
-        // pick, which jumps to Detail EDIT silently per spec.
-        if (toast.isNotEmpty () && stacksDetail_ != nullptr)
-            nam::ui::showToast (*stacksDetail_, toast);
-    };
 }
 
 void AppShell::openGearPicker (nam::GearType hint, GearPickerMode mode, juce::String targetUid) {
@@ -294,9 +265,6 @@ void AppShell::wireGearPicker () {
     auto& sheet = stacksDetail_->itemSheet ();
     sheet.onToggleBypass = [this] (juce::String uid) {
         mutateItem (uid, [] (nam::ChainItem& it) { it.bypassed = !it.bypassed; });
-    };
-    sheet.onSetFs = [this] (juce::String uid, int fs) {
-        mutateItem (uid, [fs] (nam::ChainItem& it) { it.fs = fs; });
     };
     sheet.onSetChannel = [this] (juce::String uid, int ch) {
         mutateItem (uid, [ch] (nam::ChainItem& it) {

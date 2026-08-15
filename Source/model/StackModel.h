@@ -27,34 +27,28 @@ struct ChainItem {
     // is available (EDIT picker add/swap) -- ChainItem itself only stores
     // toneId/title/format, so without this a re-fetch later (thumbnail
     // paint) has no imageUrl to hand fetchArtwork and can never succeed even
-    // though the id is real. "" for wizard/local-library items (no ToneInfo
-    // exists for those) and for files written before this field existed --
-    // both fall back to the local-library artwork path or the placeholder.
+    // though the id is real. "" for a local-library item sourced from a
+    // legacy (retired) creation path with no fetchable URL, and for files
+    // written before this field existed -- both fall back to the
+    // local-library artwork path or the placeholder.
     std::string imageUrl;
-    int fs = 0;   // 0 = unassigned, 1..8
     bool bypassed = false;
     std::vector<StackChannel> channels;   // amps only; [0] mirrors toneId/title
     int activeChannel = 0;
     // Unknown v2 JSON keys on this item, preserved verbatim across
-    // parse/serialize round-trips so forward-incompatible fields survive.
+    // parse/serialize round-trips so forward-incompatible fields (including
+    // "fs" and any scene data from a build that still wrote them) survive.
     nlohmann::json extra = nlohmann::json::object();
-};
-
-struct Scene {
-    std::string name;
-    std::map<std::string, bool> pedalBypass;   // keyed by ChainItem::uid
-    int ampChannel = 0;
 };
 
 struct Stack {
     std::string uid;   // stable per stack, "s1","s2"... assigned by the model
     std::string name;
-    enum class Routing { Single, AB, Stereo };
-    Routing routing = Routing::Single;
     std::vector<ChainItem> chain;   // ordered, signal top->bottom
-    std::vector<Scene> scenes;
-    int activeScene = -1;
-    // Unknown v2 JSON keys on this stack, preserved across round-trips.
+    // Unknown v2 JSON keys on this stack, preserved across round-trips
+    // (including "routing"/"scenes"/"activeScene" from a build that still
+    // wrote them -- Stacks is a plain ordered chain now, no routing or
+    // scene concept exists in this model).
     nlohmann::json extra = nlohmann::json::object();
 };
 
@@ -81,17 +75,10 @@ public:
     activeModelToneId(const Stack& stack);                   // active channel's toneId, "" if none
     static std::string activeIrToneId(const Stack& stack);   // active cab's toneId, "" if none
 
-    struct SceneApply {
-        std::string modelToneId, modelTitle;
-        std::vector<std::pair<std::string, bool>> bypass;
-    };
-    // What tapping a scene changes; {} (all empty) for an out-of-range index.
-    static SceneApply sceneApplyPlan(const Stack& stack, int sceneIdx);
-
     static std::string nextUid(const Stack& stack);   // "i{max existing index + 1}"
     // Unique across the WHOLE file, unlike nextUid (per-stack items) --
-    // callers creating a new stack (wizard save/template pick) must pass the
-    // full stack list so the mint can't collide with an existing stack's uid.
+    // callers creating a new stack must pass the full stack list so the
+    // mint can't collide with an existing stack's uid.
     static std::string
     nextStackUid(const std::vector<Stack>& stacks);   // "s{max existing index + 1}"
     // Top-level shape check only (valid JSON that's either a v1 array or a

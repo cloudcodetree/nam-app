@@ -6,6 +6,13 @@ using namespace nam;
 using json = nlohmann::json;
 
 TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
+    // "routing"/"scenes"/"activeScene" (stack-level) and "fs" (item-level)
+    // are no longer model fields -- Stacks is a plain ordered chain, no
+    // guided/routing/scene concept exists. They're deliberately included
+    // here as UNKNOWN keys: shrinking kStackKeys/kItemKeys means parse()'s
+    // per-key `extra.erase(k)` no longer touches them, so a file written by
+    // a prior build (or a hand-edited one) round-trips them untouched
+    // instead of silently losing them.
     static const char* v2Fixture = R"JSON(
     {
       "version": 2,
@@ -48,9 +55,12 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     const auto& st = stacks[0];
     REQUIRE(st.name == "My Rig");
     REQUIRE(st.uid == "s7");   // explicit uid preserved verbatim, not re-minted
-    REQUIRE(st.routing == Stack::Routing::AB);
-    REQUIRE(st.activeScene == 0);
     REQUIRE(st.chain.size() == 1);
+    // Retired stack-level keys survive verbatim in extra, untouched.
+    REQUIRE(st.extra.at("routing") == "ab");
+    REQUIRE(st.extra.at("activeScene") == 0);
+    REQUIRE(st.extra.at("scenes")[0]["name"] == "Clean");
+    REQUIRE(st.extra.at("notes") == "custom-stack-field");
 
     const auto& item = st.chain[0];
     REQUIRE(item.uid == "i1");
@@ -60,15 +70,13 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     REQUIRE(item.format == "nam");
     REQUIRE(item.gearTag == "amp");
     REQUIRE(item.imageUrl == "https://example.com/amp-1.jpg");
-    REQUIRE(item.fs == 3);
     REQUIRE_FALSE(item.bypassed);
     REQUIRE(item.channels.size() == 2);
     REQUIRE(item.channels[1].toneId == "amp-1b");
     REQUIRE(item.activeChannel == 1);
-
-    REQUIRE(st.scenes.size() == 1);
-    REQUIRE(st.scenes[0].name == "Clean");
-    REQUIRE(st.scenes[0].pedalBypass.at("i2") == true);
+    // Retired item-level key ("fs") and a genuinely-unknown one both survive.
+    REQUIRE(item.extra.at("fs") == 3);
+    REQUIRE(item.extra.at("vendorExtra") == 42);
 
     auto out = StackModel::serialize(stacks);
     json reparsed = json::parse(out);
@@ -76,7 +84,11 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     REQUIRE(reparsed["stacks"][0]["uid"] == "s7");
     // Unknown keys on both stack and item objects survive the round trip.
     REQUIRE(reparsed["stacks"][0]["notes"] == "custom-stack-field");
+    REQUIRE(reparsed["stacks"][0]["routing"] == "ab");
+    REQUIRE(reparsed["stacks"][0]["scenes"][0]["name"] == "Clean");
+    REQUIRE(reparsed["stacks"][0]["activeScene"] == 0);
     REQUIRE(reparsed["stacks"][0]["chain"][0]["vendorExtra"] == 42);
+    REQUIRE(reparsed["stacks"][0]["chain"][0]["fs"] == 3);
     REQUIRE(reparsed["stacks"][0]["chain"][0]["imageUrl"] == "https://example.com/amp-1.jpg");
 
     auto stacks2 = StackModel::parse(out);
@@ -84,7 +96,8 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     REQUIRE(stacks2[0].uid == "s7");   // still preserved after a second round trip
     REQUIRE(stacks2[0].chain[0].activeChannel == 1);
     REQUIRE(stacks2[0].chain[0].channels.size() == 2);
-    REQUIRE(stacks2[0].routing == Stack::Routing::AB);
+    REQUIRE(stacks2[0].extra.at("routing") == "ab");
+    REQUIRE(stacks2[0].chain[0].extra.at("fs") == 3);
     REQUIRE(stacks2[0].chain[0].imageUrl == "https://example.com/amp-1.jpg");
 }
 
@@ -114,48 +127,6 @@ TEST_CASE("StackModel parse defaults imageUrl to empty when the key is absent") 
     REQUIRE(stacks.size() == 1);
     REQUIRE(stacks[0].chain.size() == 1);
     REQUIRE(stacks[0].chain[0].imageUrl.empty());
-}
-
-TEST_CASE("StackModel parse zeroes fs on a Cab item -- no UI can clear a stale one") {
-    // A cab footswitch is meaningless (nothing in the chain acts on it) and
-    // the item sheet no longer offers FS pills for a Cab -- but a file
-    // written by a PRIOR build (or hand-edited) can still carry a nonzero
-    // cab fs, which would otherwise permanently occupy a STOMP slot with no
-    // in-app control left to clear it. parse() is the one choke point every
-    // persisted file flows through, so it normalizes this on load rather
-    // than leaving corrupt-shaped old state to a UI that can no longer fix
-    // it. Pedal/Amp/Post fs values must survive untouched.
-    static const char* fixture = R"JSON(
-    {
-      "version": 2,
-      "stacks": [
-        {
-          "name": "Legacy Rig",
-          "uid": "s1",
-          "chain": [
-            {"uid": "i1", "type": "cab", "fs": 4},
-            {"uid": "i2", "type": "pedal", "fs": 2},
-            {"uid": "i3", "type": "amp", "fs": 1, "channels": [{"toneId":"a","title":"A"}]}
-          ]
-        }
-      ]
-    }
-    )JSON";
-
-    auto stacks = StackModel::parse(fixture);
-    REQUIRE(stacks.size() == 1);
-    const auto& chain = stacks[0].chain;
-    REQUIRE(chain.size() == 3);
-    REQUIRE(chain[0].type == GearType::Cab);
-    REQUIRE(chain[0].fs == 0);   // zeroed on load, not the file's stale 4
-    REQUIRE(chain[1].fs == 2);   // pedal untouched
-    REQUIRE(chain[2].fs == 1);   // amp untouched
-
-    // Re-serializing also writes the normalized (zeroed) value, not the
-    // original 4 -- a save after load never resurrects the stale slot.
-    auto out = StackModel::serialize(stacks);
-    json reparsed = json::parse(out);
-    REQUIRE(reparsed["stacks"][0]["chain"][0]["fs"] == 0);
 }
 
 TEST_CASE("StackModel v1 migration maps fixed slots to ordered chain") {
@@ -303,44 +274,6 @@ TEST_CASE("StackModel activeModelToneId/activeIrToneId read the active channel")
     REQUIRE(StackModel::activeIrToneId(s) == "cab-ir");
 }
 
-TEST_CASE("StackModel sceneApplyPlan returns channel toneId + bypass pairs, clamps bad indices") {
-    Stack s;
-    ChainItem amp;
-    amp.uid = "i1";
-    amp.type = GearType::Amp;
-    amp.channels = { { "clean-tone", "Clean" }, { "lead-tone", "Lead" } };
-    amp.activeChannel = 0;
-    s.chain.push_back(amp);
-
-    ChainItem pedal;
-    pedal.uid = "i2";
-    pedal.type = GearType::Pedal;
-    s.chain.push_back(pedal);
-
-    Scene sc;
-    sc.name = "Lead";
-    sc.ampChannel = 1;
-    sc.pedalBypass = { { "i2", true } };
-    s.scenes.push_back(sc);
-
-    auto plan = StackModel::sceneApplyPlan(s, 0);
-    REQUIRE(plan.modelToneId == "lead-tone");
-    REQUIRE(plan.modelTitle == "Lead");
-    REQUIRE(plan.bypass.size() == 1);
-    REQUIRE(plan.bypass[0].first == "i2");
-    REQUIRE(plan.bypass[0].second == true);
-
-    // Out-of-range scene index clamps to an empty plan.
-    auto badPlan = StackModel::sceneApplyPlan(s, 5);
-    REQUIRE(badPlan.modelToneId.empty());
-    REQUIRE(badPlan.modelTitle.empty());
-    REQUIRE(badPlan.bypass.empty());
-
-    auto negPlan = StackModel::sceneApplyPlan(s, -1);
-    REQUIRE(negPlan.modelToneId.empty());
-    REQUIRE(negPlan.bypass.empty());
-}
-
 TEST_CASE("StackModel parse: malformed JSON never throws, returns empty vector") {
     REQUIRE(StackModel::parse("not valid json {{{").empty());
     REQUIRE(StackModel::parse("").empty());
@@ -373,8 +306,8 @@ TEST_CASE("StackModel nextUid is monotonic based on the highest existing index")
 }
 
 TEST_CASE("StackModel parse v2: a malformed chain item is skipped, its stack and others survive") {
-    // stack[0]'s second item has "fs" as a string (should be int) -- only
-    // that ONE item should be dropped, not the whole stack or the file.
+    // stack[0]'s second item has "bypassed" as a string (should be bool) --
+    // only that ONE item should be dropped, not the whole stack or the file.
     static const char* fixture = R"JSON(
     {
       "version": 2,
@@ -383,10 +316,10 @@ TEST_CASE("StackModel parse v2: a malformed chain item is skipped, its stack and
           "name": "Mixed Stack",
           "chain": [
             {"uid": "i1", "type": "pedal", "toneId": "pedal-ok", "title": "OK Pedal",
-             "format": "nam", "gearTag": "pedal", "fs": 1, "bypassed": false,
+             "format": "nam", "gearTag": "pedal", "bypassed": false,
              "channels": [], "activeChannel": 0},
             {"uid": "i2", "type": "pedal", "toneId": "pedal-bad", "title": "Bad Pedal",
-             "format": "nam", "gearTag": "pedal", "fs": "not-a-number", "bypassed": false,
+             "format": "nam", "gearTag": "pedal", "bypassed": "not-a-bool",
              "channels": [], "activeChannel": 0}
           ]
         },
@@ -394,7 +327,7 @@ TEST_CASE("StackModel parse v2: a malformed chain item is skipped, its stack and
           "name": "Good Stack",
           "chain": [
             {"uid": "i1", "type": "amp", "toneId": "amp-1", "title": "Amp One",
-             "format": "nam", "gearTag": "amp", "fs": 2, "bypassed": false,
+             "format": "nam", "gearTag": "amp", "bypassed": false,
              "channels": [{"toneId": "amp-1", "title": "Amp One"}], "activeChannel": 0}
           ]
         }
@@ -414,7 +347,7 @@ TEST_CASE("StackModel parse v2: a malformed chain item is skipped, its stack and
 
 TEST_CASE(
     "StackModel parse v2: a stack with a malformed top-level field is dropped, others survive") {
-    // stack[0]'s activeScene is a string (should be int) -- the reviewer's
+    // stack[0]'s "uid" is a number (should be a string) -- the reviewer's
     // originally-reported bug: without per-stack isolation this used to
     // wipe out EVERY stack in the file, not just this one.
     static const char* fixture = R"JSON(
@@ -423,10 +356,10 @@ TEST_CASE(
       "stacks": [
         {
           "name": "Broken Stack",
-          "activeScene": "not-a-number",
+          "uid": 12345,
           "chain": [
             {"uid": "i1", "type": "pedal", "toneId": "pedal-1", "title": "P",
-             "format": "nam", "gearTag": "pedal", "fs": 1, "bypassed": false,
+             "format": "nam", "gearTag": "pedal", "bypassed": false,
              "channels": [], "activeChannel": 0}
           ]
         },
@@ -541,9 +474,9 @@ TEST_CASE("StackModel parse mints stack uids when absent, unique within the file
 TEST_CASE("StackModel parse mints fresh uids for hand-edited duplicate stack uids") {
     // Adversarial-review finding on the Stack.uid commit: two stacks sharing
     // an explicit uid (only reachable via a hand-edited file) would let
-    // AppShellPerform.cpp's (index,uid) revalidation accept the WRONG stack
-    // once one of them shifts index. Only the first occurrence is kept
-    // as-is; every later duplicate is re-minted fresh.
+    // AppShellStackApply.cpp's (index,uid) revalidation accept the WRONG
+    // stack once one of them shifts index. Only the first occurrence is
+    // kept as-is; every later duplicate is re-minted fresh.
     static const char* fixture = R"JSON(
     {
       "version": 2,
