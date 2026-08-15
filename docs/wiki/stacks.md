@@ -1,32 +1,32 @@
 # Stacks
 
-User-built rigs, one slot per TONE3000 gear type: AMP, CABINET, PEDAL,
-OUTBOARD, SPACES, EXPERIMENTAL (`StacksScreen::slotDefs()`).
+User-built rigs as an **ordered chain** of gear (`nam::StackModel`,
+`Source/model/StackModel.h` — JUCE-free, headless-tested). A `Stack` is
+`{uid, name, routing, chain[], scenes[], activeScene}`; a `ChainItem` is
+`{uid, type (Pedal/Amp/Cab/Post), toneId, title, format, gearTag, fs,
+bypassed, channels[], activeChannel}`. Amps hold multiple switchable
+channels; scenes snapshot a pedal-bypass map plus an amp channel.
 
-- **Slots pick from live TONE3000 lists** (trending, per gear; CABINET uses
-  `format=ir&gears=cab`) — nothing is downloaded up front. The picked tone's
-  `format` is stored per slot and decides how it loads later.
-- **LOAD applies the stack** through `AppShell::applyStack`: the first
-  filled head-ish slot (AMP → PEDAL → OUTBOARD → EXPERIMENTAL) becomes the
-  engine model; the first filled cab-ish slot (CABINET → SPACES) becomes the
-  impulse. Engine chain = ONE model + ONE impulse, so that's all that loads.
-- Loads are **sequential** (model completes, then cab): the host funnels
-  downloads through one session thread and a concurrent second fetch cancels
-  the first.
-- `doLoadToneLive` (host): cache hit → hot-swap immediately; miss →
-  `doDownloadOnly` then swap. `format=="ir"` → `loadImpulseResponse` +
-  `setImpulse`; else `NamModel::load` + `setModel`.
-- Persistence: `stacks.json` in appdata via `loadStacksJson`/`saveStacksJson`
-  services, juce::JSON, shape `[{name, slots:[{id,title,format}×6]}]`.
+- **Persistence**: `stacks.json` in appdata via `loadStacksJson`/
+  `saveStacksJson`, shape `{"version":2,"stacks":[…]}`. `StackModel::parse`
+  migrates the v1 shape (`[{name, slots:[{id,title,format}×6]}]`, slot order
+  AMP/CABINET/PEDAL/OUTBOARD/SPACES/EXPERIMENTAL) transparently; the next
+  save writes v2. Parse never throws and isolates per stack/item/slot, so
+  one bad object can't destroy the library; a file whose top-level shape
+  isn't recognized (`looksLikeStacksFile`) is copied to `stacks.json.bak`
+  before the first overwrite. Stack uids are minted on parse when absent.
+- **Engine truth is unchanged: ONE model + ONE IR.** The active amp
+  channel's tone is the model; the cab item is the impulse. Pedals/post
+  items and the routing enum (SINGLE live; A/B and STEREO stored only) are
+  stored + visual in Phase A — no multi-node DSP chain exists yet.
+- **Surfaces**: `StacksHomeScreen` (setlist chips, per-stack meta + PERFORM
+  pill), `StackDetailScreen` hosting `StackEditView` (guided sections +
+  freeform reorder, gear picker, item sheet, REMOVE STACK) and
+  `StackPerformView` (below), and `StackCreateWizard` (below).
+- Deferred to their own plans: MIDI/foot control, dual-amp A/B + stereo
+  DSP, audible pedal nodes.
 
-Known gap: `applyStack` drops load errors silently (no toast) — tracked.
-
-## PERFORM tab (Task 4, v2 ordered-chain model)
-
-The paragraphs above describe the **superseded v1 fixed-slot model**
-(`StacksScreen`/`applyStack`); see `StackModel.h` and `docs/wiki/decisions.md`
-for the current v2 ordered-chain model. This section covers only PERFORM's
-apply wiring, which is new:
+## PERFORM tab
 
 - `StackDetailScreen`'s PERFORM tab hosts `StackPerformView`
   (`Source/app/ui/StackPerformView.h/.cpp` + `...Paint.cpp`), a full-bleed
@@ -37,13 +37,25 @@ apply wiring, which is new:
   (`AppShell::wirePerformView`/`enterPerform`/`applyScene`/`applyAmpCycle`/
   `stepPerformStack`/`requestToneLoad`/`startToneLoad`), split out of
   `AppShellStacks.cpp` to stay under the 400-line new-file cap.
-- Engine truth: ONE model + ONE IR (still, same as v1). A scene/AMP tap is
-  audible only when the target toneId differs from `AppShell::
-  liveModelToneId_`/`liveIrToneId_` — tracked only by PERFORM's own applies,
-  so a tone loaded via Play/Browse first won't be recognized as live until
-  PERFORM applies it itself (one redundant reload, not a correctness bug).
-  One `nam::ToneInfo` load in flight at a time (`performApplyInFlight_` +
-  `pendingPerformApply_`, a single pending slot — last tap wins).
+- A scene/AMP tap is audible only when the target toneId differs from
+  `AppShell::liveModelToneId_`/`liveIrToneId_`. Those are updated by
+  PERFORM's own applies and **cleared whenever Play becomes the nav target**
+  (`AppShell::show`), since a Play/Browse-side load would otherwise leave a
+  stale id that a later PERFORM re-entry trusts — worst case now is one
+  redundant reload. One load in flight at a time
+  (`performApplyInFlight_`), with **two** pending slots —
+  `pendingModelApply_` and `pendingIrApply_`, keyed by `tone.format`, both
+  drained on completion (last tap wins *within* each resource; a single
+  slot let an IR request clobber a parked model request). A 30s
+  `ApplyTimeout` watchdog resolves the in-flight state as a failure if the
+  host callback never fires, so PERFORM can't wedge.
+- **Local-first apply**: wizard-built items reference the local library by
+  `LibraryEntry::id` (a filename, `keep_<id>.nam`/`ir_<id>.nam`), not a
+  TONE3000 tone id. `startToneLoad`'s `findLocalEntry` matches the id
+  against `getModels_`/`getIrs_` by format and applies synchronously via
+  `loadModel_`/`loadIr_` through the same completion/drain machinery; no
+  match falls through to `svc_.loadTone` (the network route EDIT's picker
+  stores real ids for). The two id spaces can't collide.
 - Bypass + `activeScene` + the amp's `activeChannel` are STORED-state
   writes (visual LEDs/highlight only — no multi-pedal DSP chain exists in
   Phase A) and apply immediately, independent of the audible load; on a
@@ -101,8 +113,13 @@ spawning one blank stack instantly.
   a wizard-assigned switch is live in PERFORM immediately; a "channel
   cycle" assignment currently reads as a plain bypass toggle there (no
   MIDI/cycle semantics exist yet — tracked, not fixed).
-- **Save**: `onSave(nam::Stack, bool toast)` — the `bool` is a deliberate
-  deviation from the task brief's literal `onSave(nam::Stack)` signature,
-  needed so the owner can skip the "Saved · A-D mapped on your Chocolate"
-  toast on the (silent) template-pick path while still firing it for the
-  step-4 guided save.
+- **Save**: `onSave(nam::Stack, juce::String toast)` — the wizard composes
+  the toast text so the owner stays dumb: empty on the (silent)
+  template-pick path, the spec's "Saved · A–D mapped on your Chocolate"
+  when every action is mapped, and a truthful "Saved · {n} action(s) not
+  foot-switchable" when the map is incomplete (the copy must not claim a
+  full map it doesn't have). Both save paths run `seedScenesFor()` — one
+  Scene per amp channel (name = channel title, `ampChannel` = its index,
+  `pedalBypass` mirroring the as-built state, `activeScene = 0`) so
+  PERFORM's SCENES grid is never empty from creation. Interim until a real
+  scene editor exists.

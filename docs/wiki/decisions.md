@@ -10,7 +10,8 @@ direction is chosen, reversed, or a constraint is discovered.
   `stacks.json.bak` safety net for a stacks.json `StackModel::parse`
   couldn't make sense of; a 30s `performApplyInFlight_` watchdog
   (`AppShell::ApplyTimeout`, same owner-backed one-shot-`juce::Timer`
-  shape as `AndroidBilling::PurchaseTimeout`) so a `svc_.loadTone`
+  shape as `AndroidAudioApp::PurchaseTimeout`, declared AndroidAudioApp.h,
+  implemented in AndroidBilling.cpp) so a `svc_.loadTone`
   callback that never fires can't wedge PERFORM forever; and
   `AppShell::dismissPaywall()` unifying the three paywall-dismiss sites
   (only `onClose` re-derived nav-hidden before). Adversarial review round 1
@@ -61,12 +62,10 @@ direction is chosen, reversed, or a constraint is discovered.
   internal testing after the two Criticals landed (stale live-ids across
   Play↔PERFORM; two-slot pending apply split). **Pre-launch checklist**
   (fix before public flip; the SDD workspace is deleted at completion —
-  this is the durable copy): Stack.uid field replacing (index,name) async
-  identity (retires 4 ledger items; templates make duplicate names the
-  default); stacks.json.bak before overwriting an unparseable non-empty
-  file; performApplyInFlight_ 30s watchdog; dismissPaywall() factoring
-  (handleBackButton/refreshProState lack onClose's nav re-derive); PERFORM
-  tuner anchor (Play-layout placement); picker mismatched-tab toast in
+  this is the durable copy). **DONE 2026-08-15** in the hardening batch
+  (9df1dc9..aac1000, see the newer entry above): Stack.uid; stacks.json.bak;
+  performApplyInFlight_ watchdog; dismissPaywall() factoring. **STILL OPEN:**
+  PERFORM tuner anchor (Play-layout placement); picker mismatched-tab toast in
   AddChannel/Swap modes; wizard nav policy (nav tappable behind wizard
   keeps draft, inconsistent w/ back-discard); hoist scrim/sheet hex to
   NamLookAndFeel (0xa008070f/0xf214101f, old + new sites); PEDALS
