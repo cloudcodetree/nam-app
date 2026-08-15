@@ -288,3 +288,161 @@ TEST_CASE("StackModel nextUid is monotonic based on the highest existing index")
     s.chain.push_back(c);
     REQUIRE(StackModel::nextUid(s) == "i6");   // still based on max (i5), not count
 }
+
+TEST_CASE("StackModel parse v2: a malformed chain item is skipped, its stack and others survive") {
+    // stack[0]'s second item has "fs" as a string (should be int) -- only
+    // that ONE item should be dropped, not the whole stack or the file.
+    static const char* fixture = R"JSON(
+    {
+      "version": 2,
+      "stacks": [
+        {
+          "name": "Mixed Stack",
+          "chain": [
+            {"uid": "i1", "type": "pedal", "toneId": "pedal-ok", "title": "OK Pedal",
+             "format": "nam", "gearTag": "pedal", "fs": 1, "bypassed": false,
+             "channels": [], "activeChannel": 0},
+            {"uid": "i2", "type": "pedal", "toneId": "pedal-bad", "title": "Bad Pedal",
+             "format": "nam", "gearTag": "pedal", "fs": "not-a-number", "bypassed": false,
+             "channels": [], "activeChannel": 0}
+          ]
+        },
+        {
+          "name": "Good Stack",
+          "chain": [
+            {"uid": "i1", "type": "amp", "toneId": "amp-1", "title": "Amp One",
+             "format": "nam", "gearTag": "amp", "fs": 2, "bypassed": false,
+             "channels": [{"toneId": "amp-1", "title": "Amp One"}], "activeChannel": 0}
+          ]
+        }
+      ]
+    }
+    )JSON";
+
+    auto stacks = StackModel::parse(fixture);
+    REQUIRE(stacks.size() == 2);
+    REQUIRE(stacks[0].name == "Mixed Stack");
+    REQUIRE(stacks[0].chain.size() == 1);   // the malformed item was skipped
+    REQUIRE(stacks[0].chain[0].toneId == "pedal-ok");
+    REQUIRE(stacks[1].name == "Good Stack");
+    REQUIRE(stacks[1].chain.size() == 1);
+    REQUIRE(stacks[1].chain[0].toneId == "amp-1");
+}
+
+TEST_CASE(
+    "StackModel parse v2: a stack with a malformed top-level field is dropped, others survive") {
+    // stack[0]'s activeScene is a string (should be int) -- the reviewer's
+    // originally-reported bug: without per-stack isolation this used to
+    // wipe out EVERY stack in the file, not just this one.
+    static const char* fixture = R"JSON(
+    {
+      "version": 2,
+      "stacks": [
+        {
+          "name": "Broken Stack",
+          "activeScene": "not-a-number",
+          "chain": [
+            {"uid": "i1", "type": "pedal", "toneId": "pedal-1", "title": "P",
+             "format": "nam", "gearTag": "pedal", "fs": 1, "bypassed": false,
+             "channels": [], "activeChannel": 0}
+          ]
+        },
+        {
+          "name": "Good Stack",
+          "chain": []
+        }
+      ]
+    }
+    )JSON";
+
+    auto stacks = StackModel::parse(fixture);
+    REQUIRE(stacks.size() == 1);
+    REQUIRE(stacks[0].name == "Good Stack");
+}
+
+TEST_CASE("StackModel v1 migration: a malformed slot is skipped, its stack and others survive") {
+    // stack[0]'s AMP slot has a numeric "id" (should be a string) -- only
+    // that ONE slot should be dropped, not the whole stack or the file.
+    static const char* fixture = R"JSON(
+    [
+      {
+        "name": "Mixed Rig",
+        "slots": [
+          {"id": 12345, "title": "Bad Amp", "format": "nam"},
+          {"id": "cab-y", "title": "Cab Y", "format": "ir"},
+          {"id": "", "title": "", "format": ""},
+          {"id": "", "title": "", "format": ""},
+          {"id": "", "title": "", "format": ""},
+          {"id": "", "title": "", "format": ""}
+        ]
+      },
+      {
+        "name": "Good Rig",
+        "slots": [
+          {"id": "amp-z", "title": "Amp Z", "format": "nam"},
+          {"id": "", "title": "", "format": ""},
+          {"id": "", "title": "", "format": ""},
+          {"id": "", "title": "", "format": ""},
+          {"id": "", "title": "", "format": ""},
+          {"id": "", "title": "", "format": ""}
+        ]
+      }
+    ]
+    )JSON";
+
+    auto stacks = StackModel::parse(fixture);
+    REQUIRE(stacks.size() == 2);
+    REQUIRE(stacks[0].name == "Mixed Rig");
+    REQUIRE(stacks[0].chain.size() == 1);   // the malformed AMP slot was skipped
+    REQUIRE(stacks[0].chain[0].toneId == "cab-y");
+    REQUIRE(stacks[0].chain[0].type == GearType::Cab);
+    REQUIRE(stacks[1].name == "Good Rig");
+    REQUIRE(stacks[1].chain.size() == 1);
+    REQUIRE(stacks[1].chain[0].toneId == "amp-z");
+}
+
+TEST_CASE(
+    "StackModel v1 migration: a stack with a malformed name field is dropped, others survive") {
+    static const char* fixture = R"JSON(
+    [
+      {
+        "name": 42,
+        "slots": [
+          {"id": "amp-x", "title": "Amp X", "format": "nam"}
+        ]
+      },
+      {
+        "name": "Good Rig",
+        "slots": [
+          {"id": "amp-z", "title": "Amp Z", "format": "nam"}
+        ]
+      }
+    ]
+    )JSON";
+
+    auto stacks = StackModel::parse(fixture);
+    REQUIRE(stacks.size() == 1);
+    REQUIRE(stacks[0].name == "Good Rig");
+}
+
+TEST_CASE("StackModel serialize never throws on invalid UTF-8 in a string field") {
+    Stack st;
+    st.name = "Good Name";
+    ChainItem it;
+    it.uid = "i1";
+    it.type = GearType::Pedal;
+    it.toneId = "t1";
+    // A lone continuation byte (0x80) is never valid UTF-8 on its own.
+    it.title = std::string("Invalid \x80\x81 UTF8");
+    st.chain.push_back(it);
+    std::vector<Stack> stacks{ st };
+
+    std::string out;
+    REQUIRE_NOTHROW(out = StackModel::serialize(stacks));
+    REQUIRE_FALSE(out.empty());
+
+    // The rest of the payload stays valid, parseable JSON.
+    auto reparsed = StackModel::parse(out);
+    REQUIRE(reparsed.size() == 1);
+    REQUIRE(reparsed[0].name == "Good Name");
+}

@@ -62,6 +62,9 @@ public:
     serialize(const std::vector<Stack>& stacks);   // always v2: {"version":2,"stacks":[...]}
 
     static bool canAdd(const Stack& stack, GearType type);   // false for 2nd Amp/Cab
+    // Returned pointer aliases into stack.chain; it is invalidated by any
+    // mutation of that chain (push_back/erase/reorder/reassignment) --
+    // never retain it across a call that can mutate the stack.
     static const ChainItem* activeAmp(const Stack& stack);   // first Amp or nullptr
     static const ChainItem* cabOf(const Stack& stack);       // first Cab or nullptr
 

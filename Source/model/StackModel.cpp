@@ -112,12 +112,26 @@ Stack stackFromJson(const json& sj) {
     Stack st;
     st.name = sj.value("name", std::string());
     st.routing = routingFromString(sj.value("routing", std::string("single")));
+    // Per-item isolation: one malformed chain item (wrong field type) drops
+    // only that item, not the whole stack.
     if (sj.contains("chain") && sj.at("chain").is_array())
-        for (const auto& cj : sj.at("chain"))
-            if (cj.is_object()) st.chain.push_back(itemFromJson(cj));
+        for (const auto& cj : sj.at("chain")) {
+            if (!cj.is_object()) continue;
+            try {
+                st.chain.push_back(itemFromJson(cj));
+            } catch (const std::exception&) {
+                // malformed item; skip it, keep the rest of the stack
+            }
+        }
     if (sj.contains("scenes") && sj.at("scenes").is_array())
-        for (const auto& scj : sj.at("scenes"))
-            if (scj.is_object()) st.scenes.push_back(sceneFromJson(scj));
+        for (const auto& scj : sj.at("scenes")) {
+            if (!scj.is_object()) continue;
+            try {
+                st.scenes.push_back(sceneFromJson(scj));
+            } catch (const std::exception&) {
+                // malformed scene; skip it, keep the rest of the stack
+            }
+        }
     st.activeScene = sj.value("activeScene", -1);
 
     json extra = sj.is_object() ? sj : json::object();
@@ -143,8 +157,16 @@ json stackToJson(const Stack& st) {
 std::vector<Stack> parseV2(const json& root) {
     std::vector<Stack> out;
     if (!root.contains("stacks") || !root.at("stacks").is_array()) return out;
-    for (const auto& sj : root.at("stacks"))
-        if (sj.is_object()) out.push_back(stackFromJson(sj));
+    // Per-stack isolation: one malformed stack (e.g. a wrong-typed
+    // top-level field) drops only that stack, not the user's whole library.
+    for (const auto& sj : root.at("stacks")) {
+        if (!sj.is_object()) continue;
+        try {
+            out.push_back(stackFromJson(sj));
+        } catch (const std::exception&) {
+            // malformed stack; skip it, keep the rest of the file
+        }
+    }
     return out;
 }
 
@@ -157,9 +179,11 @@ struct V1SlotDef {
 
 // AMP, CABINET, PEDAL, OUTBOARD, SPACES, EXPERIMENTAL -- the exact order
 // StacksScreen::slotDefs()/AppShell::saveStacksState wrote. gearTag values
-// are the live TONE3000 API gear filter (StacksScreen::slotDefs()/
-// Tone3000Api.h), NOT the slot's display label -- SPACES' API gear is
-// "space" (singular), not "spaces".
+// are the live TONE3000 API gear filter; Tone3000Api.h is the SOLE
+// authority for valid values (amp-cab|amp|cab|pedal|outboard|space|
+// experimental). Do NOT copy StacksScreen::slotDefs()'s gearApi column
+// verbatim -- its CABINET row is "ir" (a format filter for that picker,
+// not an API gear), while the correct gearTag here is "cab".
 constexpr std::array<V1SlotDef, 6> kV1Slots{ { { GearType::Amp, "amp" },
                                                { GearType::Cab, "cab" },
                                                { GearType::Pedal, "pedal" },
@@ -174,32 +198,46 @@ Stack migrateV1Stack(const json& sj) {
 
     const auto& slots = sj.at("slots");
     int nextIdx = 1;
+    // Per-slot isolation: one malformed slot (e.g. a wrong-typed "id")
+    // drops only that slot, not the whole rig.
     for (size_t k = 0; k < slots.size() && k < kV1Slots.size(); ++k) {
         const auto& so = slots[k];
         if (!so.is_object()) continue;
-        std::string id = so.value("id", std::string());
-        if (id.empty()) continue;   // empty slot -> skipped, not a chain item
+        try {
+            std::string id = so.value("id", std::string());
+            if (id.empty()) continue;   // empty slot -> skipped, not a chain item
 
-        ChainItem it;
-        it.uid = "i" + std::to_string(nextIdx++);
-        it.type = kV1Slots[k].type;
-        it.gearTag = kV1Slots[k].gearTag;
-        it.toneId = id;
-        it.title = so.value("title", std::string());
-        it.format = so.value("format", std::string());
-        if (it.type == GearType::Amp) {
-            it.channels.push_back({ it.toneId, it.title });
-            it.activeChannel = 0;
+            ChainItem it;
+            it.type = kV1Slots[k].type;
+            it.gearTag = kV1Slots[k].gearTag;
+            it.toneId = id;
+            it.title = so.value("title", std::string());
+            it.format = so.value("format", std::string());
+            if (it.type == GearType::Amp) {
+                it.channels.push_back({ it.toneId, it.title });
+                it.activeChannel = 0;
+            }
+            it.uid = "i" + std::to_string(nextIdx);
+            st.chain.push_back(std::move(it));
+            ++nextIdx;
+        } catch (const std::exception&) {
+            // malformed slot; skip it, keep the rest of the rig
         }
-        st.chain.push_back(std::move(it));
     }
     return st;
 }
 
 std::vector<Stack> migrateV1(const json& arr) {
     std::vector<Stack> out;
-    for (const auto& sj : arr)
-        if (sj.is_object()) out.push_back(migrateV1Stack(sj));
+    // Per-stack isolation, same reasoning as parseV2.
+    for (const auto& sj : arr) {
+        if (!sj.is_object()) continue;
+        try {
+            out.push_back(migrateV1Stack(sj));
+        } catch (const std::exception&) {
+            // malformed rig; skip it, keep the rest of the file
+        }
+    }
     return out;
 }
 
@@ -215,10 +253,20 @@ std::vector<Stack> StackModel::parse(const std::string& jsonText) {
 }
 
 std::string StackModel::serialize(const std::vector<Stack>& stacks) {
-    json arr = json::array();
-    for (const auto& st : stacks) arr.push_back(stackToJson(st));
-    json root{ { "version", 2 }, { "stacks", arr } };
-    return root.dump(2);
+    try {
+        json arr = json::array();
+        for (const auto& st : stacks) arr.push_back(stackToJson(st));
+        json root{ { "version", 2 }, { "stacks", arr } };
+        // error_handler_t::replace swaps invalid UTF-8 byte sequences for
+        // U+FFFD instead of throwing type_error.316 -- upholds the "no
+        // public method throws" contract even if a string field somehow
+        // carries non-UTF-8 bytes.
+        return root.dump(2, ' ', false, json::error_handler_t::replace);
+    } catch (const std::exception&) {
+        // Should be unreachable given the replace handler above, but keep
+        // the contract airtight against any other construction failure.
+        return R"({"version":2,"stacks":[]})";
+    }
 }
 
 bool StackModel::canAdd(const Stack& stack, GearType type) {
