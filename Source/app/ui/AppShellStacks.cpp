@@ -1,6 +1,7 @@
 #include "app/ui/AppShell.h"
 #include <algorithm>
 #include <array>
+#include <string>
 #include "app/ui/StackWidgets.h"
 #include "model/Entitlements.h"
 
@@ -138,10 +139,14 @@ void AppShell::wireStacksScreens () {
         }
         // No wizard: "+ NEW STACK" mints an empty rig and opens its editor
         // directly -- freeform IS the only edit mode now, so there's
-        // nothing left for a wizard to build up front.
+        // nothing left for a wizard to build up front. Name is "Rig {n}"
+        // rather than a fixed literal -- there is no rename UI anywhere in
+        // the app (review finding: a fixed "New Rig" for every creation
+        // made distinct rigs, and their REMOVE confirms, indistinguishable
+        // on Home the moment there was more than one).
         nam::Stack st;
         st.uid = nam::StackModel::nextStackUid (stackList_);
-        st.name = "New Rig";
+        st.name = "Rig " + std::to_string ((int)stackList_.size () + 1);
         stackList_.push_back (std::move (st));
         const int idx = (int)stackList_.size () - 1;
         saveStacksState ();

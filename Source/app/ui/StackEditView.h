@@ -47,7 +47,13 @@ public:
 private:
     void layout ();
     void paintConfirm (juce::Graphics&) const;
-    void moveItem (const juce::String& uid, int delta);
+    // uid is by value, not const&: a caller iterating freeformRowRects_
+    // (handleContentTap) can pass a reference INTO that vector as `uid`
+    // (fr.uid) -- layout(), called below before this returns, clears
+    // freeformRowRects_ and would leave a const& dangling. Taking it by
+    // value copies the (refcounted, so cheap) juce::String at the call
+    // site, before layout() can invalidate anything it might alias.
+    void moveItem (juce::String uid, int delta);
     void handleContentTap (juce::Point<int> contentLocal);
     void openConfirm ();
     const nam::ChainItem* findItem (const juce::String& uid) const;

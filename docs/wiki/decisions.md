@@ -14,11 +14,17 @@ direction is chosen, reversed, or a constraint is discovered.
   engine can actually do (ONE model + ONE IR, no multi-node DSP chain) --
   the guided/wizard/scenes/routing/footswitch scaffolding was UI for
   features that don't exist yet, and it was the majority of the Stacks
-  code. Freeform (rename/reorder-anything, tap-to-edit) is now the ONLY
-  edit mode, so `StackEditView`'s freeform rows got the thumbnail
-  treatment guided cards used to have exclusively. "+ NEW STACK" mints an
-  empty rig and opens its editor directly instead of stepping through a
-  wizard. Deleted outright: `StackCreateWizard{,Input,Gear,Paint}.{h,cpp}`,
+  code. Freeform (reorder-anything, tap-to-edit) is now the ONLY edit
+  mode, so `StackEditView`'s freeform rows got the thumbnail treatment
+  guided cards used to have exclusively. "+ NEW STACK" mints an empty rig
+  named "Rig {n}" and opens its editor directly instead of stepping
+  through a wizard -- there is still no rename UI anywhere in the app
+  (the deleted wizard's name step was the only source of a custom name,
+  and nothing replaced it; an adversarial-review finding caught the first
+  attempt at this, a fixed "New Rig" literal for every creation, which
+  made distinct rigs -- and their REMOVE confirms -- indistinguishable on
+  Home the moment there was more than one). Deleted outright:
+  `StackCreateWizard{,Input,Gear,Paint}.{h,cpp}`,
   `StackTemplates.h`, `StackPerformView{,Paint}.{h,cpp}`,
   `StacksHomeScreen::wizard_`/`onPerform`/the CONTROLS pill/the routing
   badge, `StackDetailScreen::performView_`/`performTab_`/`selectTab`/

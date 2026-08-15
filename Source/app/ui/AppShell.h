@@ -326,9 +326,9 @@ private:
     // stops -- never polls forever, and only runs from real state changes
     // (never from paint()). One shared impl, two independent instances (one
     // per surface) so Home/EDIT and the picker retry on their own schedules.
-    // Mirrors ApplyTimeoutImpl's owner-backed Timer shape (AppShellPerform.
-    // cpp) so this header's unique_ptr doesn't need juce::Timer's vtable
-    // complete.
+    // Mirrors ApplyTimeoutImpl's owner-backed Timer shape
+    // (AppShellStackApply.cpp) so this header's unique_ptr doesn't need
+    // juce::Timer's vtable complete.
     struct ThumbRetry {
         virtual ~ThumbRetry () = default;
         virtual void

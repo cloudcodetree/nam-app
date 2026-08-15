@@ -97,7 +97,7 @@ void StackEditView::openConfirm () {
     repaint ();
 }
 
-void StackEditView::moveItem (const juce::String& uid, int delta) {
+void StackEditView::moveItem (juce::String uid, int delta) {
     int idx = -1;
     for (size_t i = 0; i < stack_.chain.size (); ++i)
         if (juce::String (stack_.chain[i].uid) == uid) {

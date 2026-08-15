@@ -5,7 +5,8 @@
 using namespace nam::ui;
 
 namespace {
-const juce::String kDotSep = juce::String::fromUTF8 ("\xC2\xB7");   // ·
+const juce::String kDotSep = juce::String::fromUTF8 ("\xC2\xB7");       // ·
+const juce::String kEmDash = juce::String::fromUTF8 ("\xE2\x80\x94");   // —
 
 // "1 pedal" / "2 pedals" -- singular for exactly one, plural otherwise.
 juce::String countNoun (int n, const char* singular, const char* plural) {
@@ -138,7 +139,7 @@ void StacksHomeScreen::paint (juce::Graphics& g) {
                         juce::Justification::centredLeft, false);
             g.setFont (uiFont (11.0f, false));
             g.setColour (col::inkA (0.4f));
-            g.drawText ("starts empty -- add gear in the editor", text,
+            g.drawText ("starts empty " + kEmDash + " add gear in the editor", text,
                         juce::Justification::topLeft, true);
         }
     }
