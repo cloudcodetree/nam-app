@@ -115,6 +115,7 @@ if(NAM_BUILD_APP)
             Source/app/ui/StackWidgets.cpp
             Source/app/ui/StacksHomeScreen.cpp
             Source/app/ui/StackCreateWizard.cpp
+            Source/app/ui/StackCreateWizardInput.cpp
             Source/app/ui/StackCreateWizardGear.cpp
             Source/app/ui/StackCreateWizardPaint.cpp
             Source/app/ui/StackDetailScreen.cpp
