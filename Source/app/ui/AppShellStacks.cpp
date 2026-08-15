@@ -1,5 +1,6 @@
 #include "app/ui/AppShell.h"
 #include <algorithm>
+#include "app/ui/StackWidgets.h"
 #include "model/Entitlements.h"
 
 // Stacks surface plumbing: JSON persistence (v2 ordered-chain model, via
@@ -98,12 +99,7 @@ void AppShell::wireStacksScreens () {
                 return;
             }
         }
-        nam::Stack st;
-        st.name = ("Stack " + juce::String ((int)stackList_.size () + 1)).toStdString ();
-        stackList_.push_back (std::move (st));
-        currentStack_ = (int)stackList_.size () - 1;
-        saveStacksState ();
-        pushStacks ();
+        stacksHome_->wizard ().open ((int)stackList_.size ());
     };
     stacksHome_->onSetCurrent = [this] (int i) {
         if (i < 0 || i >= (int)stackList_.size ()) return;
@@ -147,7 +143,35 @@ void AppShell::wireStacksScreens () {
     };
 
     wireGearPicker ();
-    wirePerformView ();   // PERFORM tab: AppShellPerform.cpp
+    wirePerformView ();    // PERFORM tab: AppShellPerform.cpp
+    wireCreateWizard ();   // "+ NEW STACK" wizard, hosted by stacksHome_
+}
+
+void AppShell::wireCreateWizard () {
+    auto& wiz = stacksHome_->wizard ();
+    // Synchronous local-library reads -- same accessors keptModelsSorted()/
+    // the cab-choices code already use, no new service plumbing needed.
+    wiz.onFetchModels = [this] {
+        return getModels_ ? getModels_ () : std::vector<nam::LibraryEntry> ();
+    };
+    wiz.onFetchIrs = [this] { return getIrs_ ? getIrs_ () : std::vector<nam::LibraryEntry> (); };
+    wiz.onSave = [this] (nam::Stack st, bool toast) {
+        stackList_.push_back (std::move (st));
+        currentStack_ = (int)stackList_.size () - 1;
+        saveStacksState ();
+        pushStacks ();
+        openStackDetail (currentStack_, false);
+        // Template picks skip the toast (spec: they jump straight to Detail
+        // EDIT silently); only the step-4 guided save gets it.
+        if (toast && stacksDetail_ != nullptr)
+            // Hex escapes are greedy ("\xE2\x80\x93D" would swallow the 'D'
+            // as part of the escape) -- split after the dash so "D" starts
+            // fresh.
+            nam::ui::showToast (*stacksDetail_, juce::String::fromUTF8 ("Saved \xC2\xB7 "
+                                                                        "A\xE2\x80\x93"
+                                                                        "D mapped "
+                                                                        "on your Chocolate"));
+    };
 }
 
 void AppShell::openGearPicker (nam::GearType hint, GearPickerMode mode, juce::String targetUid) {

@@ -52,3 +52,57 @@ apply wiring, which is new:
 - `AppShell::setNavHidden` (`AppShellChrome.cpp`) hides the bottom nav for
   PERFORM's full-bleed stage view; see decisions.md for how it's kept in
   sync across every exit path.
+
+## Create wizard (Task 5, final Phase A piece)
+
+`Source/app/ui/StackCreateWizard.h/.cpp` (+ `...Gear.cpp` for gear
+mutation/FS-assignment logic, `...Paint.cpp` for painting, and the
+data-only `StackTemplates.h`). Replaces the old `onCreate` behavior of
+spawning one blank stack instantly.
+
+- **Hosting**: a direct (non-pointer) member of `StacksHomeScreen`, sized
+  to its full local bounds and shown/hidden via `open()`/`close()` — same
+  pattern as `StackDetailScreen`'s `picker_`/`itemSheet_` members. This
+  means `AppShell.cpp`/`AppShellChrome.cpp` needed no new Screen
+  enumerator, no `show()`/`resized()` changes, and no `contentBounds()`
+  changes; the owner (`AppShellStacks.cpp`'s `wireCreateWizard`) just
+  wires callbacks onto `stacksHome_->wizard()`. The only touch to
+  `AppShell.cpp` is an 8-line `handleBackButton` hook
+  (`stacksHome_->closeWizard()`), ordered before the Detail-overlay
+  chain since the wizard also lives under `Screen::Stacks`.
+- **Step 0 (gallery)**: 3 built-in templates (`nam::templates::builtins()`
+  in `StackTemplates.h`) — `nam::Stack` literals with empty `toneId`s but
+  real placeholder titles/channels/FS numbers. Picking one clones it with
+  a fresh `nam::StackModel::nextUid` sequence and calls `onSave(stack,
+  false)` — no toast, jumps straight to Detail EDIT (matches the spec:
+  template picks are silent). "START EMPTY" advances to step 1 against an
+  empty `draft_` instead.
+- **Steps 1-3** mutate a local `draft_` (steps only touch it, nothing
+  persists until SAVE): step 1 pushes/pops `StackChannel`s on the
+  stack's single Amp `ChainItem` (created lazily on first pick, same
+  "channels[0] mirrors toneId/title" convention as `AppShell::
+  applyGearPick`'s AddChannel path); step 2 toggles Pedal `ChainItem`s by
+  `toneId` match; step 3 singleton-replaces the Cab item. **Gap**: `nam::
+  LibraryEntry` (`Source/model/LibraryEntry.h`) has no gear-type tag —
+  only `LibraryType::Model` vs `Ir` — so steps 1 and 2 both list the same
+  full `onFetchModels()` result; there's no data-level way to show "amps
+  only" vs "pedals only" today. A real gear tag on `LibraryEntry` is the
+  fix, not attempted here.
+- **Step 4**: an action list built fresh from `draft_.chain` each call
+  (`buildActions()`) — an amp-channel-cycle action (only if the amp has
+  >1 channel), one on/off action per pedal, and a fixed Tap-tempo action
+  with no backing `ChainItem`. `switches_[4]` (A-D) is the single source
+  of truth; auto-map runs once per wizard session on first entry to step
+  4 (amp cycle → A, pedals → B/C in order, D always Tap tempo), and
+  re-entry after editing gear elsewhere prunes stale bindings instead of
+  re-running auto-map (so a manual re-assignment survives non-linear step
+  navigation). `syncFsIntoChain()` writes switch index+1 onto the bound
+  `ChainItem::fs` — the SAME field PERFORM's STOMP grid already reads, so
+  a wizard-assigned switch is live in PERFORM immediately; a "channel
+  cycle" assignment currently reads as a plain bypass toggle there (no
+  MIDI/cycle semantics exist yet — tracked, not fixed).
+- **Save**: `onSave(nam::Stack, bool toast)` — the `bool` is a deliberate
+  deviation from the task brief's literal `onSave(nam::Stack)` signature,
+  needed so the owner can skip the "Saved · A-D mapped on your Chocolate"
+  toast on the (silent) template-pick path while still firing it for the
+  step-4 guided save.

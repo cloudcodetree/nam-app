@@ -3,6 +3,31 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Stack creation wizard (Task 5, final Phase A task) ships:
+  step-0 template gallery (Plexi Crunch/Modern Metal/Clean Platform, data-
+  only `StackTemplates.h`, cloned with fresh `nextUid` sequence on pick,
+  no toast) + steps 1-4 guided build, hosted as a screen-level child of
+  `StacksHomeScreen` (`StackCreateWizard`, own back chevron; owner wires
+  it via `wizard()`/`closeWizard()` the same way Detail exposes
+  `picker()`/`itemSheet()`) rather than a new `AppShell::Screen` — this
+  kept `AppShell.cpp` to +8 lines (the mandatory `handleBackButton` hook,
+  ordered before the Detail-overlay chain per the task brief) instead of
+  touching its show()/resized()/target-selection logic at all. `nam::
+  LibraryEntry` carries no gear-type tag (only Model vs Ir), so steps 1
+  ("amp channels") and 2 ("pedals") both list the full kept-models set
+  with no way to filter one to "pedals only" — flagged in the task report
+  as a follow-up (a real gear tag on `LibraryEntry`), not fixed here.
+  FS numbers 1-4 (A-D) are written onto `ChainItem::fs` by the wizard's
+  own arm-then-assign flow, reusing the existing field rather than adding
+  new model surface — the same field PERFORM's STOMP grid already reads,
+  so a wizard-assigned switch is immediately live in PERFORM with no
+  extra wiring, at the cost of "channel cycle" actions reading as a plain
+  bypass toggle in STOMP mode today (no MIDI layer exists yet to give
+  that assignment its own semantics — tracked as a Phase A gap, not
+  addressed here). `onSave(nam::Stack, bool toast)` deviates from the
+  brief's literal `onSave(nam::Stack)` so the owner can skip the "Saved ·
+  A-D mapped" toast on a template pick, matching the spec's silence on
+  that path.
 - **2026-08-15** PERFORM's STOMP mode (`StackPerformView::layoutGrid`)
   shows a fixed FS1-FS8 switch grid, resolving an ambiguity in the visual
   spec's "one switch per chain item that has an fs number" wording: read

@@ -12,7 +12,16 @@ const juce::String kSubtitle =
 const juce::String kPerformLabel = juce::String::fromUTF8 ("\xE2\x96\xB8") + " PERFORM";   // ▸
 }   // namespace
 
-StacksHomeScreen::StacksHomeScreen () { setOpaque (true); }
+StacksHomeScreen::StacksHomeScreen () {
+    setOpaque (true);
+    addChildComponent (wizard_);
+}
+
+bool StacksHomeScreen::closeWizard () {
+    if (!wizard_.isOpen ()) return false;
+    wizard_.close ();
+    return true;
+}
 
 void StacksHomeScreen::setStacks (std::vector<nam::Stack> stacks, int current) {
     stacks_ = std::move (stacks);
@@ -21,7 +30,10 @@ void StacksHomeScreen::setStacks (std::vector<nam::Stack> stacks, int current) {
     repaint ();
 }
 
-void StacksHomeScreen::resized () { layout (); }
+void StacksHomeScreen::resized () {
+    layout ();
+    wizard_.setBounds (getLocalBounds ());
+}
 
 juce::String StacksHomeScreen::chipLabel (size_t i) const {
     const auto& st = stacks_[i];

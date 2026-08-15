@@ -293,6 +293,7 @@ private:
     void saveStacksState ();
     void pushStacks ();
     void wireStacksScreens ();   // Home/Detail callbacks
+    void wireCreateWizard ();    // "+ NEW STACK" wizard callbacks (AppShellStacks.cpp)
     void openStackDetail (int idx, bool perform);
     // What a StackGearPicker pick means: a brand-new chain item (canAdd
     // gated), a new channel appended to an existing amp item, or a

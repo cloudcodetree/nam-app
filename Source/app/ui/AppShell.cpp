@@ -721,6 +721,14 @@ bool AppShell::handleBackButton () {
         toggleTuner ();
         return true;
     }
+    // The create wizard is a screen-level child of stacksHome_, not its own
+    // Screen -- closing it never persists anything (nothing writes until
+    // SAVE), so this is a plain dismiss, no confirm, same as the paywall
+    // check above. Checked before the Detail overlay chain below since both
+    // live under Screen::Stacks and only one of Home/Detail is current_ at
+    // a time.
+    if (current_ == stacksHome_.get () && stacksHome_ != nullptr && stacksHome_->closeWizard ())
+        return true;
     // An open Detail overlay (item sheet / gear picker / EDIT's REMOVE
     // STACK confirm) dismisses first, same as the paywall above -- without
     // this, back-ing out of an open confirm and reopening a DIFFERENT

@@ -2,6 +2,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <functional>
 #include <vector>
+#include "app/ui/StackCreateWizard.h"
 #include "model/StackModel.h"
 
 // Stacks Home: the ordered-chain rig list (replaces the old fixed-6-slot
@@ -21,6 +22,19 @@ public:
     std::function<void (int)> onSetCurrent;   // SETLIST chip tap
     std::function<void ()> onSettings;        // gear icon -> orb I/O flyout
 
+    // "+ NEW STACK" opens this directly (the owner's onCreate gate wraps the
+    // call, then reaches in via this accessor) -- same pattern as
+    // StackDetailScreen's picker()/itemSheet(). Hosted as a screen-level
+    // child here (not a height-capped overlay), so it fills Home's own
+    // bounds while open; JUCE's normal child hit-testing means Home's own
+    // mouseDown/paint need no changes for it at all.
+    StackCreateWizard& wizard () { return wizard_; }
+    // Closes the wizard if it's open (Android back button, wired in
+    // AppShell::handleBackButton before the Detail checks). Returns whether
+    // it was open -- nothing persists from an unsaved wizard, so there is no
+    // confirm step, unlike Detail's overlay dismissal chain.
+    bool closeWizard ();
+
     void paint (juce::Graphics&) override;
     void resized () override;
     void mouseDown (const juce::MouseEvent&) override;
@@ -34,6 +48,8 @@ private:
 
     std::vector<nam::Stack> stacks_;
     int current_ = -1;
+
+    StackCreateWizard wizard_;
 
     juce::Rectangle<int> headerRect_, gearRect_, titleRowRect_, newBtnRect_, subtitleRect_,
         setlistLabelRect_, chipsRect_, listArea_;
