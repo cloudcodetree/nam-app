@@ -23,7 +23,21 @@ direction is chosen, reversed, or a constraint is discovered.
   and nothing replaced it; an adversarial-review finding caught the first
   attempt at this, a fixed "New Rig" literal for every creation, which
   made distinct rigs -- and their REMOVE confirms -- indistinguishable on
-  Home the moment there was more than one). Deleted outright:
+  Home the moment there was more than one). A second review round then
+  caught the first FIX: naming from `stackList_.size()+1` is not stable
+  across deletion (create "Rig 2"/"Rig 3", delete "Rig 2", create again
+  -> `size()+1` mints "Rig 3" again, colliding with the survivor). The
+  name is minted from the uid `StackModel::nextStackUid` just returned
+  instead (`"Rig " + uid.substr(1)`) -- that helper is already
+  max-existing-index-based, so every rig's name-number stays ≤ its own
+  uid-index and a strictly-higher next index can never collide, an
+  invariant `size()`-based naming doesn't hold. This naming rule is
+  still UI-layer arithmetic (`AppShellStacks.cpp`'s `onCreate`, not
+  `StackModel`), so it has no test coverage of its own -- both bugs
+  shipped and were only caught by review; pushing it down into the
+  JUCE-free core as a `StackModel::nextStackName` (or similar) would
+  put it under the same TDD bar `nextStackUid` already has, tracked as a
+  future cleanup, not required for this strip. Deleted outright:
   `StackCreateWizard{,Input,Gear,Paint}.{h,cpp}`,
   `StackTemplates.h`, `StackPerformView{,Paint}.{h,cpp}`,
   `StacksHomeScreen::wizard_`/`onPerform`/the CONTROLS pill/the routing
