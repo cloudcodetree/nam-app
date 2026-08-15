@@ -182,7 +182,11 @@ void drawGrilleStrip (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour c)
     g.setColour (col::bg.withAlpha (0.55f));
     g.fillRoundedRectangle (r.toFloat (), 8.0f);
 
-    constexpr float spacing = 4.0f, thickness = 0.75f;
+    // spacing 6 (not 4): review finding -- the two-pass weave roughly
+    // quadrupled the line count vs. the old single-pass version, and this
+    // repaints on every EDIT scroll-drag frame. 6px keeps the woven-cloth
+    // read while cutting that back down to about 2x, not 4x.
+    constexpr float spacing = 6.0f, thickness = 0.75f;
     const float span = (float)(r.getWidth () + r.getHeight ());
     g.setColour (c.withAlpha (c.getFloatAlpha () * 0.3f));
     for (float x = -(float)r.getHeight (); x < span; x += spacing)

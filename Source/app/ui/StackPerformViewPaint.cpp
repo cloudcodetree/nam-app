@@ -151,8 +151,17 @@ void StackPerformView::paintCell (juce::Graphics& g, const Cell& cell,
         g.fillEllipse (led);
     }
 
-    auto titleRow = r.reduced (10, 8);
-    auto subRow = titleRow.removeFromBottom (titleRow.getHeight () / 2);
+    // Title+sub as a fixed-height block, vertically centred in the cell --
+    // NOT a top-half/bottom-half split (review finding: once layoutGrid
+    // grows cellH to fill the viewport, a half/half split strands the two
+    // lines with a huge empty gap between them instead of the cell just
+    // looking bigger).
+    auto content = r.reduced (10, 8);
+    constexpr int titleH = 20, subH = 16, blockGap = 6;
+    auto block = content.withSizeKeepingCentre (content.getWidth (), titleH + blockGap + subH);
+    auto titleRow = block.removeFromTop (titleH);
+    block.removeFromTop (blockGap);
+    auto subRow = block;
     if (showLed) titleRow.removeFromLeft (12);   // clears the LED dot painted above
     // NEXT's forward glyph is a vector triangle, not the "▸" unicode
     // character -- Work Sans doesn't cover U+25B8 on Android, where it

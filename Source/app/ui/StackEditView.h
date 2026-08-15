@@ -38,6 +38,9 @@ public:
 private:
     void layout ();
     void layoutGuided (juce::Rectangle<int> content);
+    // AMP card sub-block of layoutGuided, split out to stay under the
+    // ~60-line function-size rule. See definition for details.
+    int layoutAmpCard (const nam::ChainItem* amp, int w, int y);
     void layoutFreeform (juce::Rectangle<int> content);
     void paintGuided (juce::Graphics&, int dy) const;
     void paintFreeform (juce::Graphics&, int dy) const;

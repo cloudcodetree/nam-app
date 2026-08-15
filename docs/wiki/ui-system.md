@@ -30,6 +30,14 @@ glowing tone cards. All colours via `nam::ui::col` — no magic hex outside
 - Non-ASCII glyphs only via `juce::String::fromUTF8` (raw literals render
   mojibake on Android); prefer vector `juce::Path` icons — the Android
   colour-emoji fallback ignores `setColour` (the heart had to become a path).
+  Correct UTF-8 encoding is necessary but NOT sufficient: Work Sans itself
+  has no glyph for some codepoints (found with "▸" U+25B8 -- correctly
+  encoded via `fromUTF8`, still rendered as a bare dot on Android, no tofu
+  box) and the OS font-fallback chain doesn't reliably fill the gap either.
+  If a glyph looks wrong/missing on-device despite `fromUTF8` being used,
+  suspect font coverage next, not encoding — `drawFwdTriangle`
+  (`StackWidgets.h`) is the fix pattern: draw the shape as a `juce::Path`
+  instead of trusting the typeface has it.
 - `drawImage*` inherits the current colour's ALPHA as opacity — set
   `g.setOpacity(1.0f)` after painting translucent washes (thumbnails once
   rendered at 4%).

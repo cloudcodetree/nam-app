@@ -44,11 +44,11 @@ void paintHeroBackground (juce::Graphics& g, juce::Rectangle<int> bounds, bool w
 void drawPill (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour fill, juce::Colour stroke,
                float strokeWidth = 1.0f);
 
-// Elides `text` to fit `maxWidth` px in `font`, appending "..." (JUCE's own
-// ellipsis glyph via String::getEllipsisString) -- shared helper so text
-// truncation isn't re-solved (and re-broken) in every screen that draws a
-// label into a fixed-width rect. Returns `text` unchanged if it already
-// fits or `maxWidth` is non-positive.
+// Elides `text` to fit `maxWidth` px in `font`, appending a single "…"
+// (U+2026, via String::fromUTF8 per the non-ASCII house rule) -- shared
+// helper so text truncation isn't re-solved (and re-broken) in every
+// screen that draws a label into a fixed-width rect. Returns `text`
+// unchanged if it already fits or `maxWidth` is non-positive.
 juce::String elide (const juce::String& text, const juce::Font& font, int maxWidth);
 
 // Vector padlock (rounded-rect body + arc shackle) for gated Pro rows —
