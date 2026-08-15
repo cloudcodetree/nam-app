@@ -39,7 +39,7 @@ struct ChainItem {
     std::string uid;            // stable per item, "i1","i2"… assigned by model
     GearType type = GearType::Pedal;
     std::string toneId, title, format;   // format "nam"/"ir" as today
-    std::string gearTag;        // original TONE3000 gear ("pedal","amp","cab","outboard","spaces","experimental")
+    std::string gearTag;        // original TONE3000 gear ("pedal","amp","cab","outboard","space","experimental")
     int fs = 0;                 // 0 = unassigned, 1..8
     bool bypassed = false;
     std::vector<StackChannel> channels;  // amps only; [0] mirrors toneId/title
@@ -70,7 +70,7 @@ public:
 }
 ```
 
-- [ ] **Step 1: failing tests** — write `tests/test_stack_model.cpp` FIRST covering: (a) v2 round-trip preserves every field incl. unknown keys on stack and item objects (store extras in an internal `nlohmann::json extra` member merged back on serialize); (b) v1 migration: fixture string in the exact shipped shape — top-level ARRAY of `{"name":…,"slots":[{"id","title","format"}×6]}`, slot order AMP,CABINET,PEDAL,OUTBOARD,SPACES,EXPERIMENTAL — maps to chain order [Amp(slot0, one channel), Cab(slot1), Pedal(slot2), Post(slot3 gearTag "outboard"), Post(slot4 "spaces"), Post(slot5 "experimental")], empty-id slots skipped; (c) `canAdd` amp/cab singleton; (d) `sceneApplyPlan` returns the scene's channel toneId + bypass pairs, clamps bad indices ({} for out-of-range); (e) malformed JSON → empty vector, never throws; (f) `nextUid` monotonic. Run: expect FAIL (no header).
+- [ ] **Step 1: failing tests** — write `tests/test_stack_model.cpp` FIRST covering: (a) v2 round-trip preserves every field incl. unknown keys on stack and item objects (store extras in an internal `nlohmann::json extra` member merged back on serialize); (b) v1 migration: fixture string in the exact shipped shape — top-level ARRAY of `{"name":…,"slots":[{"id","title","format"}×6]}`, slot order AMP,CABINET,PEDAL,OUTBOARD,SPACES,EXPERIMENTAL — maps to chain order [Amp(slot0, one channel), Cab(slot1), Pedal(slot2), Post(slot3 gearTag "outboard"), Post(slot4 "space"), Post(slot5 "experimental")], empty-id slots skipped; (c) `canAdd` amp/cab singleton; (d) `sceneApplyPlan` returns the scene's channel toneId + bypass pairs, clamps bad indices ({} for out-of-range); (e) malformed JSON → empty vector, never throws; (f) `nextUid` monotonic. Run: expect FAIL (no header).
 - [ ] **Step 2: implement** `StackModel.h/.cpp` (nlohmann, no JUCE includes) until all pass.
 - [ ] **Step 3: full suite green** both presets. Register in both CMake files.
 - [ ] **Step 4: commit** `feat: StackModel — ordered-chain stacks core with v1 migration`.
