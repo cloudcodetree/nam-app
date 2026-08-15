@@ -155,22 +155,19 @@ void AppShell::wireCreateWizard () {
         return getModels_ ? getModels_ () : std::vector<nam::LibraryEntry> ();
     };
     wiz.onFetchIrs = [this] { return getIrs_ ? getIrs_ () : std::vector<nam::LibraryEntry> (); };
-    wiz.onSave = [this] (nam::Stack st, bool toast) {
+    wiz.onSave = [this] (nam::Stack st, juce::String toast) {
         stackList_.push_back (std::move (st));
         currentStack_ = (int)stackList_.size () - 1;
         saveStacksState ();
         pushStacks ();
         openStackDetail (currentStack_, false);
-        // Template picks skip the toast (spec: they jump straight to Detail
-        // EDIT silently); only the step-4 guided save gets it.
-        if (toast && stacksDetail_ != nullptr)
-            // Hex escapes are greedy ("\xE2\x80\x93D" would swallow the 'D'
-            // as part of the escape) -- split after the dash so "D" starts
-            // fresh.
-            nam::ui::showToast (*stacksDetail_, juce::String::fromUTF8 ("Saved \xC2\xB7 "
-                                                                        "A\xE2\x80\x93"
-                                                                        "D mapped "
-                                                                        "on your Chocolate"));
+        // The wizard composes the exact toast text itself (spec copy when
+        // the FS map is complete, a truthful "{n} action(s) not
+        // foot-switchable" variant otherwise) since it's the only place
+        // that knows the switch-assignment state; empty means a template
+        // pick, which jumps to Detail EDIT silently per spec.
+        if (toast.isNotEmpty () && stacksDetail_ != nullptr)
+            nam::ui::showToast (*stacksDetail_, toast);
     };
 }
 

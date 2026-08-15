@@ -33,9 +33,11 @@ public:
     // list every kept model (see StackCreateWizard.cpp's file header note).
     std::function<std::vector<nam::LibraryEntry> ()> onFetchModels;
     std::function<std::vector<nam::LibraryEntry> ()> onFetchIrs;
-    // `toast` is true only for the step-4 guided save; a template pick
-    // jumps straight to Detail EDIT with no toast, per the spec.
-    std::function<void (nam::Stack, bool toast)> onSave;
+    // `toast` is the exact message to show, already composed by the wizard
+    // (spec copy for a complete map, a truthful "{n} action(s) not
+    // foot-switchable" variant otherwise) -- empty means no toast. A
+    // template pick jumps straight to Detail EDIT with no toast, per spec.
+    std::function<void (nam::Stack, juce::String toast)> onSave;
     std::function<void ()> onCancel;   // informational -- close() already ran
 
     void paint (juce::Graphics&) override;
@@ -67,8 +69,9 @@ private:
     void armSwitch (int idx);
     void assignArmedTo (const ActionRow&);
     void clearArmed ();
-    juce::String warningText () const;   // "" if nothing unmapped
-    void syncFsIntoChain ();             // switches_ -> draft_.chain[*].fs
+    juce::StringArray unmappedActionLabels () const;   // labels of actions bound to no switch
+    juce::String warningText () const;                 // "" if nothing unmapped
+    void syncFsIntoChain ();                           // switches_ -> draft_.chain[*].fs
 
     void pickTemplate (int idx);
     void doSave ();
@@ -145,6 +148,15 @@ private:
     std::vector<juce::Rectangle<int>> actionRowRects_;   // index into buildActions()
     juce::Rectangle<int> warningRect_;
 
+    // Press/drag/tap: mouseDown records which chrome region (if any) the
+    // press landed in; mouseDrag tracks `moved_` for ANY press regardless
+    // of origin (only content presses also scroll); mouseUp dispatches a
+    // tap only when the release point is still inside the SAME region it
+    // started in AND the gesture never crossed the move threshold -- a
+    // press that rolls off one region into another (in either direction)
+    // is a drag, not a tap, and does nothing.
+    enum class PressRegion { None, Back, Pill, Footer, Content };
+    PressRegion pressRegion_ = PressRegion::None;
     bool pressedInContent_ = false;
     juce::Point<int> pressPos_;
     bool moved_ = false;

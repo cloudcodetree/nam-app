@@ -132,9 +132,24 @@ void StackCreateWizard::autoMapIfNeeded () {
 }
 
 void StackCreateWizard::pruneStaleAssignments () {
+    // A bound uid can still exist in draft_.chain while the ACTION it was
+    // bound to no longer does -- e.g. an amp reduced from 2 channels to 1
+    // drops out of buildActions()'s channel-cycle row (which requires
+    // channels.size() > 1) without the amp item itself being removed.
+    // findByUid alone would miss that and leave a switch "SET" against a
+    // dead action, which syncFsIntoChain would then happily persist as an
+    // fs on an item nothing maps to anymore. Validate against the CURRENT
+    // buildActions() set (uid + action kind, since each uid contributes at
+    // most one row) instead of raw chain membership.
+    const auto actions = buildActions ();
+    const auto stillActionable = [&] (const juce::String& uid) {
+        for (const auto& a : actions)
+            if (a.uid == uid) return true;
+        return false;
+    };
     for (auto& sw : switches_) {
         if (sw.tapTempo || sw.uid.isEmpty ()) continue;
-        if (findByUid (draft_, sw.uid) == nullptr) sw = {};
+        if (!stillActionable (sw.uid)) sw = {};
     }
     syncFsIntoChain ();
 }
@@ -171,7 +186,7 @@ void StackCreateWizard::clearArmed () {
     repaint ();
 }
 
-juce::String StackCreateWizard::warningText () const {
+juce::StringArray StackCreateWizard::unmappedActionLabels () const {
     juce::StringArray unmapped;
     for (const auto& a : buildActions ()) {
         bool bound = false;
@@ -182,6 +197,11 @@ juce::String StackCreateWizard::warningText () const {
             }
         if (!bound) unmapped.add (a.label);
     }
+    return unmapped;
+}
+
+juce::String StackCreateWizard::warningText () const {
+    const auto unmapped = unmappedActionLabels ();
     if (unmapped.isEmpty ()) return {};
     return juce::String (unmapped.size ()) +
            " action(s) won't be foot-switchable: " + unmapped.joinIntoString (", ");
@@ -208,12 +228,24 @@ void StackCreateWizard::pickTemplate (int idx) {
         item.uid = nam::StackModel::nextUid (cloned);
         cloned.chain.push_back (std::move (item));
     }
-    if (onSave) onSave (cloned, false);
+    if (onSave) onSave (cloned, {});   // template pick: no toast, per spec
     close ();
 }
 
 void StackCreateWizard::doSave () {
     syncFsIntoChain ();
-    if (onSave) onSave (draft_, true);
+    const int unmapped = unmappedActionLabels ().size ();
+    // The spec copy claims a full A-D map -- only true when nothing is
+    // unmapped. Compose a truthful variant otherwise rather than lying.
+    // Hex escapes are greedy ("\xE2\x80\x93D" would swallow the 'D' as part
+    // of the escape) -- split after the dash so "D" starts fresh.
+    const juce::String toast = unmapped == 0
+                                   ? juce::String::fromUTF8 ("Saved \xC2\xB7 "
+                                                             "A\xE2\x80\x93"
+                                                             "D mapped "
+                                                             "on your Chocolate")
+                                   : juce::String::fromUTF8 ("Saved \xC2\xB7 ") +
+                                         juce::String (unmapped) + " action(s) not foot-switchable";
+    if (onSave) onSave (draft_, toast);
     close ();
 }
