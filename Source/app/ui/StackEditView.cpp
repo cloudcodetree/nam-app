@@ -41,19 +41,27 @@ void StackEditView::layout () {
     auto b = getLocalBounds ();
     if (b.isEmpty ()) return;
 
+    // 4px top margin so the FREEFORM pill's .expanded(4) hit test doesn't
+    // poke a few px above y=0 -- review finding: any part of an expanded
+    // hit rect outside getLocalBounds() is dead in JUCE (the parent gets
+    // the event and StackDetailScreen doesn't forward it), so padding a
+    // target flush against the component's own top edge silently does
+    // nothing for that sliver.
+    b.removeFromTop (4);
     // Row 1: "ROUTING" micro-label + FREEFORM toggle. Row 2: the three
     // routing pills, each sized to its own label text (never a fixed
     // shared width -- at this component's width a 3-way equal split left
-    // no room for "STEREO", which clipped to "STERE"). Row 1 is 36px tall
-    // (not just the label's own text height) so the FREEFORM pill's
+    // no room for "STEREO", which clipped to "STERE"). Both rows are the
+    // same 36px tall so FREEFORM and the routing pills read as one
+    // consistent pill family (review finding: FREEFORM alone at 36px next
+    // to 28px routing pills looked like a mismatched pair) and FREEFORM's
     // effective (.expanded(4)) touch target clears the codebase's own
-    // >=44px bar -- review finding: a text-height-only row had shrunk it
-    // to 28px; an interim 32px row still landed short at 40px.
+    // >=44px bar.
     auto labelRow = b.removeFromTop (36);
     routingLabelRect_ = labelRow.withWidth (62);
     freeformToggleRect_ = labelRow.removeFromRight (100);
 
-    routingPillsRowRect_ = b.removeFromTop (32).reduced (0, 2);
+    routingPillsRowRect_ = b.removeFromTop (36);
     {
         auto row = routingPillsRowRect_;
         const char* labels[3] = { "SINGLE", "A/B", "STEREO" };
