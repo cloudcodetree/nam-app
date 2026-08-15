@@ -3,6 +3,55 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Pre-launch hardening batch landed (9df1dc9..8a759c5, 5
+  commits): `Stack.uid` replacing every (index,name) async revalidation
+  with (index,uid) (TDD, `StackModel::nextStackUid`/`assignMissingStackUids`
+  mint monotonic "sN" ids on parse + at every creation site);
+  `stacks.json.bak` safety net for a stacks.json `StackModel::parse`
+  couldn't make sense of; a 30s `performApplyInFlight_` watchdog
+  (`AppShell::ApplyTimeout`, same owner-backed one-shot-`juce::Timer`
+  shape as `AndroidBilling::PurchaseTimeout`) so a `svc_.loadTone`
+  callback that never fires can't wedge PERFORM forever; and
+  `AppShell::dismissPaywall()` unifying the three paywall-dismiss sites
+  (only `onClose` re-derived nav-hidden before). Adversarial review round 1
+  on the uid + backup commits caught one MAJOR worth recording: the backup
+  trigger `stackList_.empty() && raw.isNotEmpty()` couldn't tell "parse()
+  degraded unreadable content to {}" from "parse() correctly read a
+  legitimately empty, well-formed file" (e.g. the user deleted their last
+  rig) — the latter would silently overwrite a real recovery `.bak` with
+  nothing worth recovering on the very next ordinary save. Fixed via new
+  `StackModel::looksLikeStacksFile` (top-level shape check only: valid
+  JSON, v1 array or v2-object-with-version-2 — independent of how many
+  stacks it actually yields) so the trigger reads "unrecognized shape,"
+  not "zero stacks." Two MINOR uid-safety findings fixed alongside it:
+  `maxStackUidIndex` signed-overflowed (UB) on a hand-edited uid of
+  exactly `"s2147483647"` (INT_MAX) — capped at a 1e9 sane ceiling; and
+  `assignMissingStackUids` left hand-edited duplicate uids uncorrected,
+  letting the (index,uid) revalidation accept the wrong stack after a
+  removal shifted indices — every occurrence past the first is now
+  re-minted. Residual, MINOR, hand-edit-only-boundary-value gaps the
+  reviewer flagged and were judged not worth chasing given the effort/
+  reachability trade: the duplicate re-mint isn't re-checked against
+  already-seen uids at the exact 1e9 cap boundary (a fresh duplicate needs
+  uids in the 999,999,999–1,000,000,000 range, i.e. a billion-stack file);
+  `nextStackUid` can likewise mint a uid colliding with an existing
+  cap-excluded one at that same boundary; and `looksLikeStacksFile`
+  narrows the backup net for a v2 file whose top-level shape is valid but
+  EVERY stack entry is individually fatal to parse (implausible from
+  organic corruption — truncation and a version bump both still trigger
+  the backup). E2E: uid migration/persistence/removal-stability/creation-
+  minting verified against the real device's existing 11-stack library
+  (`s1`..`s11` minted on load, stable across a removal, `s12` minted
+  correctly past the gap on the next wizard save); paywall open (STACKS
+  nav gate, `NAM_GATES_ENABLED=1`) → Android back-button dismiss → nav
+  bar intact verified on-device, `.env` restored after. Full native
+  library compiles AND links clean against the Android arm64-v8a
+  toolchain, android-29 platform (matching `minSdk`) — not just the
+  desktop target, which doesn't compile the Stacks UI layer at all.
+  Watchdog's 30s-timeout path (bogus id + network off) was judged too
+  time-costly to stage via adb for this pass and is the one item of the
+  original brief's E2E ask not device-verified; the code path was
+  reviewed twice adversarially with no BLOCKER/MAJOR survivors instead.
 - **2026-08-15** Stacks Redesign Phase A COMPLETE (f2d133b..c40b881, 19
   commits): ordered-chain StackModel (v2 json, v1 migration), Home
   (setlist chips), Detail EDIT (guided + freeform, live picker, item
