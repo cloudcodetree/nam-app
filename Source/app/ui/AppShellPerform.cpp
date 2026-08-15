@@ -48,7 +48,7 @@ struct AppShell::ApplyTimeoutImpl : AppShell::ApplyTimeout, private juce::Timer 
 };
 
 void AppShell::wirePerformView () {
-    stacksDetail_->onTabChanged = [this] (bool perform) { applyStackToEngine (); };
+    stacksDetail_->onTabChanged = [this] (bool) { applyStackToEngine (); };
 
     auto& perf = stacksDetail_->performView ();
     perf.onExit = [this] { stacksDetail_->selectTab (false); };
@@ -266,17 +266,15 @@ void AppShell::handleApplyTimeout (int generation) {
                     std::move (req.onFail), false);
 }
 
-// Make the engine match the open rig: load its active amp channel as the
-// model and its cab as the impulse. Idempotent -- each half is skipped when
-// that tone is already live -- so callers fire it freely (every edit, every
-// open, every tab switch) and only real changes reach the engine. That's
-// what lets EDIT be audible: you hear the rig as you build it, not only
-// once you reach CONTROLS.
+// Make the engine match the open rig (active amp channel = model, cab =
+// impulse). Idempotent: each half is skipped when that tone is already live.
+// Callers are in AppShellStacks.cpp -- including why pushStacks is NOT one.
 void AppShell::applyStackToEngine () {
-    // Only while a rig is actually on screen; a background push (load,
-    // removal) must not re-point the engine at whatever index Detail last
-    // held.
-    if (stacksDetail_ == nullptr || !stacksShowDetail_) return;
+    // VISIBILITY, not stacksShowDetail_: that flag survives navigating to
+    // Play, where show() deliberately clears the live ids -- a load
+    // completing after the user left would then re-point the engine at the
+    // rig, over whatever they just picked on Play.
+    if (stacksDetail_ == nullptr || current_ != stacksDetail_.get ()) return;
     const int idx = stacksDetail_->currentIndex ();
     if (idx < 0 || idx >= (int)stackList_.size ()) return;
     const auto& st = stackList_[(size_t)idx];

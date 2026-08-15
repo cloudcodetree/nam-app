@@ -76,11 +76,13 @@ void AppShell::pushStacks () {
         if (idx >= 0 && idx < (int)stackList_.size ())
             stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
     }
-    // Every stack mutation funnels through here, so this one call is what
-    // makes editing audible -- swap an amp, cycle a channel, pick a cab and
-    // you hear it immediately. No-op unless a rig is on screen and the tone
-    // actually changed (applyStackToEngine is idempotent).
-    applyStackToEngine ();
+    // Deliberately NO applyStackToEngine() here. pushStacks is a RENDER
+    // call, and finishToneLoad calls it on the failure path -- making it
+    // also trigger a load turned an unloadable tone into an unbounded
+    // retry (toast storm, endless HTTP, flash churn; direct recursion when
+    // a corrupt cache file fails synchronously). The apply is fired from
+    // the specific state transitions that should cause one instead: opening
+    // a rig, switching tabs, and each edit that changes the audible truth.
 }
 
 void AppShell::openStackDetail (int idx, bool perform) {
@@ -95,11 +97,16 @@ void AppShell::openStackDetail (int idx, bool perform) {
     // CONTROLS' setlist stepping falls back to it when Detail has no index.
     currentStack_ = idx;
     stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
-    stacksDetail_->selectTab (perform);
+    // show() BEFORE selectTab, and no applyStackToEngine() call here.
+    // selectTab fires onTabChanged, whose handler applies the rig; that
+    // apply is guarded on this screen being current_, which only show()
+    // makes true -- selecting first would apply while Play was still
+    // current_ and be dropped. Letting onTabChanged be the single trigger
+    // also keeps it to exactly ONE apply per open: an extra call here would
+    // park a duplicate load that the drain later starts against an
+    // already-live tone (an audible double-reload every time you open).
     show (Screen::Stacks);
-    // Opening a rig makes it audible immediately, on EITHER tab -- you hear
-    // what you're about to edit, not just what you perform.
-    applyStackToEngine ();
+    stacksDetail_->selectTab (perform);
 }
 
 void AppShell::openOrbPanel () {
@@ -163,6 +170,7 @@ void AppShell::wireStacksScreens () {
         stackList_[(size_t)idx] = std::move (st);
         saveStacksState ();
         pushStacks ();
+        applyStackToEngine ();   // a reorder can change which amp is first
     };
     stacksDetail_->onAddGear = [this] (nam::GearType hint) {
         openGearPicker (hint, GearPickerMode::Add, {});
@@ -315,6 +323,7 @@ void AppShell::wireGearPicker () {
         stacksDetail_->itemSheet ().close ();
         saveStacksState ();
         pushStacks ();
+        applyStackToEngine ();   // removing the amp/cab changes what's live
     };
 }
 
@@ -367,6 +376,7 @@ void AppShell::applyGearPick (nam::GearType tab, nam::ToneInfo tone) {
     if (!changed) return;
     saveStacksState ();
     pushStacks ();
+    applyStackToEngine ();   // added/swapped gear is audible at once
 }
 
 void AppShell::mutateItem (juce::String uid, std::function<void (nam::ChainItem&)> fn) {
@@ -378,6 +388,7 @@ void AppShell::mutateItem (juce::String uid, std::function<void (nam::ChainItem&
             fn (it);
             saveStacksState ();
             pushStacks ();
+            applyStackToEngine ();   // e.g. an amp channel change
             return;
         }
 }

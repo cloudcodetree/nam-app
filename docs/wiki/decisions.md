@@ -22,6 +22,24 @@ direction is chosen, reversed, or a constraint is discovered.
   the code still says "perform" throughout (`StackPerformView`,
   `AppShellPerform.cpp`, `performTab_`). A mechanical rename is deliberately
   deferred rather than bundled into a behavior change.
+  **The gate BLOCKED the first attempt, correctly**: the apply had been
+  hooked into `pushStacks()` -- a RENDER call that `finishToneLoad` makes on
+  its own failure path, so any tone that could not load retried forever
+  (toast storm, endless HTTP, stacks.json write churn, and unbounded direct
+  recursion when a corrupt cache file fails synchronously). Render functions
+  get called from inside the completion path of the very effect they would
+  trigger; the effect now fires from the specific state transitions instead
+  (open, tab switch, and each mutation that can change the audible truth).
+  Two more findings from the same review are fixed here: the guard is
+  visibility-based (`current_ == stacksDetail_.get()`) rather than
+  `stacksShowDetail_`, which survives navigating to Play and would have let
+  a late-completing load overwrite a tone the user had just picked there;
+  and `openStackDetail` now calls `show()` BEFORE `selectTab()` so exactly
+  ONE apply fires per open (it was three, two of which parked duplicate
+  loads the drain later started against an already-live tone -- an audible
+  double-reload on every open). Verified offline on emulator-5554 with a
+  deliberately evicted model cache: exactly ONE apply attempt in 25 s where
+  the pre-fix build looped unbounded.
 - **2026-08-15** Stacks UX-correctness batch (5 STILL-OPEN checklist items):
   amp stomp tap now routes to `applyAmpCycle` instead of the meaningless
   bypass toggle (plus a bonus fix found while E2E-verifying it: the STOMP
