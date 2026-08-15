@@ -3,6 +3,15 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-14** `StackModel::ChainItem::gearTag` for the SPACES slot is
+  `"space"` (singular), not `"spaces"`. Why: the Phase A plan
+  (docs/superpowers/plans/2026-08-14-stacks-redesign-phase-a.md:42) and its
+  Task 1 brief both specified `"spaces"`, which the adversarial reviewer
+  already flagged as a MAJOR finding on the plan commit (f2d133b) — it
+  contradicts the live TONE3000 API gear values (`Source/net/Tone3000Api.h`)
+  and the shipped `StacksScreen::slotDefs()` (`{"SPACES","space"}`).
+  Corrected in `StackModel`'s v1 migration before later tasks (the live
+  gear picker) could bake `gears=spaces` into a request and inherit the bug.
 - **2026-08-14** Pro gating became an .env build switch: `NAM_GATES_ENABLED=0`
   disables paywall/gates/lock-glyphs for development (CMake injects it, same
   pattern as the publishable key; .env changes now retrigger configure).

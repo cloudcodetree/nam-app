@@ -128,7 +128,9 @@ TEST_CASE("StackModel v1 migration maps fixed slots to ordered chain") {
 
     // OUTBOARD (empty) skipped; SPACES is next.
     REQUIRE(st.chain[3].type == GearType::Post);
-    REQUIRE(st.chain[3].gearTag == "spaces");
+    // Live TONE3000 API gear is "space" (singular) per StacksScreen::slotDefs()
+    // and Tone3000Api.h, not the "SPACES" slot label.
+    REQUIRE(st.chain[3].gearTag == "space");
     REQUIRE(st.chain[3].toneId == "space-w");
     REQUIRE(st.chain[3].uid == "i4");
 

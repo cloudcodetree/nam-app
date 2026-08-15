@@ -156,12 +156,15 @@ struct V1SlotDef {
 };
 
 // AMP, CABINET, PEDAL, OUTBOARD, SPACES, EXPERIMENTAL -- the exact order
-// StacksScreen::slotDefs()/AppShell::saveStacksState wrote.
+// StacksScreen::slotDefs()/AppShell::saveStacksState wrote. gearTag values
+// are the live TONE3000 API gear filter (StacksScreen::slotDefs()/
+// Tone3000Api.h), NOT the slot's display label -- SPACES' API gear is
+// "space" (singular), not "spaces".
 constexpr std::array<V1SlotDef, 6> kV1Slots{ { { GearType::Amp, "amp" },
                                                { GearType::Cab, "cab" },
                                                { GearType::Pedal, "pedal" },
                                                { GearType::Post, "outboard" },
-                                               { GearType::Post, "spaces" },
+                                               { GearType::Post, "space" },
                                                { GearType::Post, "experimental" } } };
 
 Stack migrateV1Stack(const json& sj) {

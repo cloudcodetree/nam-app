@@ -17,9 +17,11 @@ struct ChainItem {
     std::string uid;   // stable per item, "i1","i2"... assigned by the model
     GearType type = GearType::Pedal;
     std::string toneId, title, format;   // format "nam"/"ir" as today
-    // Original TONE3000 gear this item came from ("pedal","amp","cab",
-    // "outboard","spaces","experimental"); distinct from `type`, which is
-    // the chain's coarser routing category.
+    // Original TONE3000 API gear filter this item came from ("pedal","amp",
+    // "cab","outboard","space","experimental" -- see Tone3000Api.h and
+    // StacksScreen::slotDefs(); "space" is singular, unlike the SPACES slot
+    // label); distinct from `type`, which is the chain's coarser routing
+    // category.
     std::string gearTag;
     int fs = 0;   // 0 = unassigned, 1..8
     bool bypassed = false;
