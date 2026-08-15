@@ -64,33 +64,45 @@ void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<vo
     const auto toneId = tone.id;
     const auto title = tone.title;
     const auto format = tone.format;
-    svc_.loadTone (tone, [this, stackIdx, stackName, toneId, title, format, onFail] (bool ok,
-                                                                                     juce::String) {
-        performApplyInFlight_ = false;
-        // Re-validate: the stack this load was for may have been
-        // removed (or the index reused by a different one) while the
-        // round trip was in flight.
-        const bool stillValid = stackIdx >= 0 && stackIdx < (int)stackList_.size () &&
-                                juce::String (stackList_[(size_t)stackIdx].name) == stackName;
-        if (ok) {
-            if (format == "ir") liveIrToneId_ = toneId;
-            else liveModelToneId_ = toneId;
-        } else {
-            if (stillValid && onFail) onFail ();
-            if (stacksDetail_ != nullptr)
-                nam::ui::showToast (*stacksDetail_, "couldn't load " + juce::String (title) + " " +
-                                                        kEmDash + " check connection");
-        }
-        if (stillValid) {
-            saveStacksState ();
-            pushStacks ();
-        }
-        if (pendingPerformApply_.active) {
-            auto pending = std::move (pendingPerformApply_);
-            pendingPerformApply_ = {};
-            startToneLoad (pending.stackIdx, std::move (pending.tone), std::move (pending.onFail));
-        }
-    });
+    svc_.loadTone (
+        tone, [this, stackIdx, stackName, toneId, title, format, onFail] (bool ok, juce::String) {
+            performApplyInFlight_ = false;
+            // Re-validate: the stack this load was for may have been
+            // removed (or the index reused by a different one) while the
+            // round trip was in flight.
+            const bool stillValid = stackIdx >= 0 && stackIdx < (int)stackList_.size () &&
+                                    juce::String (stackList_[(size_t)stackIdx].name) == stackName;
+            if (ok) {
+                if (format == "ir") liveIrToneId_ = toneId;
+                else liveModelToneId_ = toneId;
+            } else {
+                if (stillValid && onFail) onFail ();
+                if (stacksDetail_ != nullptr)
+                    nam::ui::showToast (*stacksDetail_, "couldn't load " + juce::String (title) +
+                                                            " " + kEmDash + " check connection");
+            }
+            if (stillValid) {
+                saveStacksState ();
+                pushStacks ();
+            }
+            if (pendingPerformApply_.active) {
+                auto pending = std::move (pendingPerformApply_);
+                pendingPerformApply_ = {};
+                // Re-validate the parked request the same way the completion
+                // above re-validates its own load: the stack it was queued for
+                // may have been removed (or its index reused by a different
+                // stack) during the load that was in flight while it waited.
+                // Without this, an OOB `stackList_[stackIdx]` below is possible
+                // (empty vector) or, with >=2 stacks, the wrong stack's uids get
+                // mutated and persisted on a later failure.
+                const bool pendingValid =
+                    pending.stackIdx >= 0 && pending.stackIdx < (int)stackList_.size () &&
+                    juce::String (stackList_[(size_t)pending.stackIdx].name) == pending.stackName;
+                if (pendingValid)
+                    startToneLoad (pending.stackIdx, std::move (pending.tone),
+                                   std::move (pending.onFail));
+            }
+        });
 }
 
 void AppShell::enterPerform () {
@@ -159,7 +171,11 @@ void AppShell::applyScene (int stackIdx, int sceneIdx) {
                          if (!ampUid.empty ())
                              for (auto& it : s.chain)
                                  if (it.uid == ampUid) {
-                                     it.activeChannel = prevChannel;
+                                     // The chain may have been edited (swap/remove
+                                     // channel) via EDIT while this load was in flight --
+                                     // clamp rather than persist an OOB activeChannel.
+                                     if (prevChannel >= 0 && prevChannel < (int)it.channels.size ())
+                                         it.activeChannel = prevChannel;
                                      break;
                                  }
                      });
@@ -187,7 +203,12 @@ void AppShell::applyAmpCycle (int stackIdx) {
                              auto& s = stackList_[(size_t)stackIdx];
                              for (auto& jt : s.chain)
                                  if (jt.uid == ampUid) {
-                                     jt.activeChannel = prevChannel;
+                                     // Same clamp as applyScene's revert --
+                                     // the channel list may have been
+                                     // edited via EDIT while this load was
+                                     // in flight.
+                                     if (prevChannel >= 0 && prevChannel < (int)jt.channels.size ())
+                                         jt.activeChannel = prevChannel;
                                      break;
                                  }
                          });

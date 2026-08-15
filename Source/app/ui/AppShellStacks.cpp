@@ -125,6 +125,12 @@ void AppShell::wireStacksScreens () {
         stackList_.erase (stackList_.begin () + idx);
         if (currentStack_ >= (int)stackList_.size ())
             currentStack_ = juce::jmax (0, (int)stackList_.size () - 1);
+        // Belt and braces alongside startToneLoad's own drain-time
+        // revalidation (AppShellPerform.cpp): a pending PERFORM apply
+        // parked mid-flight for the stack just removed (or any stack,
+        // since every index above `idx` just shifted down) must not
+        // resurrect against a since-reused index.
+        pendingPerformApply_ = {};
         saveStacksState ();
         stacksShowDetail_ = false;
         pushStacks ();
