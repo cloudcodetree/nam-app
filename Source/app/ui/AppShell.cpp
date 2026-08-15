@@ -835,6 +835,21 @@ void AppShell::show (Screen s) {
         }
     }
 
+    // PERFORM tracks what's actually live by id (liveModelToneId_/
+    // liveIrToneId_, see AppShell.h) so a scene/AMP tap can skip a load
+    // that's already audible. Only PERFORM's own applies update those ids --
+    // Play-side loads (loadModel_/loadIr_/setCab) don't, so without this a
+    // Play-side swap while PERFORM is off-screen leaves the ids stale and a
+    // later PERFORM re-entry skips the load it should make, silently
+    // leaving the wrong tone live under the stage view. Every Play-side
+    // load requires Play visible, so clearing both whenever Play becomes
+    // the nav target closes that gap; worst case is one redundant reload
+    // (harmless).
+    if (s == Screen::Play) {
+        liveModelToneId_.clear ();
+        liveIrToneId_.clear ();
+    }
+
     juce::Component* target = (s == Screen::Stacks)
                                   ? (stacksShowDetail_ ? (juce::Component*)stacksDetail_.get ()
                                                        : (juce::Component*)stacksHome_.get ())

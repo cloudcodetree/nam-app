@@ -1,5 +1,6 @@
 #include "app/ui/StackCreateWizard.h"
 #include <algorithm>
+#include <string>
 
 // Gear mutation (steps 1-3: amp channels / pedals / cab), step-4 footswitch
 // assignment, and the save/template-pick paths. Split out of
@@ -232,8 +233,37 @@ void StackCreateWizard::pickTemplate (int idx) {
     close ();
 }
 
+// No scene editor exists yet (see docs/wiki/decisions.md) -- without this,
+// a wizard-built stack saves with zero scenes and PERFORM's SCENES grid is
+// empty from the moment it's created. Minimum-viable seed: one Scene per
+// amp channel, named after the channel (or "Scene {n}" if the channel has
+// no title), so PERFORM has something to switch between immediately. Pedal
+// bypass is mirrored from the chain's current (all-on, as built -- nothing
+// in the wizard toggles bypass) state rather than hardcoded, so this stays
+// correct if that ever changes. Template picks (pickTemplate) are untouched
+// -- a template already defines its own scenes.
+void StackCreateWizard::seedScenes () {
+    draft_.scenes.clear ();
+    const auto* amp = ampItem ();
+    if (amp == nullptr || amp->channels.empty ()) {
+        draft_.activeScene = -1;
+        return;
+    }
+    for (int i = 0; i < (int)amp->channels.size (); ++i) {
+        nam::Scene sc;
+        const auto& title = amp->channels[(size_t)i].title;
+        sc.name = title.empty () ? ("Scene " + std::to_string (i + 1)) : title;
+        sc.ampChannel = i;
+        for (const auto& it : draft_.chain)
+            if (it.type == nam::GearType::Pedal) sc.pedalBypass[it.uid] = it.bypassed;
+        draft_.scenes.push_back (std::move (sc));
+    }
+    draft_.activeScene = 0;
+}
+
 void StackCreateWizard::doSave () {
     syncFsIntoChain ();
+    seedScenes ();
     const int unmapped = unmappedActionLabels ().size ();
     // The spec copy claims a full A-D map -- only true when nothing is
     // unmapped. Compose a truthful variant otherwise rather than lying.

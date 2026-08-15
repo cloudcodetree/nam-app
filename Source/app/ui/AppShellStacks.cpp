@@ -125,8 +125,11 @@ void AppShell::wireStacksScreens () {
         // revalidation (AppShellPerform.cpp): a pending PERFORM apply
         // parked mid-flight for the stack just removed (or any stack,
         // since every index above `idx` just shifted down) must not
-        // resurrect against a since-reused index.
-        pendingPerformApply_ = {};
+        // resurrect against a since-reused index. Both slots -- a removal
+        // can land while either a model or an IR request (or both) is
+        // parked.
+        pendingModelApply_ = {};
+        pendingIrApply_ = {};
         saveStacksState ();
         stacksShowDetail_ = false;
         pushStacks ();

@@ -314,12 +314,16 @@ private:
     // PERFORM tab apply wiring (AppShellStacks.cpp). Engine truth: ONE model
     // + ONE IR; a scene/AMP tap is audible only when the target toneId
     // differs from what's actually live (tracked here by id, not assumed
-    // from stored state -- Play/Browse loads don't update these, so the
-    // first PERFORM entry after using Play may re-load redundantly, which
-    // is harmless). Bypass + activeScene/activeChannel are STORED-state
-    // writes (visual LEDs only in Phase A -- no multi-pedal DSP chain
-    // exists yet) and always apply immediately, independent of whether the
-    // audible load below them succeeds.
+    // from stored state). Play-side loads (loadModel_/loadIr_/setCab) don't
+    // update these ids directly -- AppShell::show() clears both whenever
+    // Play becomes the nav target instead (every Play-side load requires
+    // Play visible), so a PERFORM re-entry after a Play-side swap always
+    // re-validates against the engine rather than trusting a stale id.
+    // Worst case is one redundant reload, which is harmless. Bypass +
+    // activeScene/activeChannel are STORED-state writes (visual LEDs only
+    // in Phase A -- no multi-pedal DSP chain exists yet) and always apply
+    // immediately, independent of whether the audible load below them
+    // succeeds.
     std::string liveModelToneId_, liveIrToneId_;
     void wirePerformView ();                        // performView() callbacks (AppShellPerform.cpp)
     void enterPerform ();                           // apply activeModel/IrToneId if not live
@@ -328,8 +332,15 @@ private:
     void stepPerformStack (int delta);              // setlist ‹ › / NEXT ▸ switch
 
     // One in-flight nam::ToneInfo load at a time; a request that arrives
-    // mid-flight replaces whatever was pending (last tap wins) rather than
-    // starting a second concurrent svc_.loadTone call.
+    // mid-flight parks in the slot matching its resource type (model vs IR,
+    // by tone.format) rather than starting a second concurrent
+    // svc_.loadTone call. Two slots, not one -- enterPerform issues a model
+    // load then an IR load back to back, so a NEXT/‹ › switch or a scene tap
+    // that lands while the first is still in flight must not let the IR
+    // request overwrite the parked model request (or vice versa). Each slot
+    // is still last-tap-wins for its own resource; startToneLoad's
+    // completion drains both (one at a time -- draining the second happens
+    // on the next completion, since only one load runs at once).
     bool performApplyInFlight_ = false;
     struct PendingToneApply {
         bool active = false;
@@ -339,7 +350,7 @@ private:
         nam::ToneInfo tone;
         std::function<void ()> onFail;
     };
-    PendingToneApply pendingPerformApply_;
+    PendingToneApply pendingModelApply_, pendingIrApply_;
     void requestToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
     void startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
 

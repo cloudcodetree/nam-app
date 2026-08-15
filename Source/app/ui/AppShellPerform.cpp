@@ -10,7 +10,10 @@
 // Engine truth (Phase A): ONE model + ONE IR. A tap is audible only when the
 // target toneId differs from what's actually live (tracked here by id, see
 // AppShell.h); one nam::ToneInfo load is in flight at a time, a tap that
-// arrives mid-flight replaces the single pending slot (last tap wins).
+// arrives mid-flight parks in the pending slot matching its resource type
+// (model vs IR -- see AppShell.h's pendingModelApply_/pendingIrApply_
+// comment), last tap wins within each slot, and both drain once the
+// in-flight load completes.
 
 namespace {
 nam::ToneInfo makeToneInfo (std::string id, std::string title, std::string format) {
@@ -51,8 +54,12 @@ void AppShell::wirePerformView () {
 void AppShell::requestToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail) {
     if (stackIdx < 0 || stackIdx >= (int)stackList_.size () || !svc_.loadTone) return;
     if (performApplyInFlight_) {
-        pendingPerformApply_ = { true, stackIdx, juce::String (stackList_[(size_t)stackIdx].name),
-                                 std::move (tone), std::move (onFail) };
+        // Keyed by resource type so a model request and an IR request that
+        // both arrive mid-flight (enterPerform's model-then-IR pair racing
+        // a stack switch) don't collide in one slot -- see AppShell.h.
+        auto& slot = (tone.format == "ir") ? pendingIrApply_ : pendingModelApply_;
+        slot = { true, stackIdx, juce::String (stackList_[(size_t)stackIdx].name), std::move (tone),
+                 std::move (onFail) };
         return;
     }
     startToneLoad (stackIdx, std::move (tone), std::move (onFail));
@@ -64,45 +71,56 @@ void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<vo
     const auto toneId = tone.id;
     const auto title = tone.title;
     const auto format = tone.format;
-    svc_.loadTone (
-        tone, [this, stackIdx, stackName, toneId, title, format, onFail] (bool ok, juce::String) {
-            performApplyInFlight_ = false;
-            // Re-validate: the stack this load was for may have been
-            // removed (or the index reused by a different one) while the
-            // round trip was in flight.
-            const bool stillValid = stackIdx >= 0 && stackIdx < (int)stackList_.size () &&
-                                    juce::String (stackList_[(size_t)stackIdx].name) == stackName;
-            if (ok) {
-                if (format == "ir") liveIrToneId_ = toneId;
-                else liveModelToneId_ = toneId;
-            } else {
-                if (stillValid && onFail) onFail ();
-                if (stacksDetail_ != nullptr)
-                    nam::ui::showToast (*stacksDetail_, "couldn't load " + juce::String (title) +
-                                                            " " + kEmDash + " check connection");
-            }
-            if (stillValid) {
-                saveStacksState ();
-                pushStacks ();
-            }
-            if (pendingPerformApply_.active) {
-                auto pending = std::move (pendingPerformApply_);
-                pendingPerformApply_ = {};
-                // Re-validate the parked request the same way the completion
-                // above re-validates its own load: the stack it was queued for
-                // may have been removed (or its index reused by a different
-                // stack) during the load that was in flight while it waited.
-                // Without this, an OOB `stackList_[stackIdx]` below is possible
-                // (empty vector) or, with >=2 stacks, the wrong stack's uids get
-                // mutated and persisted on a later failure.
-                const bool pendingValid =
-                    pending.stackIdx >= 0 && pending.stackIdx < (int)stackList_.size () &&
-                    juce::String (stackList_[(size_t)pending.stackIdx].name) == pending.stackName;
-                if (pendingValid)
-                    startToneLoad (pending.stackIdx, std::move (pending.tone),
-                                   std::move (pending.onFail));
-            }
-        });
+    svc_.loadTone (tone, [this, stackIdx, stackName, toneId, title, format, onFail] (bool ok,
+                                                                                     juce::String) {
+        performApplyInFlight_ = false;
+        // Re-validate: the stack this load was for may have been
+        // removed (or the index reused by a different one) while the
+        // round trip was in flight.
+        const bool stillValid = stackIdx >= 0 && stackIdx < (int)stackList_.size () &&
+                                juce::String (stackList_[(size_t)stackIdx].name) == stackName;
+        if (ok) {
+            if (format == "ir") liveIrToneId_ = toneId;
+            else liveModelToneId_ = toneId;
+        } else {
+            if (stillValid && onFail) onFail ();
+            if (stacksDetail_ != nullptr)
+                nam::ui::showToast (*stacksDetail_, "couldn't load " + juce::String (title) + " " +
+                                                        kEmDash + " check connection");
+        }
+        if (stillValid) {
+            saveStacksState ();
+            pushStacks ();
+        }
+        // Drain the parked slots, model first: at most one load starts
+        // here (startToneLoad only runs one at a time), and the other --
+        // if also active -- drains on THAT load's completion in turn, so
+        // both eventually run even though only one is in flight at once.
+        // A slot whose stack vanished while parked is dropped rather
+        // than started, in which case the OTHER slot must still get a
+        // chance this round -- otherwise, with performApplyInFlight_
+        // already false, it would sit orphaned until some unrelated
+        // future requestToneLoad happened to flush it.
+        auto drain = [this] (PendingToneApply& slot) {
+            if (!slot.active) return false;
+            auto pending = std::move (slot);
+            slot = {};
+            // Re-validate the parked request the same way the completion
+            // above re-validates its own load: the stack it was queued for
+            // may have been removed (or its index reused by a different
+            // stack) during the load that was in flight while it waited.
+            // Without this, an OOB `stackList_[stackIdx]` below is possible
+            // (empty vector) or, with >=2 stacks, the wrong stack's uids get
+            // mutated and persisted on a later failure.
+            const bool pendingValid =
+                pending.stackIdx >= 0 && pending.stackIdx < (int)stackList_.size () &&
+                juce::String (stackList_[(size_t)pending.stackIdx].name) == pending.stackName;
+            if (!pendingValid) return false;   // dropped -- give the other slot a turn
+            startToneLoad (pending.stackIdx, std::move (pending.tone), std::move (pending.onFail));
+            return true;   // a load is now in flight again; stop here
+        };
+        if (!drain (pendingModelApply_)) drain (pendingIrApply_);
+    });
 }
 
 void AppShell::enterPerform () {

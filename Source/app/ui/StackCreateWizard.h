@@ -74,6 +74,7 @@ private:
     void syncFsIntoChain ();                           // switches_ -> draft_.chain[*].fs
 
     void pickTemplate (int idx);
+    void seedScenes ();   // wizard-save-only scene seed, see StackCreateWizardGear.cpp
     void doSave ();
 
     void handleContentTap (juce::Point<int> contentLocal);

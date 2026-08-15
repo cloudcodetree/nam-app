@@ -3,6 +3,21 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Stacks Phase A final-review fix round: (1) `AppShell::show()`
+  clears `liveModelToneId_`/`liveIrToneId_` whenever Play becomes the nav
+  target, since only PERFORM's own applies updated them before and a
+  Play-side load (loadModel_/loadIr_/setCab) could leave a stale id that a
+  later PERFORM re-entry trusted instead of re-validating. (2) PERFORM's
+  single `pendingPerformApply_` slot split into `pendingModelApply_` +
+  `pendingIrApply_` (keyed by `tone.format`), both drained on load
+  completion — one slot let a mid-flight IR request silently clobber a
+  parked model request (or vice versa) during a fast NEXT/‹ › or scene tap.
+  (3) Wizard save (`StackCreateWizard::doSave` → new `seedScenes()`) now
+  seeds one Scene per amp channel (name = channel title or "Scene {n}",
+  pedalBypass mirrors the as-built all-on state, `activeScene = 0`) so
+  PERFORM's SCENES grid isn't empty from creation — interim until a real
+  scene editor exists; template picks (`pickTemplate`) are untouched and
+  keep whatever scenes the template defines.
 - **2026-08-15** Stack creation wizard (Task 5, final Phase A task) ships:
   step-0 template gallery (Plexi Crunch/Modern Metal/Clean Platform, data-
   only `StackTemplates.h`, cloned with fresh `nextUid` sequence on pick,
