@@ -3,6 +3,15 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Stacks Home replaces the fixed-6-slot `StacksScreen`
+  accordion; `AppShell` now holds `std::vector<nam::Stack>` (v2 ordered-chain
+  model via `StackModel`, v1 files migrate transparently on load, next save
+  writes v2) instead of `StacksScreen::Stack`. Row tap navigates to a new
+  `StackDetailScreen` (EDIT/PERFORM tabs, shell only this task) rather than
+  expanding in place; `applyStack`/"LOAD" is dropped (superseded by
+  PERFORM). Why: the new design's ordered/multi-amp/scene model has no
+  fixed-slot equivalent — a rewrite, not a restyle (see
+  docs/superpowers/specs/2026-08-14-stacks-redesign-notes.md).
 - **2026-08-14** `StackModel::ChainItem::gearTag` for the SPACES slot is
   `"space"` (singular), not `"spaces"`. Why: the Phase A plan
   (docs/superpowers/plans/2026-08-14-stacks-redesign-phase-a.md:42) and its

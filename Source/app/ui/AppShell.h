@@ -11,18 +11,20 @@
 #include "app/ui/PlayScreen.h"
 #include "app/ui/AudioSettingsState.h"
 #include "app/ui/PaywallPanel.h"
-#include "app/ui/StacksScreen.h"
+#include "app/ui/StacksHomeScreen.h"
+#include "app/ui/StackDetailScreen.h"
 #include "app/ui/TunerScreen.h"
+#include "model/StackModel.h"
 
 // Soft-paywall strategy for Stacks (Task 8, freemium Pro-unlock). Shared by
-// AppShell.cpp (rig-creation gate) and AppShellChrome.cpp (STACKS nav gate)
-// so both touchpoints flip together.
+// AppShellStacks.cpp (rig-creation gate) and AppShellChrome.cpp (STACKS nav
+// gate) so both touchpoints flip together.
 //   false (current/internal-testing default): the STACKS nav button itself
 //   is hard-gated in AppShellChrome.cpp -- free users never reach the
 //   screen, matching the Task 5 config as shipped.
 //   true (public-launch config): the nav gate lets everyone in; the first
-//   rig is free and AppShell.cpp's stacks_->onCreate gates creation of a
-//   SECOND rig instead. Flip this one constant at public launch.
+//   rig is free and AppShellStacks.cpp's wireStacksScreens onCreate gates
+//   creation of a SECOND rig instead. Flip this one constant at public launch.
 constexpr bool kSoftPaywall = false;
 
 // Master switch for ALL Pro gating (nav/layout/demo/rig gates + lock
@@ -172,7 +174,11 @@ private:
 
     dsp::ToneEngine& engine_;
     std::unique_ptr<PlayScreen> play_;
-    std::unique_ptr<StacksScreen> stacks_;
+    // Stacks surface: both live under Screen::Stacks, one visible at a time
+    // (stacksShowDetail_ picks which) -- Detail is a state within Stacks,
+    // not its own Screen enumerator (AppShellStacks.cpp).
+    std::unique_ptr<StacksHomeScreen> stacksHome_;
+    std::unique_ptr<StackDetailScreen> stacksDetail_;
     std::unique_ptr<TunerScreen> tuner_;   // overlay above Play, not a screen
     // Invisible click-catcher under the tuner card: any tap outside the card
     // collapses it (nav taps stay live — the scrim covers content only).
@@ -270,13 +276,20 @@ private:
     void pushDeckItems ();                            // list/grid rows (AppShellDeck.cpp)
     std::map<std::string, juce::Image> thumbCache_;   // id -> small image (bounded)
     void updateCabChoices ();
-    // Stacks state (persisted through the host as JSON).
-    std::vector<StacksScreen::Stack> stackList_;
-    int stackSel_ = -1;
+    // Stacks state (persisted through the host as JSON, v2 ordered-chain
+    // model with transparent v1 fixed-slot migration -- see StackModel).
+    // Persistence + Home/Detail wiring live in AppShellStacks.cpp; screen
+    // orchestration (show/resized/handleBackButton) stays here.
+    std::vector<nam::Stack> stackList_;
+    int currentStack_ = 0;            // SETLIST "current" chip (session-only)
+    int stacksDetailIdx_ = -1;        // index open in Detail; -1 = none
+    bool stacksShowDetail_ = false;   // which child is visible under Screen::Stacks
     void loadStacksState ();
     void saveStacksState ();
     void pushStacks ();
-    void applyStack (int index);
+    void wireStacksScreens ();   // Home/Detail callbacks
+    void openStackDetail (int idx, bool perform);
+    void openOrbPanel ();      // gear icon on Stacks -> same entry point as the orb tap
     void pushPairChoices ();   // PAIR row matches the card's gear
     std::vector<nam::LibraryEntry> keptModelsSorted () const;
     int cabBuiltinCount_ = 0;   // names beyond this are kept IRs

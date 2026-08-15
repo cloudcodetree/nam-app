@@ -112,10 +112,13 @@ if(NAM_BUILD_APP)
             Source/app/ui/PlayScreenDeck.cpp
             Source/app/ui/AppShellDeck.cpp
             Source/app/ui/PaywallPanel.cpp
-            Source/app/ui/StacksScreen.cpp
+            Source/app/ui/StackWidgets.cpp
+            Source/app/ui/StacksHomeScreen.cpp
+            Source/app/ui/StackDetailScreen.cpp
             Source/app/ui/TunerScreen.cpp
             Source/app/ui/AppShell.cpp
             Source/app/ui/AppShellChrome.cpp
+            Source/app/ui/AppShellStacks.cpp
             Source/dsp/ToneEngine.cpp
             Source/dsp/PitchDetector.cpp
             Source/dsp/IrCab.cpp

@@ -78,7 +78,8 @@ void AppShell::paint (juce::Graphics& g) {
         };
         navBtn (navBrowseRect_, "BROWSE", onPlay && deckMode_ == 2, 0);
         navBtn (navFavRect_, "FAVORITES", onPlay && deckMode_ == 0, 1);
-        navBtn (navStacksRect_, "STACKS", current_ == stacks_.get (), 3);
+        navBtn (navStacksRect_, "STACKS",
+                current_ == stacksHome_.get () || current_ == stacksDetail_.get (), 3);
         navBtn (navMoreRect_, "MORE", moreOpen_ || (onPlay && deckMode_ == 1), 4);
     }
 
@@ -546,9 +547,11 @@ void AppShell::mouseDown (const juce::MouseEvent& e) {
     if (navStacksRect_.contains (p)) {
         // kSoftPaywall (public launch) lets everyone into Stacks; the first
         // rig is free and creation of a second one is gated instead (see
-        // stacks_->onCreate in AppShell.cpp). Until then this nav hit stays
-        // the hard gate, matching the Task 5 internal-testing config.
+        // wireStacksScreens's onCreate in AppShellStacks.cpp). Until then
+        // this nav hit stays the hard gate, matching the Task 5
+        // internal-testing config.
         if (!kGatesEnabled || kSoftPaywall || !isPro_ || isPro_ ()) {
+            stacksShowDetail_ = false;   // STACKS nav always lands on Home
             show (Screen::Stacks);
             repaint (navBar_);
         } else {

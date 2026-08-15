@@ -1,7 +1,6 @@
 #include "app/ui/AppShell.h"
 #include "app/ui/DemoTrackCatalog.h"
 #include "app/ui/NamLookAndFeel.h"
-#include "model/Entitlements.h"
 
 #include <algorithm>
 #include <cmath>
@@ -48,12 +47,14 @@ const SortDef kSortVocab[] = {
 
 AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     play_ = std::make_unique<PlayScreen> ();
-    stacks_ = std::make_unique<StacksScreen> ();
+    stacksHome_ = std::make_unique<StacksHomeScreen> ();
+    stacksDetail_ = std::make_unique<StackDetailScreen> ();
     tuner_ = std::make_unique<TunerScreen> ();
     tuner_->setPanelMode (true);   // hosted as a card over Play, not a screen
 
-    for (juce::Component* c : { (juce::Component*)play_.get (), (juce::Component*)stacks_.get (),
-                                (juce::Component*)tuner_.get () })
+    for (juce::Component* c :
+         { (juce::Component*)play_.get (), (juce::Component*)stacksHome_.get (),
+           (juce::Component*)stacksDetail_.get (), (juce::Component*)tuner_.get () })
         addChildComponent (*c);
 
     play_->onPrev = [this] { stepCollection (-1); };
@@ -237,79 +238,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
             play_->setDemoPlaying (ok);
         });
     };
-    // --- Stacks: user-built rigs; every slot picks live from TONE3000 ----
-    stacks_->onCreate = [this] {
-        // Public-launch config only (kSoftPaywall): the nav gate above lets
-        // free users reach Stacks, so creation of a SECOND rig is gated
-        // here instead. Policy lives in Entitlements, not this UI layer;
-        // isPro_ null stays ungated (desktop convention).
-        if (kGatesEnabled && kSoftPaywall && isPro_) {
-            nam::Entitlements ent;
-            ent.setPro (isPro_ ());
-            if (!ent.canSaveRig ((int)stackList_.size ())) {
-                openPaywall (juce::String::fromUTF8 (
-                    "Your first rig stays free forever \xE2\x80\x94 Pro adds unlimited rigs"));
-                return;
-            }
-        }
-        StacksScreen::Stack st;
-        st.name = "STACK " + juce::String ((int)stackList_.size () + 1);
-        stackList_.push_back (std::move (st));
-        stackSel_ = (int)stackList_.size () - 1;
-        saveStacksState ();
-        pushStacks ();
-    };
-    stacks_->onDelete = [this] (int i) {
-        if (i < 0 || i >= (int)stackList_.size ()) return;
-        stackList_.erase (stackList_.begin () + i);
-        if (stackSel_ >= (int)stackList_.size ()) stackSel_ = -1;
-        saveStacksState ();
-        pushStacks ();
-    };
-    stacks_->onSelect = [this] (int i) {
-        stackSel_ = (stackSel_ == i ? -1 : i);
-        pushStacks ();
-    };
-    stacks_->onApply = [this] (int i) { applyStack (i); };
-    stacks_->onFetchSlotOptions =
-        [this] (int slot,
-                std::function<void (juce::StringArray, juce::StringArray, juce::StringArray)> cb) {
-            if (!svc_.searchEx || slot < 0 || slot >= StacksScreen::kNumSlots) {
-                cb ({}, {}, {});
-                return;
-            }
-            // Trending list for the slot's gear type, fetched on demand — nothing
-            // needs downloading up front.
-            nam::SearchParams p;
-            p.sort = "trending";
-            const auto& def = StacksScreen::slotDefs ()[(size_t)slot];
-            if (juce::String (def.gearApi) == "ir") {
-                p.format = "ir";
-                p.gears.push_back ("cab");
-            } else p.gears.push_back (def.gearApi);
-            svc_.searchEx (p, [cb] (bool ok, std::vector<nam::ToneInfo> tones, juce::String) {
-                juce::StringArray ids, titles, formats;
-                if (ok)
-                    for (const auto& t : tones) {
-                        ids.add (juce::String (t.id));
-                        titles.add (juce::String (t.title));
-                        formats.add (juce::String (t.format));
-                    }
-                cb (std::move (ids), std::move (titles), std::move (formats));
-            });
-        };
-    stacks_->onSlotPicked = [this] (int stack, int slot, juce::String id, juce::String title,
-                                    juce::String format) {
-        if (stack < 0 || stack >= (int)stackList_.size () || slot < 0 ||
-            slot >= StacksScreen::kNumSlots)
-            return;
-        auto& st = stackList_[(size_t)stack];
-        st.toneIds[(size_t)slot] = std::move (id);
-        st.titles[(size_t)slot] = std::move (title);
-        st.formats[(size_t)slot] = std::move (format);
-        saveStacksState ();
-        pushStacks ();
-    };
+    wireStacksScreens ();   // Home/Detail callbacks (AppShellStacks.cpp)
 
     play_->onTuner = [this] { toggleTuner (); };
     tuner_->onBack = [this] {
@@ -656,89 +585,6 @@ void AppShell::setDeckMode (int v) {
     repaint (navBar_);
 }
 
-void AppShell::loadStacksState () {
-    stackList_.clear ();
-    stackSel_ = -1;
-    if (!svc_.loadStacksJson) return;
-    const auto parsed = juce::JSON::parse (svc_.loadStacksJson ());
-    if (auto* arr = parsed.getArray ())
-        for (const auto& v : *arr) {
-            auto* obj = v.getDynamicObject ();
-            if (obj == nullptr) continue;
-            StacksScreen::Stack st;
-            st.name = obj->getProperty ("name").toString ();
-            if (auto* slots = obj->getProperty ("slots").getArray ())
-                for (int k = 0; k < juce::jmin ((int)StacksScreen::kNumSlots, slots->size ());
-                     ++k) {
-                    auto* so = (*slots)[k].getDynamicObject ();
-                    if (so == nullptr) continue;
-                    st.toneIds[(size_t)k] = so->getProperty ("id").toString ();
-                    st.titles[(size_t)k] = so->getProperty ("title").toString ();
-                    st.formats[(size_t)k] = so->getProperty ("format").toString ();
-                }
-            stackList_.push_back (std::move (st));
-        }
-}
-
-void AppShell::saveStacksState () {
-    if (!svc_.saveStacksJson) return;
-    juce::Array<juce::var> arr;
-    for (const auto& st : stackList_) {
-        auto* obj = new juce::DynamicObject ();
-        obj->setProperty ("name", st.name);
-        juce::Array<juce::var> slots;
-        for (int k = 0; k < StacksScreen::kNumSlots; ++k) {
-            auto* so = new juce::DynamicObject ();
-            so->setProperty ("id", st.toneIds[(size_t)k]);
-            so->setProperty ("title", st.titles[(size_t)k]);
-            so->setProperty ("format", st.formats[(size_t)k]);
-            slots.add (juce::var (so));
-        }
-        obj->setProperty ("slots", slots);
-        arr.add (juce::var (obj));
-    }
-    svc_.saveStacksJson (juce::JSON::toString (juce::var (arr)));
-}
-
-void AppShell::pushStacks () {
-    if (stacks_ != nullptr) stacks_->setStacks (stackList_, stackSel_);
-}
-
-void AppShell::applyStack (int index) {
-    if (index < 0 || index >= (int)stackList_.size () || !svc_.loadTone) return;
-    const auto& st = stackList_[(size_t)index];
-    auto toneAt = [&st] (int k) {
-        nam::ToneInfo t;
-        t.id = st.toneIds[(size_t)k].toStdString ();
-        t.title = st.titles[(size_t)k].toStdString ();
-        t.format = st.formats[(size_t)k].toStdString ();
-        return t;
-    };
-    // The engine chain runs ONE model + ONE impulse: the first filled
-    // head-ish slot becomes the model, the first filled cab/space slot the
-    // impulse. Loads are SEQUENTIAL — the host funnels downloads through one
-    // session thread, so a concurrent cab fetch would supersede (cancel) the
-    // amp fetch and the amp would never load.
-    int modelSlot = -1, irSlot = -1;
-    for (int k : { 0, 2, 3, 5 })   // AMP, PEDAL, OUTBOARD, EXPERIMENTAL
-        if (modelSlot < 0 && st.toneIds[(size_t)k].isNotEmpty ()) modelSlot = k;
-    for (int k : { 1, 4 })   // CABINET, SPACES
-        if (irSlot < 0 && st.toneIds[(size_t)k].isNotEmpty ()) irSlot = k;
-
-    auto loadIrSlot = [this, irSlot, tone = irSlot >= 0 ? toneAt (irSlot) : nam::ToneInfo{}] {
-        if (irSlot >= 0) svc_.loadTone (tone, [] (bool, juce::String) {});
-    };
-    if (modelSlot >= 0) {
-        setNowPlayingInfo (st.titles[(size_t)modelSlot],
-                           st.name.toUpperCase () + " " + kDotSep + " STACK");
-        svc_.loadTone (toneAt (modelSlot), [loadIrSlot] (bool, juce::String) { loadIrSlot (); });
-    } else {
-        loadIrSlot ();
-    }
-    stackSel_ = index;
-    pushStacks ();
-}
-
 void AppShell::showEntryAsNowPlaying (const nam::LibraryEntry& e) {
     auditionToneId_.clear ();   // a library entry owns the engine now
     deckMode_ = 0;
@@ -864,6 +710,13 @@ bool AppShell::handleBackButton () {
         toggleTuner ();
         return true;
     }
+    // Stack detail backs out to Home first, matching its own ‹ chevron —
+    // only a second back press (or one from Home) leaves Stacks for Play.
+    if (current_ == stacksDetail_.get ()) {
+        stacksShowDetail_ = false;
+        show (Screen::Stacks);
+        return true;
+    }
     if (current_ != nullptr && current_ != play_.get ()) {
         show (Screen::Play);
         return true;
@@ -941,8 +794,10 @@ void AppShell::show (Screen s) {
         }
     }
 
-    juce::Component* target =
-        (s == Screen::Stacks) ? (juce::Component*)stacks_.get () : (juce::Component*)play_.get ();
+    juce::Component* target = (s == Screen::Stacks)
+                                  ? (stacksShowDetail_ ? (juce::Component*)stacksDetail_.get ()
+                                                       : (juce::Component*)stacksHome_.get ())
+                                  : (juce::Component*)play_.get ();
     repaint (navBar_);   // active nav highlight tracks the visible screen
 
     if (current_ == target) return;
@@ -1039,7 +894,9 @@ void AppShell::resized () {
         ioBufPill_ = pills.removeFromRight (70).withSizeKeepingCentre (70, 28);
     }
 
-    for (juce::Component* c : { (juce::Component*)play_.get (), (juce::Component*)stacks_.get () })
+    for (juce::Component* c :
+         { (juce::Component*)play_.get (), (juce::Component*)stacksHome_.get (),
+           (juce::Component*)stacksDetail_.get () })
         if (c != nullptr) c->setBounds (b);
     if (paywall_ != nullptr) paywall_->setBounds (getLocalBounds ());
 
