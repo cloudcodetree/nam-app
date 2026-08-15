@@ -245,18 +245,25 @@ std::vector<Stack> migrateV1(const json& arr) {
 
 // --- stack uid minting -------------------------------------------------
 
+// Ceiling for a recognized "sN" suffix -- comfortably beyond any real stack
+// count, but far enough below INT_MAX that maxN + 1 (nextStackUid) can never
+// signed-overflow (UB). A hand-edited uid at or past this (e.g. exactly
+// "s2147483647", which stoi parses without throwing) is treated the same as
+// a non-numeric suffix: ignored rather than trusted.
+constexpr int kMaxSaneStackUidIndex = 1'000'000'000;
+
 // Shared by nextStackUid and assignMissingStackUids: highest "sN" index
-// already present, or 0 if none. Non-numeric/malformed suffixes are ignored
-// rather than thrown on, same tolerance as ChainItem's nextUid.
+// already present, or 0 if none. Non-numeric/malformed/adversarial suffixes
+// are ignored rather than thrown on, same tolerance as ChainItem's nextUid.
 int maxStackUidIndex(const std::vector<Stack>& stacks) {
     int maxN = 0;
     for (const auto& st : stacks) {
         if (st.uid.size() > 1 && st.uid[0] == 's') {
             try {
-                int n = std::stoi(st.uid.substr(1));
-                if (n > maxN) maxN = n;
+                long n = std::stol(st.uid.substr(1));
+                if (n > maxN && n < kMaxSaneStackUidIndex) maxN = (int)n;
             } catch (const std::exception&) {
-                // non-numeric suffix; ignore
+                // non-numeric or out-of-range suffix; ignore
             }
         }
     }
@@ -272,6 +279,22 @@ void assignMissingStackUids(std::vector<Stack>& stacks) {
     int nextN = maxStackUidIndex(stacks);
     for (auto& st : stacks)
         if (st.uid.empty()) st.uid = "s" + std::to_string(++nextN);
+    // A hand-edited file can carry two stacks with the SAME explicit uid --
+    // the (index,uid) revalidation in AppShellPerform.cpp assumes
+    // uniqueness, so every occurrence past the first is re-minted fresh
+    // rather than left to collide.
+    std::vector<std::string> seen;
+    seen.reserve(stacks.size());
+    for (auto& st : stacks) {
+        bool dup = false;
+        for (const auto& s : seen)
+            if (s == st.uid) {
+                dup = true;
+                break;
+            }
+        if (dup) st.uid = "s" + std::to_string(++nextN);
+        seen.push_back(st.uid);
+    }
 }
 
 }   // namespace
@@ -286,6 +309,13 @@ std::vector<Stack> StackModel::parse(const std::string& jsonText) {
         assignMissingStackUids(out);
         return out;
     } catch (const std::exception&) { return {}; }
+}
+
+bool StackModel::looksLikeStacksFile(const std::string& jsonText) {
+    try {
+        json root = json::parse(jsonText);
+        return root.is_array() || (root.is_object() && root.value("version", 0) == 2);
+    } catch (const std::exception&) { return false; }
 }
 
 std::string StackModel::serialize(const std::vector<Stack>& stacks) {

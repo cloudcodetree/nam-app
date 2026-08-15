@@ -460,6 +460,58 @@ TEST_CASE("StackModel parse mints stack uids when absent, unique within the file
     REQUIRE(idx(stacks[2].uid) > 5);
 }
 
+TEST_CASE("StackModel parse mints fresh uids for hand-edited duplicate stack uids") {
+    // Adversarial-review finding on the Stack.uid commit: two stacks sharing
+    // an explicit uid (only reachable via a hand-edited file) would let
+    // AppShellPerform.cpp's (index,uid) revalidation accept the WRONG stack
+    // once one of them shifts index. Only the first occurrence is kept
+    // as-is; every later duplicate is re-minted fresh.
+    static const char* fixture = R"JSON(
+    {
+      "version": 2,
+      "stacks": [
+        {"name": "A", "uid": "s2", "chain": []},
+        {"name": "B", "uid": "s2", "chain": []}
+      ]
+    }
+    )JSON";
+    auto stacks = StackModel::parse(fixture);
+    REQUIRE(stacks.size() == 2);
+    REQUIRE(stacks[0].uid == "s2");
+    REQUIRE(stacks[1].uid != "s2");
+    REQUIRE_FALSE(stacks[1].uid.empty());
+}
+
+TEST_CASE("StackModel nextStackUid does not overflow on an adversarial max-int uid") {
+    // Adversarial-review finding: a hand-edited uid of exactly "s2147483647"
+    // (INT_MAX) parses via stoi without throwing, so an unguarded maxN + 1
+    // is signed-integer overflow (UB). The exact recovered value isn't
+    // load-bearing, only that minting stays well-formed and doesn't collide
+    // with the adversarial input.
+    std::vector<Stack> stacks;
+    Stack a;
+    a.uid = "s2147483647";
+    stacks.push_back(a);
+    const auto uid = StackModel::nextStackUid(stacks);
+    REQUIRE(uid != "s2147483647");
+    REQUIRE(uid.rfind("s", 0) == 0);
+}
+
+TEST_CASE("StackModel looksLikeStacksFile distinguishes unrecognized content from a valid, "
+          "possibly-empty file") {
+    // Backs AppShell::loadStacksState's backup trigger: a legitimately
+    // empty v1/v2 file (e.g. the user deleted their last rig) must NOT
+    // trigger a backup, only content parse() couldn't make sense of at all.
+    REQUIRE(StackModel::looksLikeStacksFile(R"({"version":2,"stacks":[]})"));
+    REQUIRE(StackModel::looksLikeStacksFile("[]"));   // empty v1 array
+    REQUIRE(StackModel::looksLikeStacksFile(R"([{"name":"Old","slots":[]}])"));
+    REQUIRE_FALSE(StackModel::looksLikeStacksFile("not valid json {{{"));
+    REQUIRE_FALSE(StackModel::looksLikeStacksFile(""));
+    REQUIRE_FALSE(StackModel::looksLikeStacksFile("null"));
+    REQUIRE_FALSE(StackModel::looksLikeStacksFile(R"({"version":1,"stacks":[]})"));
+    REQUIRE_FALSE(StackModel::looksLikeStacksFile(R"({"foo":"bar"})"));
+}
+
 TEST_CASE("StackModel nextStackUid is monotonic based on the highest existing stack uid") {
     std::vector<Stack> stacks;
     REQUIRE(StackModel::nextStackUid(stacks) == "s1");

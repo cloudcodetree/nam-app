@@ -38,13 +38,24 @@ void AppShell::loadStacksState () {
     currentStack_ = 0;
     if (!svc_.loadStacksJson) return;
     const auto raw = svc_.loadStacksJson ();
-    stackList_ = nam::StackModel::parse (raw.toStdString ());
+    const auto rawStd = raw.toStdString ();
+    stackList_ = nam::StackModel::parse (rawStd);
     // parse() degrades unreadable content to {} rather than throwing (a
     // corrupt file, or one written by a future app version) -- without a
     // backup, the very next save (any stack edit) would overwrite those raw
     // bytes with an empty rig list, losing them for good. Back the file up
     // once, right here, before that can happen.
-    if (stackList_.empty () && raw.isNotEmpty () && svc_.backupStacksJson) svc_.backupStacksJson ();
+    //
+    // stackList_.empty() alone isn't enough: a LEGITIMATELY empty, well-
+    // formed file (the user deleted their last rig, saving
+    // {"version":2,"stacks":[]}) parses to an empty vector too, and isn't
+    // corruption -- backing THAT up would overwrite a real recovery .bak
+    // (backupStacksJson always overwrites the prior one) with nothing worth
+    // recovering. looksLikeStacksFile distinguishes the two: only an
+    // unrecognized/corrupt shape triggers the backup.
+    if (stackList_.empty () && raw.isNotEmpty () &&
+        !nam::StackModel::looksLikeStacksFile (rawStd) && svc_.backupStacksJson)
+        svc_.backupStacksJson ();
 }
 
 void AppShell::saveStacksState () {

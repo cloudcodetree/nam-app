@@ -86,6 +86,15 @@ public:
     // full stack list so the mint can't collide with an existing stack's uid.
     static std::string
     nextStackUid(const std::vector<Stack>& stacks);   // "s{max existing index + 1}"
+    // Top-level shape check only (valid JSON that's either a v1 array or a
+    // v2 object with version:2) -- does NOT guarantee parse() will yield any
+    // stacks. Lets a caller distinguish "parse() returned {} because the
+    // content is corrupt/unrecognized" from "parse() returned {} because the
+    // file is a legitimately empty, well-formed rig list" -- callers that
+    // back up unreadable content (see AppShell::loadStacksState) need that
+    // distinction so a normal empty-library save can't be mistaken for
+    // corruption and overwrite a real recovery backup.
+    static bool looksLikeStacksFile(const std::string& json);
 };
 
 }   // namespace nam
