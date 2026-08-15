@@ -83,7 +83,7 @@ void AppShell::wirePerformView () {
                         if (stacksDetail_ != nullptr)
                             nam::ui::showToast (*stacksDetail_, "only one channel " + kEmDash +
                                                                     " add more in EDIT");
-                    } else applyAmpCycle (idx);
+                    } else applyAmpCycle (idx, uid);   // this exact amp, not "first in chain"
                     return;
                 }
         mutateItem (uid, [] (nam::ChainItem& it) { it.bypassed = !it.bypassed; });
@@ -345,11 +345,17 @@ void AppShell::applyScene (int stackIdx, int sceneIdx) {
                      });
 }
 
-void AppShell::applyAmpCycle (int stackIdx) {
+void AppShell::applyAmpCycle (int stackIdx, juce::String targetUid) {
     if (stackIdx < 0 || stackIdx >= (int)stackList_.size ()) return;
     auto& st = stackList_[(size_t)stackIdx];
     for (auto& it : st.chain) {
         if (it.type != nam::GearType::Amp) continue;
+        // targetUid empty (the SCENES-mode AMP cell, which assumes the
+        // Phase A one-amp-per-stack cap) matches the first amp found, same
+        // as before; a STOMP tap passes its own uid so a hand-edited/
+        // future multi-amp file cycles the amp actually mapped to the
+        // switch that was tapped, not whichever amp happens to be first.
+        if (targetUid.isNotEmpty () && juce::String (it.uid) != targetUid) continue;
         if (it.channels.empty ()) return;
         const std::string ampUid = it.uid;
         const int prevChannel = it.activeChannel;

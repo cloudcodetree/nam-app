@@ -335,8 +335,13 @@ private:
     void wirePerformView ();                        // performView() callbacks (AppShellPerform.cpp)
     void enterPerform ();                           // apply activeModel/IrToneId if not live
     void applyScene (int stackIdx, int sceneIdx);   // SCENES switch tap
-    void applyAmpCycle (int stackIdx);              // AMP switch tap
-    void stepPerformStack (int delta);              // setlist ‹ › / NEXT ▸ switch
+    // AMP switch tap (SCENES mode) / amp-mapped STOMP switch tap. `targetUid`
+    // empty = first amp in the chain (SCENES mode's onAmpCycle, matching the
+    // Phase A one-amp-per-stack cap); non-empty = that specific amp uid (a
+    // STOMP tap), so a hand-edited/future multi-amp file cycles the amp the
+    // switch is actually mapped to, not whichever amp happens to be first.
+    void applyAmpCycle (int stackIdx, juce::String targetUid = {});
+    void stepPerformStack (int delta);   // setlist ‹ › / NEXT ▸ switch
 
     // One in-flight nam::ToneInfo load at a time; a request that arrives
     // mid-flight parks in the slot matching its resource type (model vs IR,

@@ -55,13 +55,31 @@ direction is chosen, reversed, or a constraint is discovered.
   whichever tab(s) are actually disabled); the STOMP cell's amp sub-label
   now falls back to the item's own title when `channels` is empty (a
   hand-edited/future-version-file case, unreachable from any in-app flow
-  today) instead of painting blank. One MINOR left deliberately
-  unfixed and tracked: a Cab item's `fs` field isn't zeroed on load, so a
-  hand-edited stacks.json with a stale nonzero cab `fs` still occupies a
-  STOMP slot with no item-sheet control left to clear it -- the reviewer
-  confirmed no in-app write path can produce this today (the sheet no
-  longer offers FS pills for a Cab going forward), so it's noted rather
-  than given its own `StackModel::parse` migration step.
+  today) instead of painting blank.
+  **Review round 2** (same-day, VERDICT PASS, no BLOCKER) re-scrutinized
+  the round-1 "cab fs not zeroed" MINOR and escalated it to MAJOR: it's a
+  data-migration bug, not a UI gap -- a stacks.json written by the PRIOR
+  build (before the sheet stopped offering cab FS pills) can already hold
+  `{"type":"cab","fs":4}` on a real device, and nothing migrated it, so
+  the slot was permanently unclearable. Fixed with a TDD test first
+  (`tests/test_stack_model.cpp`, red before the fix): `StackModel::
+  itemFromJson` now zeroes `fs` for any parsed `GearType::Cab` item --
+  parse() is the one choke point every persisted file (v1 or v2) flows
+  through, so this closes the gap for hand-edited files too, not just the
+  UI-reachable case. Also fixed a MINOR from the same pass: `onStompTap`'s
+  single-channel guard tested the TAPPED amp but `applyAmpCycle` cycled
+  the FIRST amp in the chain -- divergent only for a hand-edited/future
+  multi-amp file (canAdd caps Add at one amp today), but cheap to close:
+  `applyAmpCycle` takes an optional `targetUid` (empty = first-amp,
+  preserving the SCENES-mode AMP cell's behavior; STOMP now passes its own
+  uid). Two more round-2 MINORs logged, not fixed: a toast/no-revert
+  mismatch when an unrelated EARLIER stack is removed mid-scene-load
+  (pre-existing baseline behavior, not a regression from this batch); and
+  the nav-bar's few px of dead space beside the orb falling through to
+  `show(Screen::Play)` now also discards an open wizard with no confirm
+  (same fallback existed pre-batch, this batch's discard-on-nav-away
+  policy just added a consequence to it) -- both are real but small
+  enough to track rather than block on.
 - **2026-08-15** Pre-launch hardening batch landed (9df1dc9..8a759c5, 5
   commits): `Stack.uid` replacing every (index,name) async revalidation
   with (index,uid) (TDD, `StackModel::nextStackUid`/`assignMissingStackUids`

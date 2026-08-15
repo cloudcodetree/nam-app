@@ -84,6 +84,48 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     REQUIRE(stacks2[0].routing == Stack::Routing::AB);
 }
 
+TEST_CASE("StackModel parse zeroes fs on a Cab item -- no UI can clear a stale one") {
+    // A cab footswitch is meaningless (nothing in the chain acts on it) and
+    // the item sheet no longer offers FS pills for a Cab -- but a file
+    // written by a PRIOR build (or hand-edited) can still carry a nonzero
+    // cab fs, which would otherwise permanently occupy a STOMP slot with no
+    // in-app control left to clear it. parse() is the one choke point every
+    // persisted file flows through, so it normalizes this on load rather
+    // than leaving corrupt-shaped old state to a UI that can no longer fix
+    // it. Pedal/Amp/Post fs values must survive untouched.
+    static const char* fixture = R"JSON(
+    {
+      "version": 2,
+      "stacks": [
+        {
+          "name": "Legacy Rig",
+          "uid": "s1",
+          "chain": [
+            {"uid": "i1", "type": "cab", "fs": 4},
+            {"uid": "i2", "type": "pedal", "fs": 2},
+            {"uid": "i3", "type": "amp", "fs": 1, "channels": [{"toneId":"a","title":"A"}]}
+          ]
+        }
+      ]
+    }
+    )JSON";
+
+    auto stacks = StackModel::parse(fixture);
+    REQUIRE(stacks.size() == 1);
+    const auto& chain = stacks[0].chain;
+    REQUIRE(chain.size() == 3);
+    REQUIRE(chain[0].type == GearType::Cab);
+    REQUIRE(chain[0].fs == 0);   // zeroed on load, not the file's stale 4
+    REQUIRE(chain[1].fs == 2);   // pedal untouched
+    REQUIRE(chain[2].fs == 1);   // amp untouched
+
+    // Re-serializing also writes the normalized (zeroed) value, not the
+    // original 4 -- a save after load never resurrects the stale slot.
+    auto out = StackModel::serialize(stacks);
+    json reparsed = json::parse(out);
+    REQUIRE(reparsed["stacks"][0]["chain"][0]["fs"] == 0);
+}
+
 TEST_CASE("StackModel v1 migration maps fixed slots to ordered chain") {
     // Exact shipped shape from AppShell::saveStacksState: top-level ARRAY of
     // {"name","slots":[six {"id","title","format"}]}, slot order

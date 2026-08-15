@@ -57,6 +57,12 @@ ChainItem itemFromJson(const json& cj) {
     it.format = cj.value("format", std::string());
     it.gearTag = cj.value("gearTag", std::string());
     it.fs = cj.value("fs", 0);
+    // A cab footswitch is meaningless (nothing in the chain acts on it) and
+    // the item sheet no longer offers FS pills for a Cab -- zero it here so
+    // a file written by a prior build (or hand-edited) can't leave a stale
+    // fs permanently occupying a STOMP slot with no UI left to clear it.
+    // parse() is the one choke point every persisted file flows through.
+    if (it.type == GearType::Cab) it.fs = 0;
     it.bypassed = cj.value("bypassed", false);
     if (cj.contains("channels") && cj.at("channels").is_array())
         for (const auto& ch : cj.at("channels"))
