@@ -51,8 +51,33 @@ void AppShell::wirePerformView () {
     perf.onPrevStack = [this] { stepPerformStack (-1); };
 }
 
+bool AppShell::findLocalEntry (const nam::ToneInfo& tone, nam::LibraryEntry& out) const {
+    if (tone.id.empty ()) return false;
+    const bool isIr = (tone.format == "ir");
+    if (isIr) {
+        if (!getIrs_) return false;
+        for (auto& e : getIrs_ ())
+            if (e.id == tone.id) {
+                out = e;
+                return true;
+            }
+    } else {
+        if (!getModels_) return false;
+        for (auto& e : getModels_ ())
+            if (e.id == tone.id) {
+                out = e;
+                return true;
+            }
+    }
+    return false;
+}
+
 void AppShell::requestToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail) {
-    if (stackIdx < 0 || stackIdx >= (int)stackList_.size () || !svc_.loadTone) return;
+    // A local match doesn't need svc_.loadTone at all (see startToneLoad) --
+    // only bail here for the lack of BOTH a local entry and a network route.
+    nam::LibraryEntry probe;
+    if (stackIdx < 0 || stackIdx >= (int)stackList_.size ()) return;
+    if (!findLocalEntry (tone, probe) && !svc_.loadTone) return;
     if (performApplyInFlight_) {
         // Keyed by resource type so a model request and an IR request that
         // both arrive mid-flight (enterPerform's model-then-IR pair racing
@@ -71,8 +96,8 @@ void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<vo
     const auto toneId = tone.id;
     const auto title = tone.title;
     const auto format = tone.format;
-    svc_.loadTone (tone, [this, stackIdx, stackName, toneId, title, format, onFail] (bool ok,
-                                                                                     juce::String) {
+    auto onDone = [this, stackIdx, stackName, toneId, title, format, onFail] (bool ok,
+                                                                              juce::String) {
         performApplyInFlight_ = false;
         // Re-validate: the stack this load was for may have been
         // removed (or the index reused by a different one) while the
@@ -120,7 +145,30 @@ void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<vo
             return true;   // a load is now in flight again; stop here
         };
         if (!drain (pendingModelApply_)) drain (pendingIrApply_);
-    });
+    };
+
+    // Wizard-built items store a LibraryEntry filename as toneId (see
+    // decisions.md) -- route those through the synchronous local
+    // model/IR load (instant, offline) instead of handing a filename to
+    // svc_.loadTone, which treats every id as a TONE3000 tone id. Resolve
+    // the SAME completion/pending-drain machinery a network load would, so
+    // the in-flight/pending state doesn't desync. An id that no longer
+    // matches (entry deleted from the library) falls through to the
+    // network route below, which fails on the bogus id and hits the
+    // existing failure toast/revert.
+    nam::LibraryEntry local;
+    if (findLocalEntry (tone, local)) {
+        if (format == "ir") {
+            if (loadIr_) loadIr_ (local);
+        } else if (loadModel_) loadModel_ (local);
+        onDone (true, {});
+        return;
+    }
+    if (!svc_.loadTone) {
+        onDone (false, {});
+        return;
+    }
+    svc_.loadTone (tone, onDone);
 }
 
 void AppShell::enterPerform () {

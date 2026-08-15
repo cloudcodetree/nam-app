@@ -353,6 +353,14 @@ private:
     PendingToneApply pendingModelApply_, pendingIrApply_;
     void requestToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
     void startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
+    // Wizard-built chain items store a LibraryEntry id (filename) in
+    // ChainItem::toneId, not a TONE3000 tone id -- see decisions.md. Looks
+    // tone.id up against the local library (models via getModels_, IRs via
+    // getIrs_, picked by tone.format) so startToneLoad can route those
+    // loads synchronously/offline instead of handing a filename to
+    // svc_.loadTone. False (out untouched) if no getter is wired or no
+    // entry matches.
+    bool findLocalEntry (const nam::ToneInfo& tone, nam::LibraryEntry& out) const;
 
     bool navHidden_ = false;   // PERFORM stage view; see setNavHidden
     void pushPairChoices ();   // PAIR row matches the card's gear

@@ -3,6 +3,20 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Critical fix: wizard-built stacks store a `LibraryEntry`
+  id (filename, e.g. `keep_75774.nam`) in `ChainItem::toneId` by design —
+  they're inherently local (`LibraryEntry` has no TONE3000 tone id field).
+  PERFORM's apply path (`AppShell::startToneLoad`) now routes by id kind
+  instead of changing what the wizard stores: a new `findLocalEntry` checks
+  the id against the local library (models via `getModels_`, IRs via
+  `getIrs_`, picked by `tone.format`) before touching `svc_.loadTone`; a
+  match applies synchronously via `loadModel_`/`loadIr_` and resolves the
+  SAME completion/pending-drain machinery a network load would, so the
+  in-flight/pending state never desyncs. No match (real TONE3000 numeric
+  id, or a local id whose entry was since deleted) falls through to the
+  existing `svc_.loadTone` route unchanged. The two id spaces can't
+  collide: `LibraryEntry::id` is always `keep_<id>.nam` / `ir_<id>.nam`,
+  never a bare TONE3000 id.
 - **2026-08-15** Stacks Phase A final-review fix round: (1) `AppShell::show()`
   clears `liveModelToneId_`/`liveIrToneId_` whenever Play becomes the nav
   target, since only PERFORM's own applies updated them before and a
