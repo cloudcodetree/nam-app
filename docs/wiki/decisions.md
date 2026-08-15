@@ -3,6 +3,33 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Stack detail's PERFORM tab (Task 4) is live: on-screen
+  SCENES/STOMP switch grid, no MIDI (separate future plan). Engine truth
+  stays ONE model + ONE IR — a scene/AMP tap is audible only when the
+  target toneId differs from what `AppShell` tracks as actually live
+  (`liveModelToneId_`/`liveIrToneId_`, updated only by PERFORM's own
+  applies); the bypass map + activeScene + the amp's activeChannel index
+  are STORED-state writes that apply immediately regardless of the load
+  outcome (Phase A has no multi-pedal DSP chain, so bypass is visual-only),
+  with activeScene+activeChannel reverted together on a failed scene load.
+  One `nam::ToneInfo` load in flight at a time; a tap mid-flight replaces
+  the single pending slot (last tap wins) rather than queuing per-resource.
+  Entering PERFORM (including re-entry via the setlist ‹ › arrows) applies
+  the stack's active model/IR if not already live, so a resource that
+  failed to load keeps retrying on each re-entry until it succeeds.
+  Resolved an ambiguity in the visual spec: the setlist header's ‹ prev /
+  next › are setlist navigation (`onPrevStack`/`onNextStack`), separate
+  from a dedicated ≥44px ‹ exit chevron (`onExit`) that returns to EDIT —
+  the spec's own open question #8 flagged the exit target as possibly too
+  small/ambiguous, so this splits it into its own affordance rather than
+  overloading prev. PERFORM hides the bottom nav entirely
+  (`AppShell::setNavHidden`, an explicit stage-view exception): derived
+  fresh from the target screen on every `show()` call plus set directly by
+  `StackDetailScreen::onTabChanged`, so any exit path (tab switch, back,
+  paywall, screen navigation) restores it without scattering restore calls.
+  Back-button chain: paywall → tuner → Detail overlay → **PERFORM → EDIT**
+  → Detail → Home → pop-to-Play (the new PERFORM step slots in right after
+  the existing overlay-close check, ahead of the Detail→Home pop).
 - **2026-08-15** Stack deletion now lives in Detail → EDIT's guided view: a
   REMOVE STACK row at the bottom opens an inline confirm ("Remove
   '{name}'?" / REMOVE / CANCEL); confirming erases from `AppShell::stackList_`,

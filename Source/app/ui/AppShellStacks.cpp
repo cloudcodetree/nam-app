@@ -54,7 +54,7 @@ void AppShell::pushStacks () {
         // reflected immediately without re-navigating.
         const int idx = stacksDetail_->currentIndex ();
         if (idx >= 0 && idx < (int)stackList_.size ())
-            stacksDetail_->setStack (stackList_[(size_t)idx], idx);
+            stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
     }
 }
 
@@ -66,7 +66,7 @@ void AppShell::openStackDetail (int idx, bool perform) {
     stacksDetail_->picker ().close ();
     stacksDetail_->itemSheet ().close ();
     stacksShowDetail_ = true;
-    stacksDetail_->setStack (stackList_[(size_t)idx], idx);
+    stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
     stacksDetail_->selectTab (perform);
     show (Screen::Stacks);
 }
@@ -141,6 +141,7 @@ void AppShell::wireStacksScreens () {
     };
 
     wireGearPicker ();
+    wirePerformView ();   // PERFORM tab: AppShellPerform.cpp
 }
 
 void AppShell::openGearPicker (nam::GearType hint, GearPickerMode mode, juce::String targetUid) {

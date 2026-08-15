@@ -11,6 +11,7 @@ const juce::String kBackGlyph = juce::String::fromUTF8 ("\xE2\x80\xB9");   // �
 StackDetailScreen::StackDetailScreen () {
     setOpaque (true);
     addAndMakeVisible (editView_);
+    addChildComponent (performView_);
     addChildComponent (picker_);
     addChildComponent (itemSheet_);
     wireChildren ();
@@ -57,10 +58,11 @@ bool StackDetailScreen::closeTopOverlay () {
     return editView_.closeConfirm ();
 }
 
-void StackDetailScreen::setStack (const nam::Stack& stack, int idx) {
+void StackDetailScreen::setStack (const nam::Stack& stack, int idx, int count) {
     stack_ = stack;
     idx_ = idx;
     editView_.setStack (stack_, idx_);
+    performView_.setStack (stack_, idx_ + 1, count);
     if (itemSheet_.isVisible ()) {
         // Keep an open sheet in sync across a repush (e.g. right after a
         // bypass/FS/channel edit) so its pills reflect the new state; if
@@ -75,14 +77,20 @@ void StackDetailScreen::setStack (const nam::Stack& stack, int idx) {
 
 void StackDetailScreen::selectTab (bool perform) {
     performTab_ = perform;
-    editView_.setVisible (!performTab_);   // PERFORM shows its own placeholder, not EDIT's content
+    editView_.setVisible (!performTab_);
+    performView_.setVisible (performTab_);
     if (performTab_) {
         // Leaving EDIT: none of its overlays (including the inline REMOVE
         // STACK confirm) should survive into PERFORM or a later re-entry.
         picker_.close ();
         itemSheet_.close ();
         editView_.closeConfirm ();
+        performView_.toFront (false);   // full-bleed: covers this screen's own header/tabs
     }
+    // Unconditional even when `perform` didn't change value -- the setlist
+    // ‹ › / NEXT switches re-select PERFORM on a DIFFERENT stack index, and
+    // the owner (AppShellStacks.cpp) relies on this firing every call to
+    // re-run its enter-PERFORM apply for the new stack.
     if (onTabChanged) onTabChanged (performTab_);
     repaint ();
 }
@@ -103,11 +111,17 @@ void StackDetailScreen::layout () {
     editView_.setBounds (bodyRect_);
     picker_.setBounds (getLocalBounds ());
     itemSheet_.setBounds (getLocalBounds ());
+    performView_.setBounds (getLocalBounds ());   // full-bleed, not just bodyRect_
 }
 
 void StackDetailScreen::resized () { layout (); }
 
 void StackDetailScreen::paint (juce::Graphics& g) {
+    // PERFORM is full-bleed: performView_ paints its own hero background,
+    // setlist header, and everything else -- this screen's own brand
+    // header/back-chevron/tab pill would just sit underneath it unseen.
+    if (performTab_) return;
+
     paintHeroBackground (g, getLocalBounds ());
     drawStacksBrandHeader (g, headerRect_, gearRect_);
 
@@ -128,14 +142,6 @@ void StackDetailScreen::paint (juce::Graphics& g) {
     };
     tabPill (editTabRect_, "EDIT", !performTab_);
     tabPill (performTabRect_, "PERFORM", performTab_);
-
-    if (performTab_) {
-        const juce::String ellipsis = juce::String::fromUTF8 ("\xE2\x80\xA6");
-        g.setFont (uiFont (13.0f, false));
-        g.setColour (col::inkA (0.35f));
-        g.drawText ("PERFORM " + ellipsis + " coming soon", bodyRect_, juce::Justification::centred,
-                    false);
-    }
 }
 
 void StackDetailScreen::mouseDown (const juce::MouseEvent& e) {

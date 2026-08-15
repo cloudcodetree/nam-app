@@ -119,10 +119,13 @@ if(NAM_BUILD_APP)
             Source/app/ui/StackEditViewPaint.cpp
             Source/app/ui/StackGearPicker.cpp
             Source/app/ui/StackItemSheet.cpp
+            Source/app/ui/StackPerformView.cpp
+            Source/app/ui/StackPerformViewPaint.cpp
             Source/app/ui/TunerScreen.cpp
             Source/app/ui/AppShell.cpp
             Source/app/ui/AppShellChrome.cpp
             Source/app/ui/AppShellStacks.cpp
+            Source/app/ui/AppShellPerform.cpp
             Source/dsp/ToneEngine.cpp
             Source/dsp/PitchDetector.cpp
             Source/dsp/IrCab.cpp

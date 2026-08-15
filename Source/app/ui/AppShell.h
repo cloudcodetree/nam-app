@@ -64,6 +64,12 @@ public:
     // Play (let the OS do the default = leave the app).
     bool handleBackButton ();
 
+    // Stage-view exception: PERFORM hides the bottom nav entirely (full-bleed
+    // switch grid). AppShellChrome.cpp's paint/mouseDown honor this; resized/
+    // contentBounds give the reclaimed strip to whichever screen is showing.
+    // Idempotent -- safe to call with the value already in effect.
+    void setNavHidden (bool hidden);
+
     // TONE3000 / Browse services, owned by the host. Auditioning renders the
     // demo riff through a model; leaving Browse stops the demo automatically.
     using DoneFn = std::function<void (bool, juce::String)>;
@@ -302,7 +308,41 @@ private:
     // then persists + repushes -- the shared tail of every item-sheet edit
     // (bypass/fs/channel). No-ops if the stack or item no longer exists.
     void mutateItem (juce::String uid, std::function<void (nam::ChainItem&)> fn);
-    void openOrbPanel ();      // gear icon on Stacks -> same entry point as the orb tap
+    void openOrbPanel ();   // gear icon on Stacks -> same entry point as the orb tap
+
+    // PERFORM tab apply wiring (AppShellStacks.cpp). Engine truth: ONE model
+    // + ONE IR; a scene/AMP tap is audible only when the target toneId
+    // differs from what's actually live (tracked here by id, not assumed
+    // from stored state -- Play/Browse loads don't update these, so the
+    // first PERFORM entry after using Play may re-load redundantly, which
+    // is harmless). Bypass + activeScene/activeChannel are STORED-state
+    // writes (visual LEDs only in Phase A -- no multi-pedal DSP chain
+    // exists yet) and always apply immediately, independent of whether the
+    // audible load below them succeeds.
+    std::string liveModelToneId_, liveIrToneId_;
+    void wirePerformView ();                        // performView() callbacks (AppShellPerform.cpp)
+    void enterPerform ();                           // apply activeModel/IrToneId if not live
+    void applyScene (int stackIdx, int sceneIdx);   // SCENES switch tap
+    void applyAmpCycle (int stackIdx);              // AMP switch tap
+    void stepPerformStack (int delta);              // setlist ‹ › / NEXT ▸ switch
+
+    // One in-flight nam::ToneInfo load at a time; a request that arrives
+    // mid-flight replaces whatever was pending (last tap wins) rather than
+    // starting a second concurrent svc_.loadTone call.
+    bool performApplyInFlight_ = false;
+    struct PendingToneApply {
+        bool active = false;
+        int stackIdx = -1;
+        juce::String
+            stackName;   // revalidated against by name, same pattern as wireGearPicker's onFetch
+        nam::ToneInfo tone;
+        std::function<void ()> onFail;
+    };
+    PendingToneApply pendingPerformApply_;
+    void requestToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
+    void startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
+
+    bool navHidden_ = false;   // PERFORM stage view; see setNavHidden
     void pushPairChoices ();   // PAIR row matches the card's gear
     std::vector<nam::LibraryEntry> keptModelsSorted () const;
     int cabBuiltinCount_ = 0;   // names beyond this are kept IRs
