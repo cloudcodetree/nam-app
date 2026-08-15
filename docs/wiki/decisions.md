@@ -84,11 +84,16 @@ direction is chosen, reversed, or a constraint is discovered.
   tested the round-2 fixes against a hand-edited multi-amp/uid-less-item
   file and found the remaining gap is real but the reviewer's own read was
   "file for the next batch": `applyAmpCycle`'s `targetUid` overloads empty
-  `juce::String` as both "use first amp" and "a legitimate item uid" (an
-  item with no `"uid"` key parses to `""`, since `assignMissingStackUids`
-  only mints STACK uids, never item ones) -- closing it fully means
-  minting item uids at parse the same way, a bigger change than this
-  batch's scope. Also flagged: cycling a non-Phase-A-reachable second amp
+  `juce::String` as both "use first amp" and "a legitimate item uid" (a
+  v2-parsed item with no `"uid"` key parses to `""` -- v1 migration DOES
+  mint per-stack `"i1".."iN"` for every migrated rig independently
+  (`migrateV1Stack`), so any future fix must NOT be a naive file-wide
+  minting pass layered on top: two v1-migrated stacks both legitimately
+  own `"i1"`, and a global pass would either renumber uids a persisted
+  scene's `pedalBypass` map already keys on, or leave the per-stack scheme
+  half-migrated -- flagged by review round 4 on this same entry). Closing
+  the v2 gap fully means item-uid minting scoped PER STACK on v2 parse
+  specifically, a bigger change than this batch's scope. Also flagged: cycling a non-Phase-A-reachable second amp
   would desync the STOMP label from the single-model engine truth on the
   next re-apply (same "unreachable via `canAdd`'s one-amp cap" carve-out);
   the legacy cab-fs zeroing (round 2) is silent to the end user with no
