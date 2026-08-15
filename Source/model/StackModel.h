@@ -39,6 +39,7 @@ struct Scene {
 };
 
 struct Stack {
+    std::string uid;   // stable per stack, "s1","s2"... assigned by the model
     std::string name;
     enum class Routing { Single, AB, Stereo };
     Routing routing = Routing::Single;
@@ -80,6 +81,11 @@ public:
     static SceneApply sceneApplyPlan(const Stack& stack, int sceneIdx);
 
     static std::string nextUid(const Stack& stack);   // "i{max existing index + 1}"
+    // Unique across the WHOLE file, unlike nextUid (per-stack items) --
+    // callers creating a new stack (wizard save/template pick) must pass the
+    // full stack list so the mint can't collide with an existing stack's uid.
+    static std::string
+    nextStackUid(const std::vector<Stack>& stacks);   // "s{max existing index + 1}"
 };
 
 }   // namespace nam

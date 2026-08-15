@@ -159,6 +159,13 @@ void AppShell::wireCreateWizard () {
     };
     wiz.onFetchIrs = [this] { return getIrs_ ? getIrs_ () : std::vector<nam::LibraryEntry> (); };
     wiz.onSave = [this] (nam::Stack st, juce::String toast) {
+        // Minted here (not by the wizard) since uniqueness needs the full
+        // stackList_ the wizard doesn't have -- existingStackCount alone
+        // could collide with a gap left by an earlier removal (e.g. "s1"
+        // deleted, "s3" remains: a count-based mint would reissue "s3").
+        // Covers both doSave (guided build) and pickTemplate -- both funnel
+        // through this one onSave callback.
+        st.uid = nam::StackModel::nextStackUid (stackList_);
         stackList_.push_back (std::move (st));
         currentStack_ = (int)stackList_.size () - 1;
         saveStacksState ();
@@ -203,16 +210,17 @@ void AppShell::wireGearPicker () {
                 cb (false, {});
                 return;
             }
-            // Captured for the async reply below -- a stack rename can't
-            // happen mid-flight today, but this still catches the stack
-            // having been removed (or the index reused by a different one)
-            // while the network round trip was in flight.
-            const auto capturedName = juce::String (stackList_[(size_t)idx].name);
+            // Captured for the async reply below -- keyed by uid rather than
+            // name so a rename mid-flight isn't mistaken for the stack
+            // having been swapped out; also catches the stack having been
+            // removed (or the index reused by a different one) while the
+            // network round trip was in flight.
+            const auto capturedUid = juce::String (stackList_[(size_t)idx].uid);
             svc_.searchEx (gearSearchParams (type),
-                           [this, idx, capturedName, cb] (bool ok, std::vector<nam::ToneInfo> tones,
-                                                          juce::String) {
+                           [this, idx, capturedUid, cb] (bool ok, std::vector<nam::ToneInfo> tones,
+                                                         juce::String) {
                                if (idx < 0 || idx >= (int)stackList_.size () ||
-                                   juce::String (stackList_[(size_t)idx].name) != capturedName) {
+                                   juce::String (stackList_[(size_t)idx].uid) != capturedUid) {
                                    cb (false, {});
                                    return;
                                }

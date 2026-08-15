@@ -83,22 +83,23 @@ void AppShell::requestToneLoad (int stackIdx, nam::ToneInfo tone, std::function<
         // both arrive mid-flight (enterPerform's model-then-IR pair racing
         // a stack switch) don't collide in one slot -- see AppShell.h.
         auto& slot = (tone.format == "ir") ? pendingIrApply_ : pendingModelApply_;
-        slot = { true, stackIdx, juce::String (stackList_[(size_t)stackIdx].name), std::move (tone),
+        slot = { true, stackIdx, juce::String (stackList_[(size_t)stackIdx].uid), std::move (tone),
                  std::move (onFail) };
         return;
     }
     startToneLoad (stackIdx, std::move (tone), std::move (onFail));
 }
 
-void AppShell::finishToneLoad (int stackIdx, juce::String stackName, std::string toneId,
+void AppShell::finishToneLoad (int stackIdx, juce::String stackUid, std::string toneId,
                                std::string title, std::string format, std::function<void ()> onFail,
                                bool ok) {
     performApplyInFlight_ = false;
     // Re-validate: the stack this load was for may have been removed (or
     // the index reused by a different one) while the round trip was in
-    // flight.
+    // flight. Keyed by uid rather than name -- a rename mid-flight must not
+    // be mistaken for the stack having been swapped out.
     const bool stillValid = stackIdx >= 0 && stackIdx < (int)stackList_.size () &&
-                            juce::String (stackList_[(size_t)stackIdx].name) == stackName;
+                            juce::String (stackList_[(size_t)stackIdx].uid) == stackUid;
     if (ok) {
         if (format == "ir") liveIrToneId_ = toneId;
         else liveModelToneId_ = toneId;
@@ -137,7 +138,7 @@ bool AppShell::drainPendingToneApply (PendingToneApply& slot) {
     // failure.
     const bool pendingValid =
         pending.stackIdx >= 0 && pending.stackIdx < (int)stackList_.size () &&
-        juce::String (stackList_[(size_t)pending.stackIdx].name) == pending.stackName;
+        juce::String (stackList_[(size_t)pending.stackIdx].uid) == pending.stackUid;
     if (!pendingValid) return false;   // dropped -- give the other slot a turn
     startToneLoad (pending.stackIdx, std::move (pending.tone), std::move (pending.onFail));
     return true;   // a load is now in flight again; stop here
@@ -145,7 +146,7 @@ bool AppShell::drainPendingToneApply (PendingToneApply& slot) {
 
 void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail) {
     performApplyInFlight_ = true;
-    const auto stackName = juce::String (stackList_[(size_t)stackIdx].name);
+    const auto stackUid = juce::String (stackList_[(size_t)stackIdx].uid);
     const auto toneId = tone.id;
     const auto title = tone.title;
     const auto format = tone.format;
@@ -164,16 +165,16 @@ void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<vo
         if (format == "ir") {
             if (loadIr_) loadIr_ (local);
         } else if (loadModel_) loadModel_ (local);
-        finishToneLoad (stackIdx, stackName, toneId, title, format, std::move (onFail), true);
+        finishToneLoad (stackIdx, stackUid, toneId, title, format, std::move (onFail), true);
         return;
     }
     if (!svc_.loadTone) {
-        finishToneLoad (stackIdx, stackName, toneId, title, format, std::move (onFail), false);
+        finishToneLoad (stackIdx, stackUid, toneId, title, format, std::move (onFail), false);
         return;
     }
-    svc_.loadTone (tone, [this, stackIdx, stackName, toneId, title, format,
+    svc_.loadTone (tone, [this, stackIdx, stackUid, toneId, title, format,
                           onFail = std::move (onFail)] (bool ok, juce::String) {
-        finishToneLoad (stackIdx, stackName, toneId, title, format, onFail, ok);
+        finishToneLoad (stackIdx, stackUid, toneId, title, format, onFail, ok);
     });
 }
 

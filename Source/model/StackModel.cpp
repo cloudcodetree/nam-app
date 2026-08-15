@@ -105,11 +105,12 @@ json sceneToJson(const Scene& sc) {
     return json{ { "name", sc.name }, { "ampChannel", sc.ampChannel }, { "pedalBypass", pb } };
 }
 
-constexpr std::array<const char*, 5> kStackKeys{ "name", "routing", "chain", "scenes",
-                                                 "activeScene" };
+constexpr std::array<const char*, 6> kStackKeys{ "uid",   "name",   "routing",
+                                                 "chain", "scenes", "activeScene" };
 
 Stack stackFromJson(const json& sj) {
     Stack st;
+    st.uid = sj.value("uid", std::string());
     st.name = sj.value("name", std::string());
     st.routing = routingFromString(sj.value("routing", std::string("single")));
     // Per-item isolation: one malformed chain item (wrong field type) drops
@@ -142,6 +143,7 @@ Stack stackFromJson(const json& sj) {
 
 json stackToJson(const Stack& st) {
     json j = st.extra.is_object() ? st.extra : json::object();
+    j["uid"] = st.uid;
     j["name"] = st.name;
     j["routing"] = routingToString(st.routing);
     json chain = json::array();
@@ -241,14 +243,48 @@ std::vector<Stack> migrateV1(const json& arr) {
     return out;
 }
 
+// --- stack uid minting -------------------------------------------------
+
+// Shared by nextStackUid and assignMissingStackUids: highest "sN" index
+// already present, or 0 if none. Non-numeric/malformed suffixes are ignored
+// rather than thrown on, same tolerance as ChainItem's nextUid.
+int maxStackUidIndex(const std::vector<Stack>& stacks) {
+    int maxN = 0;
+    for (const auto& st : stacks) {
+        if (st.uid.size() > 1 && st.uid[0] == 's') {
+            try {
+                int n = std::stoi(st.uid.substr(1));
+                if (n > maxN) maxN = n;
+            } catch (const std::exception&) {
+                // non-numeric suffix; ignore
+            }
+        }
+    }
+    return maxN;
+}
+
+// A stack loaded from a file that predates Stack::uid (any v1 file, or a v2
+// file written before this field existed) has an empty uid -- mint one for
+// every such stack, monotonic against the highest index already present so
+// an auto-minted uid can never collide with an explicit one elsewhere in
+// the same file (see the "Has Uid" mixed-fixture test).
+void assignMissingStackUids(std::vector<Stack>& stacks) {
+    int nextN = maxStackUidIndex(stacks);
+    for (auto& st : stacks)
+        if (st.uid.empty()) st.uid = "s" + std::to_string(++nextN);
+}
+
 }   // namespace
 
 std::vector<Stack> StackModel::parse(const std::string& jsonText) {
     try {
         json root = json::parse(jsonText);
-        if (root.is_array()) return migrateV1(root);
-        if (root.is_object() && root.value("version", 0) == 2) return parseV2(root);
-        return {};
+        std::vector<Stack> out;
+        if (root.is_array()) out = migrateV1(root);
+        else if (root.is_object() && root.value("version", 0) == 2) out = parseV2(root);
+        else return {};
+        assignMissingStackUids(out);
+        return out;
     } catch (const std::exception&) { return {}; }
 }
 
@@ -331,6 +367,10 @@ std::string StackModel::nextUid(const Stack& stack) {
         }
     }
     return "i" + std::to_string(maxN + 1);
+}
+
+std::string StackModel::nextStackUid(const std::vector<Stack>& stacks) {
+    return "s" + std::to_string(maxStackUidIndex(stacks) + 1);
 }
 
 }   // namespace nam

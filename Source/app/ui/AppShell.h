@@ -345,8 +345,11 @@ private:
     struct PendingToneApply {
         bool active = false;
         int stackIdx = -1;
-        juce::String
-            stackName;   // revalidated against by name, same pattern as wireGearPicker's onFetch
+        // Revalidated against by uid (not name -- a rename must not be
+        // mistaken for a different stack, and a uid is stable across a
+        // freeform reorder or edit the way an index alone is not), same
+        // pattern as wireGearPicker's onFetch.
+        juce::String stackUid;
         nam::ToneInfo tone;
         std::function<void ()> onFail;
     };
@@ -366,9 +369,8 @@ private:
     // live-id/persist/pending-drain machinery. Pulled out of startToneLoad
     // as its own named function (was an inline lambda) to keep startToneLoad
     // itself under the ~60-line function-size rule.
-    void finishToneLoad (int stackIdx, juce::String stackName, std::string toneId,
-                         std::string title, std::string format, std::function<void ()> onFail,
-                         bool ok);
+    void finishToneLoad (int stackIdx, juce::String stackUid, std::string toneId, std::string title,
+                         std::string format, std::function<void ()> onFail, bool ok);
     // Starts the next parked request in `slot`, if any and still valid (the
     // stack it targeted may have vanished while parked). Returns true if a
     // load was started (the OTHER slot gets no turn this round -- it drains

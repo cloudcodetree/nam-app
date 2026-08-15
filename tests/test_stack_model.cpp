@@ -12,6 +12,7 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
       "stacks": [
         {
           "name": "My Rig",
+          "uid": "s7",
           "routing": "ab",
           "notes": "custom-stack-field",
           "chain": [
@@ -45,6 +46,7 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     REQUIRE(stacks.size() == 1);
     const auto& st = stacks[0];
     REQUIRE(st.name == "My Rig");
+    REQUIRE(st.uid == "s7");   // explicit uid preserved verbatim, not re-minted
     REQUIRE(st.routing == Stack::Routing::AB);
     REQUIRE(st.activeScene == 0);
     REQUIRE(st.chain.size() == 1);
@@ -69,12 +71,14 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     auto out = StackModel::serialize(stacks);
     json reparsed = json::parse(out);
     REQUIRE(reparsed["version"] == 2);
+    REQUIRE(reparsed["stacks"][0]["uid"] == "s7");
     // Unknown keys on both stack and item objects survive the round trip.
     REQUIRE(reparsed["stacks"][0]["notes"] == "custom-stack-field");
     REQUIRE(reparsed["stacks"][0]["chain"][0]["vendorExtra"] == 42);
 
     auto stacks2 = StackModel::parse(out);
     REQUIRE(stacks2.size() == 1);
+    REQUIRE(stacks2[0].uid == "s7");   // still preserved after a second round trip
     REQUIRE(stacks2[0].chain[0].activeChannel == 1);
     REQUIRE(stacks2[0].chain[0].channels.size() == 2);
     REQUIRE(stacks2[0].routing == Stack::Routing::AB);
@@ -104,6 +108,7 @@ TEST_CASE("StackModel v1 migration maps fixed slots to ordered chain") {
     REQUIRE(stacks.size() == 1);
     const auto& st = stacks[0];
     REQUIRE(st.name == "Old Rig");
+    REQUIRE(st.uid == "s1");   // v1 files carry no stack uid; parse mints one
     // Empty OUTBOARD slot skipped -> 5 items, not 6.
     REQUIRE(st.chain.size() == 5);
 
@@ -399,6 +404,9 @@ TEST_CASE("StackModel v1 migration: a malformed slot is skipped, its stack and o
     REQUIRE(stacks[1].name == "Good Rig");
     REQUIRE(stacks[1].chain.size() == 1);
     REQUIRE(stacks[1].chain[0].toneId == "amp-z");
+    // Both v1-migrated stacks get unique, monotonic stack uids.
+    REQUIRE(stacks[0].uid == "s1");
+    REQUIRE(stacks[1].uid == "s2");
 }
 
 TEST_CASE(
@@ -423,6 +431,53 @@ TEST_CASE(
     auto stacks = StackModel::parse(fixture);
     REQUIRE(stacks.size() == 1);
     REQUIRE(stacks[0].name == "Good Rig");
+}
+
+TEST_CASE("StackModel parse mints stack uids when absent, unique within the file") {
+    static const char* fixture = R"JSON(
+    {
+      "version": 2,
+      "stacks": [
+        {"name": "No Uid A", "chain": []},
+        {"name": "Has Uid", "uid": "s5", "chain": []},
+        {"name": "No Uid B", "chain": []}
+      ]
+    }
+    )JSON";
+    auto stacks = StackModel::parse(fixture);
+    REQUIRE(stacks.size() == 3);
+    REQUIRE(stacks[1].uid == "s5");   // explicit uid left untouched
+    REQUIRE_FALSE(stacks[0].uid.empty());
+    REQUIRE_FALSE(stacks[2].uid.empty());
+    REQUIRE(stacks[0].uid != stacks[1].uid);
+    REQUIRE(stacks[0].uid != stacks[2].uid);
+    REQUIRE(stacks[1].uid != stacks[2].uid);
+    // Auto-minted uids must not collide with the explicit "s5" already
+    // present -- same monotonic-vs-highest-existing-index convention as
+    // ChainItem uids (nextUid).
+    auto idx = [](const std::string& uid) { return std::stoi(uid.substr(1)); };
+    REQUIRE(idx(stacks[0].uid) > 5);
+    REQUIRE(idx(stacks[2].uid) > 5);
+}
+
+TEST_CASE("StackModel nextStackUid is monotonic based on the highest existing stack uid") {
+    std::vector<Stack> stacks;
+    REQUIRE(StackModel::nextStackUid(stacks) == "s1");
+
+    Stack a;
+    a.uid = "s1";
+    stacks.push_back(a);
+    REQUIRE(StackModel::nextStackUid(stacks) == "s2");
+
+    Stack b;
+    b.uid = "s5";
+    stacks.push_back(b);
+    REQUIRE(StackModel::nextStackUid(stacks) == "s6");
+
+    Stack c;
+    c.uid = "s3";
+    stacks.push_back(c);
+    REQUIRE(StackModel::nextStackUid(stacks) == "s6");   // still based on max (s5), not count
 }
 
 TEST_CASE("StackModel serialize never throws on invalid UTF-8 in a string field") {
