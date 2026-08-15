@@ -12,6 +12,15 @@ direction is chosen, reversed, or a constraint is discovered.
   PERFORM). Why: the new design's ordered/multi-amp/scene model has no
   fixed-slot equivalent — a rewrite, not a restyle (see
   docs/superpowers/specs/2026-08-14-stacks-redesign-notes.md).
+- **2026-08-15** Stacks Home ships with NO stack-delete affordance (v1's
+  per-row "×" has no replacement yet) — flagged MAJOR by the Task 2
+  adversarial review since "+ NEW STACK" appends+persists unconditionally
+  and, once `kSoftPaywall` flips on, `Entitlements::canSaveRig` counts
+  every accidental create against the free-rig cap. Known and tracked, not
+  fixed in Task 2: the binding visual spec itself has no delete control in
+  the captured Home/Detail markup (notes doc "Open questions" #2) — where
+  it lives (swipe-to-delete? Detail overflow?) is a design decision for a
+  later task, not a Task 2 coding gap.
 - **2026-08-14** `StackModel::ChainItem::gearTag` for the SPACES slot is
   `"space"` (singular), not `"spaces"`. Why: the Phase A plan
   (docs/superpowers/plans/2026-08-14-stacks-redesign-phase-a.md:42) and its

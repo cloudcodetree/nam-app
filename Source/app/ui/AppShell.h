@@ -282,7 +282,6 @@ private:
     // orchestration (show/resized/handleBackButton) stays here.
     std::vector<nam::Stack> stackList_;
     int currentStack_ = 0;            // SETLIST "current" chip (session-only)
-    int stacksDetailIdx_ = -1;        // index open in Detail; -1 = none
     bool stacksShowDetail_ = false;   // which child is visible under Screen::Stacks
     void loadStacksState ();
     void saveStacksState ();

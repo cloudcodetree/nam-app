@@ -5,8 +5,6 @@ namespace nam::ui {
 
 namespace {
 
-const juce::String kDotSep = juce::String::fromUTF8 ("\xC2\xB7");   // ·
-
 // Self-deleting toast body: a Timer that fires once and deletes its own
 // component. No other code owns this pointer.
 class ToastView : public juce::Component, private juce::Timer {

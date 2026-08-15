@@ -10,7 +10,6 @@
 void AppShell::loadStacksState () {
     stackList_.clear ();
     currentStack_ = 0;
-    stacksDetailIdx_ = -1;
     if (!svc_.loadStacksJson) return;
     stackList_ = nam::StackModel::parse (svc_.loadStacksJson ().toStdString ());
 }
@@ -28,7 +27,6 @@ void AppShell::pushStacks () {
 
 void AppShell::openStackDetail (int idx, bool perform) {
     if (idx < 0 || idx >= (int)stackList_.size () || stacksDetail_ == nullptr) return;
-    stacksDetailIdx_ = idx;
     stacksShowDetail_ = true;
     stacksDetail_->setStack (stackList_[(size_t)idx], idx);
     stacksDetail_->selectTab (perform);
