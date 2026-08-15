@@ -27,6 +27,26 @@ nam::ToneInfo makeToneInfo (std::string id, std::string title, std::string forma
 const juce::String kEmDash = juce::String::fromUTF8 ("\xE2\x80\x94");   // —
 }   // namespace
 
+// See AppShell.h's ApplyTimeout comment: one-shot 30s juce::Timer behind the
+// arm()/cancel() interface, same shape as AndroidBilling's PurchaseTimeout.
+// Message thread only (juce::Timer itself requires it).
+struct AppShell::ApplyTimeoutImpl : AppShell::ApplyTimeout, private juce::Timer {
+    explicit ApplyTimeoutImpl (AppShell& o) : owner (o) {}
+    AppShell& owner;
+    int gen = 0;
+
+    void arm (int generation) override {
+        gen = generation;
+        startTimer (30000);
+    }
+    void cancel () override { stopTimer (); }
+
+    void timerCallback () override {
+        stopTimer ();
+        owner.handleApplyTimeout (gen);
+    }
+};
+
 void AppShell::wirePerformView () {
     stacksDetail_->onTabChanged = [this] (bool perform) {
         setNavHidden (perform);
@@ -146,6 +166,7 @@ bool AppShell::drainPendingToneApply (PendingToneApply& slot) {
 
 void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail) {
     performApplyInFlight_ = true;
+    ++performApplyGen_;
     const auto stackUid = juce::String (stackList_[(size_t)stackIdx].uid);
     const auto toneId = tone.id;
     const auto title = tone.title;
@@ -172,10 +193,35 @@ void AppShell::startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<vo
         finishToneLoad (stackIdx, stackUid, toneId, title, format, std::move (onFail), false);
         return;
     }
-    svc_.loadTone (tone, [this, stackIdx, stackUid, toneId, title, format,
+    // Real async route: arm the 30s watchdog so a callback that never fires
+    // (network hang) can't wedge performApplyInFlight_ -- and with it,
+    // PERFORM -- forever. inFlightApply_ carries what handleApplyTimeout
+    // needs to resolve this exact attempt as a failure through the SAME
+    // finishToneLoad path (toast + revert + drain pendings) a real failed
+    // callback would take.
+    const int gen = performApplyGen_;
+    inFlightApply_ = { true, stackIdx, stackUid, tone, onFail };
+    if (applyTimeout_ == nullptr) applyTimeout_ = std::make_unique<ApplyTimeoutImpl> (*this);
+    applyTimeout_->arm (gen);
+    svc_.loadTone (tone, [this, gen, stackIdx, stackUid, toneId, title, format,
                           onFail = std::move (onFail)] (bool ok, juce::String) {
+        // Stale: the watchdog (or, after it resolved this attempt as a
+        // failure and drained a pending request, that NEW attempt) already
+        // settled this slot -- a late real callback must not act on state
+        // that's since moved on. Only cancel the timer once confirmed
+        // current; it may otherwise belong to that newer attempt.
+        if (gen != performApplyGen_) return;
+        applyTimeout_->cancel ();
         finishToneLoad (stackIdx, stackUid, toneId, title, format, onFail, ok);
     });
+}
+
+void AppShell::handleApplyTimeout (int generation) {
+    if (generation != performApplyGen_) return;   // the real callback already resolved this attempt
+    auto req = std::move (inFlightApply_);
+    inFlightApply_ = {};
+    finishToneLoad (req.stackIdx, req.stackUid, req.tone.id, req.tone.title, req.tone.format,
+                    std::move (req.onFail), false);
 }
 
 void AppShell::enterPerform () {

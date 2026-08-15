@@ -363,6 +363,25 @@ private:
     PendingToneApply pendingModelApply_, pendingIrApply_;
     void requestToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
     void startToneLoad (int stackIdx, nam::ToneInfo tone, std::function<void ()> onFail);
+    // 30s watchdog: if svc_.loadTone's async callback never fires (a network
+    // hang), performApplyInFlight_ would otherwise wedge forever and PERFORM
+    // with it. Mirrors AndroidBilling's PurchaseTimeout shape (owner-backed
+    // one-shot juce::Timer behind an arm()/cancel() interface, so this
+    // header's unique_ptr destructor doesn't need the Timer-deriving impl to
+    // be complete) -- arm() here additionally carries the attempt's
+    // generation so a late real callback and a timeout firing can't both act
+    // on the same request. Race-safe: whichever resolves first wins (via
+    // performApplyGen_), the other is a no-op. Message thread only.
+    struct ApplyTimeout {
+        virtual ~ApplyTimeout () = default;
+        virtual void arm (int generation) = 0;   // (re)start the 30s countdown
+        virtual void cancel () = 0;              // stop it (the real callback already landed)
+    };
+    struct ApplyTimeoutImpl;   // defined in AppShellPerform.cpp; needs owner access
+    std::unique_ptr<ApplyTimeout> applyTimeout_;
+    int performApplyGen_ = 0;          // bumped once per startToneLoad attempt
+    PendingToneApply inFlightApply_;   // network-route payload the watchdog resolves on timeout
+    void handleApplyTimeout (int generation);   // ApplyTimeoutImpl's timerCallback
     // Wizard-built chain items store a LibraryEntry id (filename) in
     // ChainItem::toneId, not a TONE3000 tone id -- see decisions.md. Looks
     // tone.id up against the local library (models via getModels_, IRs via
