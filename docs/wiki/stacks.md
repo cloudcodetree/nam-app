@@ -29,10 +29,13 @@ channels; scenes snapshot a pedal-bypass map plus an amp channel.
 ## PERFORM tab
 
 - `StackDetailScreen`'s PERFORM tab hosts `StackPerformView`
-  (`Source/app/ui/StackPerformView.h/.cpp` + `...Paint.cpp`), a full-bleed
-  stage view — it's given the whole screen, not just the body, and none of
-  Detail's own brand header/back-chevron/tab pill paints or hit-tests while
-  it's showing.
+  (`Source/app/ui/StackPerformView.h/.cpp` + `...Paint.cpp`), full-bleed
+  *within Detail's own area* — it's given Detail's whole bounds, not just
+  the body, so none of Detail's own brand header/back-chevron/tab pill
+  paints or hit-tests while it's showing. The global bottom nav is
+  unaffected and stays visible/tappable, same as every other screen (see
+  decisions.md, 2026-08-15) — Detail itself still lays out inside
+  `AppShell::contentBounds()`.
 - Apply wiring lives in `Source/app/ui/AppShellPerform.cpp`
   (`AppShell::wirePerformView`/`enterPerform`/`applyScene`/`applyAmpCycle`/
   `stepPerformStack`/`requestToneLoad`/`startToneLoad`), split out of
@@ -61,9 +64,9 @@ channels; scenes snapshot a pedal-bypass map plus an amp channel.
   Phase A) and apply immediately, independent of the audible load; on a
   failed scene load, `activeScene` and the amp's `activeChannel` are
   reverted together (bypass is not, since it never depended on the load).
-- `AppShell::setNavHidden` (`AppShellChrome.cpp`) hides the bottom nav for
-  PERFORM's full-bleed stage view; see decisions.md for how it's kept in
-  sync across every exit path.
+- The bottom nav is persistent on PERFORM (as on every screen) by Chris's
+  direction; the `setNavHidden` mechanism that used to hide it here was
+  deleted, not defaulted off -- see decisions.md, 2026-08-15.
 
 ## Create wizard (Task 5, final Phase A piece)
 

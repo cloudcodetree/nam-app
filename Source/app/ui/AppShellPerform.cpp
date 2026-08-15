@@ -3,9 +3,9 @@
 
 // PERFORM tab apply wiring: wirePerformView() connects StackPerformView's
 // callbacks (AppShellStacks.cpp owns wireStacksScreens() itself and just
-// calls this), plus the engine-apply logic those callbacks and
-// AppShell::show()'s nav-hide hook drive. Split out of AppShellStacks.cpp
-// per the no-god-files rule -- it was pushing that file past 400 lines.
+// calls this) to enterPerform, which onTabChanged below drives on every
+// EDIT->PERFORM transition. Split out of AppShellStacks.cpp per the
+// no-god-files rule -- it was pushing that file past 400 lines.
 //
 // Engine truth (Phase A): ONE model + ONE IR. A tap is audible only when the
 // target toneId differs from what's actually live (tracked here by id, see

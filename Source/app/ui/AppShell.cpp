@@ -801,8 +801,17 @@ void AppShell::show (Screen s) {
     closeMoreMenu ();
     if (paywall_ != nullptr) paywall_->setVisible (false);
 
-    // The tuner overlay belongs to Play: navigating anywhere closes it.
-    if (tunerOpen_ && s != Screen::Play) {
+    // The tuner overlay belongs to whichever screen opened it (Play, or --
+    // since the nav went live on PERFORM too -- PERFORM's TUNER switch).
+    // Only a same-screen Play re-selection is exempt from closing it; any
+    // other target (including Play when it was PERFORM that opened the
+    // tuner) must close it, or it's left floating behind the next opaque
+    // screen with tunerOpen_ still true -- a stray BACK press then
+    // "closes" a tuner nothing on screen shows, and Play's own tuner tap
+    // needs two presses to reopen it (found in review: PERFORM -> TUNER ->
+    // BROWSE used to leave exactly this behind).
+    const bool sameScreenPlayReopen = (s == Screen::Play && current_ == play_.get ());
+    if (tunerOpen_ && !sameScreenPlayReopen) {
         juce::Desktop::getInstance ().getAnimator ().cancelAnimation (tuner_.get (), false);
         tuner_->setVisible (false);
         tuner_->setAlpha (1.0f);
