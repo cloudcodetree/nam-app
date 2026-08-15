@@ -743,7 +743,7 @@ void PlayScreen::paint (juce::Graphics& g) {
     // Filters flyout floats over the card; content scrolls when it exceeds
     // the panel height.
     if (!flyRect_.isEmpty ()) {
-        g.setColour (juce::Colour (0xf214101f));
+        g.setColour (col::sheetBg);
         g.fillRoundedRectangle (flyRect_.toFloat (), 14.0f);
         g.setColour (col::inkA (0.18f));
         g.drawRoundedRectangle (flyRect_.toFloat ().reduced (0.5f), 14.0f, 1.0f);
@@ -787,7 +787,7 @@ void PlayScreen::paint (juce::Graphics& g) {
     // Dropdown overlay (gear / pair / demo pickers) — same panel language
     // as the filters flyout, anchored to its field.
     if (menu_ != Menu::None) {
-        g.setColour (juce::Colour (0xf214101f));
+        g.setColour (col::sheetBg);
         g.fillRoundedRectangle (menuRect_.toFloat (), 14.0f);
         g.setColour (col::inkA (0.18f));
         g.drawRoundedRectangle (menuRect_.toFloat ().reduced (0.5f), 14.0f, 1.0f);

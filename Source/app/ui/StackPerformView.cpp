@@ -78,18 +78,31 @@ void StackPerformView::layoutGrid () {
     }
 
     if (contentArea_.isEmpty ()) return;
-    constexpr int gap = 10, cellH = 72, cols = 4;
+    constexpr int gap = 10, minCellH = 72, maxCellH = 148, cols = 4;
     const int cw = juce::jmax (40, (contentArea_.getWidth () - gap * (cols - 1)) / cols);
+    const int rows = (int)((cells_.size () + (size_t)cols - 1) / (size_t)cols);
+    // Stage use wants BIG touch targets, not a fixed 72px grid stranded at
+    // the top of the screen with the rest dead space -- a light setlist
+    // (few scenes, or STOMP's fixed 2-row grid) grows cells to fill the
+    // available height instead, capped so a single row doesn't get absurd.
+    const int cellH = rows > 0
+                          ? juce::jlimit (minCellH, maxCellH,
+                                          (contentArea_.getHeight () - gap * (rows - 1)) / rows)
+                          : minCellH;
+    contentH_ = rows > 0 ? rows * (cellH + gap) - gap : 0;
+    // When the grid is shorter than the viewport (no scroll needed), centre
+    // the block vertically instead of pinning it to the top -- otherwise a
+    // light setlist leaves the grown cells huddled up top with the same
+    // dead space just moved below them.
+    const int extraY = juce::jmax (0, (contentArea_.getHeight () - contentH_) / 2);
     int col = 0, row = 0;
     for (auto& cell : cells_) {
-        cell.body = { col * (cw + gap), row * (cellH + gap), cw, cellH };
+        cell.body = { col * (cw + gap), extraY + row * (cellH + gap), cw, cellH };
         if (++col >= cols) {
             col = 0;
             ++row;
         }
     }
-    const int rows = (int)((cells_.size () + (size_t)cols - 1) / (size_t)cols);
-    contentH_ = rows > 0 ? rows * (cellH + gap) - gap : 0;
     scrollY_ =
         juce::jlimit (0.0f, (float)juce::jmax (0, contentH_ - contentArea_.getHeight ()), scrollY_);
 }

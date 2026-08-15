@@ -9,7 +9,6 @@ const juce::String kDotSep = juce::String::fromUTF8 ("\xC2\xB7");       // ·
 const juce::String kEmDash = juce::String::fromUTF8 ("\xE2\x80\x94");   // —
 const juce::String kSubtitle =
     "your rigs " + kEmDash + " pedals, amps, cabs and post, wired for the floor";
-const juce::String kPerformLabel = juce::String::fromUTF8 ("\xE2\x96\xB8") + " PERFORM";   // ▸
 }   // namespace
 
 StacksHomeScreen::StacksHomeScreen () {
@@ -41,14 +40,22 @@ juce::String StacksHomeScreen::chipLabel (size_t i) const {
            juce::String (st.name).upToFirstOccurrenceOf (kDotSep, false, false);
 }
 
+namespace {
+// "1 pedal" / "2 pedals" -- singular for exactly one, plural otherwise.
+juce::String countNoun (int n, const char* singular, const char* plural) {
+    return juce::String (n) + " " + (n == 1 ? singular : plural);
+}
+}   // namespace
+
 juce::String StacksHomeScreen::metaLine (const nam::Stack& st) const {
     int pedals = 0, amps = 0;
     for (const auto& it : st.chain) {
         if (it.type == nam::GearType::Pedal) ++pedals;
         else if (it.type == nam::GearType::Amp) ++amps;
     }
-    return juce::String (pedals) + " pedals " + kDotSep + " " + juce::String (amps) + " amp " +
-           kDotSep + " " + juce::String ((int)st.scenes.size ()) + " scenes";
+    return countNoun (pedals, "pedal", "pedals") + " " + kDotSep + " " +
+           countNoun (amps, "amp", "amps") + " " + kDotSep + " " +
+           countNoun ((int)st.scenes.size (), "scene", "scenes");
 }
 
 void StacksHomeScreen::layout () {
@@ -59,7 +66,9 @@ void StacksHomeScreen::layout () {
     titleRowRect_ = b.removeFromTop (44).reduced (20, 0);
     newBtnRect_ = titleRowRect_.removeFromRight (116).withSizeKeepingCentre (112, 32);
 
-    subtitleRect_ = b.removeFromTop (26).reduced (20, 0);
+    // 2 lines' worth of 12pt body text -- was 26px (~1 line), which ran the
+    // subtitle off the right edge instead of wrapping/eliding it.
+    subtitleRect_ = b.removeFromTop (38).reduced (20, 0);
     b.removeFromTop (8);
 
     setlistLabelRect_ = b.removeFromTop (18).reduced (20, 0);
@@ -113,7 +122,7 @@ void StacksHomeScreen::paint (juce::Graphics& g) {
 
     g.setFont (uiFont (12.0f, false));
     g.setColour (col::inkA (0.45f));
-    g.drawText (kSubtitle, subtitleRect_, juce::Justification::centredLeft, false);
+    g.drawFittedText (kSubtitle, subtitleRect_, juce::Justification::topLeft, 2, 1.0f);
 
     g.setFont (uiFontTracked (9.0f, true));
     g.setColour (col::inkA (0.4f));
@@ -162,18 +171,21 @@ void StacksHomeScreen::paint (juce::Graphics& g) {
             auto badgeRect = topRow.removeFromRight (66).withSizeKeepingCentre (60, 18);
             g.setFont (uiFont (15.0f, true));
             g.setColour (col::ink);
-            g.drawText (juce::String (st.name), topRow, juce::Justification::centredLeft, false);
+            g.drawText (juce::String (st.name), topRow, juce::Justification::centredLeft, true);
             drawRoutingBadge (g, badgeRect, st.routing);
 
             g.setFont (uiFont (11.0f, false));
             g.setColour (col::inkA (0.45f));
-            g.drawText (metaLine (st), in, juce::Justification::topLeft, false);
+            g.drawText (metaLine (st), in, juce::Justification::topLeft, true);
 
             auto perform = rowRects_[i].performBtn.translated (listArea_.getX (), dy);
             drawPill (g, perform.toFloat (), col::accentA (0.14f), col::accentA (0.5f));
             g.setFont (uiFontTracked (9.0f, true));
             g.setColour (col::accentAlt);
-            g.drawText (kPerformLabel, perform, juce::Justification::centred, false);
+            auto pin = perform.reduced (14, 0);
+            drawFwdTriangle (g, pin.removeFromLeft (7).withSizeKeepingCentre (6, 8).toFloat (),
+                             col::accentAlt);
+            g.drawText ("PERFORM", pin, juce::Justification::centred, false);
         }
     }
     g.restoreState ();

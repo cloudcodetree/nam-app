@@ -41,15 +41,27 @@ void StackEditView::layout () {
     auto b = getLocalBounds ();
     if (b.isEmpty ()) return;
 
-    routingRowRect_ = b.removeFromTop (40).reduced (0, 4);
-    auto row = routingRowRect_;
-    row.removeFromLeft (62);   // "ROUTING" micro-label, painted only
-    freeformToggleRect_ = row.removeFromRight (100);
-    const int pillW = juce::jmin (56, (row.getWidth () - 8) / 3);
-    for (int i = 0; i < 3; ++i) {
-        routingPillRects_[(size_t)i] = row.removeFromLeft (pillW).reduced (2, 6);
-        row.removeFromLeft (4);
+    // Row 1: "ROUTING" micro-label + FREEFORM toggle. Row 2: the three
+    // routing pills, each sized to its own label text (never a fixed
+    // shared width -- at this component's width a 3-way equal split left
+    // no room for "STEREO", which clipped to "STERE").
+    auto labelRow = b.removeFromTop (20);
+    routingLabelRect_ = labelRow.withWidth (62);
+    freeformToggleRect_ = labelRow.removeFromRight (100);
+
+    routingPillsRowRect_ = b.removeFromTop (32).reduced (0, 2);
+    {
+        auto row = routingPillsRowRect_;
+        const char* labels[3] = { "SINGLE", "A/B", "STEREO" };
+        const auto font = uiFontTracked (8.0f, true);
+        int x = row.getX ();
+        for (int i = 0; i < 3; ++i) {
+            const int pw = (int)juce::GlyphArrangement::getStringWidth (font, labels[i]) + 22;
+            routingPillRects_[(size_t)i] = { x, row.getY (), pw, row.getHeight () };
+            x += pw + 8;
+        }
     }
+    b.removeFromTop (4);
 
     contentArea_ = b;
     if (freeform_) layoutFreeform (contentArea_);
@@ -91,16 +103,38 @@ void StackEditView::layoutGuided (juce::Rectangle<int> content) {
     ampChannelPillRects_.clear ();
     if (amp != nullptr) {
         ampUid_ = juce::String (amp->uid);
-        constexpr int cardH = 128, pillH = 28, pillGap = 8;
-        ampCardRect_ = { 0, y, w, cardH };
+        constexpr int pillH = 28, pillGap = 8;
         // Matches paintGuided's card-content cursor exactly: reduced(14,10)
         // top pad (10) + name/FS row (26) + gap (6) + grille (24) + gap (8)
         // + "CH" label (12) = 86px before the pill row starts.
-        int x = 0, rowY = y + 86;
+        constexpr int topContentH = 86;
+        // Pill widths capped to the card's own width (a single very long
+        // channel name used to be able to overflow it horizontally on its
+        // own -- paintGuided elides the drawn text into whatever width it
+        // gets, but the pill rect itself still needs a ceiling). Row count
+        // computed up front so the card can size itself to fit every
+        // channel row instead of a fixed 128px that clipped the CH pills
+        // against the card's own bottom edge whenever channels wrapped.
+        std::vector<int> pillW;
+        pillW.reserve (amp->channels.size ());
+        int rows = 1, rowX = 0;
         for (const auto& ch : amp->channels) {
-            const int pw = juce::jmax (56, (int)juce::GlyphArrangement::getStringWidth (
-                                               uiFont (10.0f, true), juce::String (ch.title)) +
-                                               24);
+            const int pw = juce::jmin (
+                w - 8, juce::jmax (56, (int)juce::GlyphArrangement::getStringWidth (
+                                           uiFont (10.0f, true), juce::String (ch.title)) +
+                                           24));
+            pillW.push_back (pw);
+            if (rowX + pw > w && rowX > 0) {
+                ++rows;
+                rowX = 0;
+            }
+            rowX += pw + pillGap;
+        }
+        const int cardH = topContentH + rows * pillH + (rows - 1) * pillGap + 10;
+        ampCardRect_ = { 0, y, w, cardH };
+        int x = 0, rowY = y + topContentH;
+        for (size_t i = 0; i < amp->channels.size (); ++i) {
+            const int pw = pillW[i];
             if (x + pw > w && x > 0) {
                 x = 0;
                 rowY += pillH + pillGap;

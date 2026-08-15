@@ -135,9 +135,9 @@ void StackItemSheet::resized () { layout (); }
 
 void StackItemSheet::paint (juce::Graphics& g) {
     if (!isVisible ()) return;
-    g.fillAll (juce::Colour (0xa008070f));
+    g.fillAll (col::scrim);
 
-    g.setColour (juce::Colour (0xf214101f));
+    g.setColour (col::sheetBg);
     g.fillRoundedRectangle (sheetRect_.toFloat (), 16.0f);
     g.setColour (col::inkA (0.16f));
     g.drawRoundedRectangle (sheetRect_.toFloat ().reduced (0.5f), 16.0f, 1.0f);

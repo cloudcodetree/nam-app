@@ -49,10 +49,7 @@ void drawTriangle (juce::Graphics& g, juce::Rectangle<int> r, bool up) {
 void StackEditView::paint (juce::Graphics& g) {
     g.setFont (uiFontTracked (9.0f, true));
     g.setColour (col::inkA (0.4f));
-    g.drawText ("ROUTING",
-                juce::Rectangle<int> (routingRowRect_.getX (), routingRowRect_.getY (), 58,
-                                      routingRowRect_.getHeight ()),
-                juce::Justification::centredLeft, false);
+    g.drawText ("ROUTING", routingLabelRect_, juce::Justification::centredLeft, false);
 
     const int selIdx = stack_.routing == nam::Stack::Routing::AB       ? 1
                        : stack_.routing == nam::Stack::Routing::Stereo ? 2
@@ -116,7 +113,7 @@ void StackEditView::paintGuided (juce::Graphics& g, int dy) const {
             const auto* it = findItem (pc.uid);
             if (it == nullptr) continue;
             auto r = tr (pc.body);
-            drawStompCardChrome (g, r, seededHue (pc.uid), !it->bypassed);
+            drawStompCardChrome (g, r, !it->bypassed);
             g.setFont (uiFont (9.0f, false));
             g.setColour (it->bypassed ? col::inkA (0.3f) : col::inkA (0.78f));
             g.drawText (juce::String (it->title),
@@ -151,7 +148,8 @@ void StackEditView::paintGuided (juce::Graphics& g, int dy) const {
         if (!amp->channels.empty () && amp->activeChannel >= 0 &&
             amp->activeChannel < (int)amp->channels.size ())
             ampName = juce::String (amp->channels[(size_t)amp->activeChannel].title);
-        g.drawText (ampName, top, juce::Justification::centredLeft, true);
+        g.drawText (elide (ampName, displayFont (15.0f), top.getWidth ()), top,
+                    juce::Justification::centredLeft, false);
         in.removeFromTop (6);
         drawGrilleStrip (g, in.removeFromTop (24), col::inkA (0.5f));
         in.removeFromTop (8);
@@ -168,10 +166,11 @@ void StackEditView::paintGuided (juce::Graphics& g, int dy) const {
             const auto dot = pin.removeFromLeft (12).withSizeKeepingCentre (6, 6).toFloat ();
             g.setColour (sel ? col::meterLime : col::inkA (0.3f));
             g.fillEllipse (dot);
-            g.setFont (uiFont (10.0f, sel));
+            const auto pillFont = uiFont (10.0f, sel);
+            g.setFont (pillFont);
             g.setColour (sel ? col::accent : col::inkA (0.65f));
-            g.drawText (juce::String (amp->channels[i].title), pin,
-                        juce::Justification::centredLeft, true);
+            g.drawText (elide (juce::String (amp->channels[i].title), pillFont, pin.getWidth ()),
+                        pin, juce::Justification::centredLeft, false);
         }
     }
 
@@ -276,8 +275,8 @@ void StackEditView::paintFreeform (juce::Graphics& g, int dy) const {
 }
 
 void StackEditView::paintConfirm (juce::Graphics& g) const {
-    g.fillAll (juce::Colour (0xa008070f));
-    g.setColour (juce::Colour (0xf214101f));
+    g.fillAll (col::scrim);
+    g.setColour (col::sheetBg);
     g.fillRoundedRectangle (confirmRect_.toFloat (), 14.0f);
     g.setColour (col::inkA (0.18f));
     g.drawRoundedRectangle (confirmRect_.toFloat ().reduced (0.5f), 14.0f, 1.0f);

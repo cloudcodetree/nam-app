@@ -154,7 +154,7 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
         auto shortName = [] (juce::String n) {
             return n.replace ("USB-Audio - ", "").replace (" USB headset", "").trim ();
         };
-        g.setColour (juce::Colour (0xf214101f));
+        g.setColour (nam::ui::col::sheetBg);
         g.fillRoundedRectangle (ioPickerRect_.toFloat (), 14.0f);
         g.setColour (nam::ui::col::inkA (0.18f));
         g.drawRoundedRectangle (ioPickerRect_.toFloat ().reduced (0.5f), 14.0f, 1.0f);
@@ -323,7 +323,7 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
 
     // ⋯ menu (right corner, above the nav) — painted last (overlay rule).
     if (moreOpen_) {
-        g.setColour (juce::Colour (0xf214101f));
+        g.setColour (nam::ui::col::sheetBg);
         g.fillRoundedRectangle (moreRect_.toFloat (), 14.0f);
         g.setColour (nam::ui::col::inkA (0.18f));
         g.drawRoundedRectangle (moreRect_.toFloat ().reduced (0.5f), 14.0f, 1.0f);

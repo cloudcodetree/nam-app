@@ -1,5 +1,6 @@
 #include "app/ui/StackPerformView.h"
 #include "app/ui/NamLookAndFeel.h"
+#include "app/ui/StackWidgets.h"
 #include "model/StackModel.h"
 
 // Painting only -- see StackPerformView.cpp for state/layout/hit-testing
@@ -9,7 +10,6 @@ using namespace nam::ui;
 namespace {
 const juce::String kBackGlyph = juce::String::fromUTF8 ("\xE2\x80\xB9");   // ‹
 const juce::String kFwdGlyph = juce::String::fromUTF8 ("\xE2\x80\xBA");    // ›
-const juce::String kFwdTri = juce::String::fromUTF8 ("\xE2\x96\xB8");      // ▸
 const juce::String kDotSep = juce::String::fromUTF8 ("\xC2\xB7");          // ·
 const juce::String kEmDash = juce::String::fromUTF8 ("\xE2\x80\x94");      // —
 }   // namespace
@@ -101,7 +101,7 @@ void StackPerformView::paintCell (juce::Graphics& g, const Cell& cell,
             sub = bpm_ > 1.0 ? juce::String (bpm_, 0) + " BPM" : juce::String (kEmDash);
             break;
         case CellKind::Tuner: title = "TUNER"; break;
-        case CellKind::Next: title = "NEXT " + kFwdTri; break;
+        case CellKind::Next: title = "NEXT"; break;
         case CellKind::Stomp: {
             title = "FS" + juce::String (cell.index);
             showLed = true;
@@ -134,8 +134,16 @@ void StackPerformView::paintCell (juce::Graphics& g, const Cell& cell,
         }
     }
 
-    drawPill (g, r.toFloat (), active ? col::accentA (0.16f) : col::inkA (0.03f),
-              active ? col::accent : col::inkA (0.16f), 1.2f);
+    // A fixed corner radius, not drawPill's stadium shape (radius =
+    // height/2) -- these cells got tall to give stage use big touch
+    // targets (see layoutGrid), and a stadium radius on a tall-narrow cell
+    // degenerates into an egg/oval instead of a switch.
+    const auto rf = r.toFloat ();
+    constexpr float radius = 16.0f;
+    g.setColour (active ? col::accentA (0.16f) : col::inkA (0.03f));
+    g.fillRoundedRectangle (rf, radius);
+    g.setColour (active ? col::accent : col::inkA (0.16f));
+    g.drawRoundedRectangle (rf.reduced (0.6f), radius, 1.2f);
 
     if (showLed) {
         const auto led = juce::Rectangle<float> (r.getX () + 10.0f, r.getY () + 10.0f, 7.0f, 7.0f);
@@ -146,6 +154,14 @@ void StackPerformView::paintCell (juce::Graphics& g, const Cell& cell,
     auto titleRow = r.reduced (10, 8);
     auto subRow = titleRow.removeFromBottom (titleRow.getHeight () / 2);
     if (showLed) titleRow.removeFromLeft (12);   // clears the LED dot painted above
+    // NEXT's forward glyph is a vector triangle, not the "▸" unicode
+    // character -- Work Sans doesn't cover U+25B8 on Android, where it
+    // rendered as a bare dot instead of an arrow (see drawFwdTriangle).
+    if (cell.kind == CellKind::Next) {
+        const auto triBox = titleRow.removeFromRight (12);
+        drawFwdTriangle (g, triBox.withSizeKeepingCentre (6, 8).toFloat (),
+                         active ? col::accent : col::inkA (0.6f));
+    }
     g.setFont (uiFontTracked (9.0f, true));
     g.setColour (active ? col::accent : col::inkA (0.6f));
     g.drawText (title, titleRow, juce::Justification::centredLeft, true);

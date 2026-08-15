@@ -83,10 +83,21 @@ void drawGearIcon (juce::Graphics& g, juce::Rectangle<float> b, juce::Colour c) 
     g.fillEllipse (cx - rInner, cy - rInner, rInner * 2.0f, rInner * 2.0f);
 }
 
+void drawFwdTriangle (juce::Graphics& g, juce::Rectangle<float> b, juce::Colour c) {
+    juce::Path p;
+    p.addTriangle (b.getX (), b.getY (), b.getX (), b.getBottom (), b.getRight (), b.getCentreY ());
+    g.setColour (c);
+    g.fillPath (p);
+}
+
 void drawStacksBrandHeader (juce::Graphics& g, juce::Rectangle<int> bounds,
                             juce::Rectangle<int> gearRect) {
     g.setFont (uiFontTracked (11.0f, true));
-    auto nameRect = bounds.withTrimmedRight (bounds.getWidth () - gearRect.getX () + 8);
+    // Left-inset to match every other screen's 20px content padding -- the
+    // wordmark used to start flush at bounds.getX() (0), jammed into the
+    // screen edge.
+    auto nameRect =
+        bounds.withTrimmedLeft (20).withTrimmedRight (bounds.getWidth () - gearRect.getX () + 8);
     // "NAM " in dim ink, "PLAYER" in accent -- drawn as two adjoining runs
     // since JUCE text layout has no inline-colour-span primitive.
     const juce::String namPart = "NAM ", playerPart = "PLAYER";
@@ -113,16 +124,15 @@ void drawFsBadge (juce::Graphics& g, juce::Rectangle<int> r, int fs) {
                 r, juce::Justification::centred, false);
 }
 
-juce::Colour seededHue (const juce::String& seed) {
-    const int h = std::abs (seed.hashCode ()) % 100;
-    return col::accent.withRotatedHue ((float)h / 100.0f);
-}
-
-void drawStompCardChrome (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour hue, bool on) {
+void drawStompCardChrome (juce::Graphics& g, juce::Rectangle<int> r, bool on) {
     const auto b = r.toFloat ();
-    juce::ColourGradient grad (hue.withAlpha (0.28f), b.getX (), b.getY (),
-                               hue.darker (0.6f).withAlpha (0.10f), b.getX (), b.getBottom (),
-                               false);
+    // Palette-only wash: accent-tinted when engaged, neutral ink when
+    // bypassed. Was a per-pedal hue rotation of col::accent (seededHue) --
+    // that read as a muddy, off-palette brown-olive gradient; dropped in
+    // favor of the two on-brand states every other card already uses.
+    const auto top = on ? col::accentA (0.20f) : col::inkA (0.07f);
+    const auto bottom = on ? col::accentA (0.05f) : col::inkA (0.015f);
+    juce::ColourGradient grad (top, b.getX (), b.getY (), bottom, b.getX (), b.getBottom (), false);
     g.setGradientFill (grad);
     g.fillRoundedRectangle (b, 12.0f);
     g.setColour (col::inkA (0.14f));
@@ -137,29 +147,50 @@ void drawStompCardChrome (juce::Graphics& g, juce::Rectangle<int> r, juce::Colou
     g.setColour (on ? col::meterLime : col::inkA (0.2f));
     g.fillEllipse (led);
 
-    // Three decorative knob rings along the card's lower third.
+    // Three knob rings along the card's lower third, each with an indicator
+    // line so they read as dials rather than placeholder circles. Angles
+    // are fixed (not random/seeded) -- a deliberate "knobs turned to some
+    // setting" look, not decoration masquerading as real state.
+    static constexpr float kAngles[3] = { -0.9f, 0.0f, 0.7f };   // radians, 0 = pointing up
     const float ringD = juce::jmin (16.0f, b.getWidth () * 0.22f);
     const float y = b.getBottom () - ringD - 12.0f;
     const float gap = (b.getWidth () - ringD * 3.0f) / 4.0f;
-    g.setColour (col::inkA (0.28f));
     for (int i = 0; i < 3; ++i) {
         const float x = b.getX () + gap + (float)i * (ringD + gap);
-        g.drawEllipse (x, y, ringD, ringD, 1.2f);
+        const juce::Rectangle<float> ring (x, y, ringD, ringD);
+        g.setColour (on ? col::inkA (0.32f) : col::inkA (0.16f));
+        g.drawEllipse (ring, 1.2f);
+        const float a = kAngles[i] - juce::MathConstants<float>::halfPi;
+        const float ir = ringD * 0.5f - 2.0f;
+        g.setColour (on ? col::accentAlt.withAlpha (0.85f) : col::inkA (0.3f));
+        g.drawLine (ring.getCentreX (), ring.getCentreY (), ring.getCentreX () + std::cos (a) * ir,
+                    ring.getCentreY () + std::sin (a) * ir, 1.4f);
     }
 }
 
 void drawGrilleStrip (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour c) {
+    // Dark inset panel (reads as an amp's speaker/control recess) with a
+    // low-contrast diagonal weave on top -- thin, tight-spaced, low alpha,
+    // clipped inside the rounded rect, crossed both ways so it reads as
+    // woven cloth. The old version was one pass of widely-spaced alpha-0.5
+    // lines with no panel underneath, which read as a broken/missing
+    // texture rather than an amp detail.
     g.saveState ();
     juce::Path clip;
     clip.addRoundedRectangle (r.toFloat (), 8.0f);
     g.reduceClipRegion (clip);
-    g.setColour (c);
-    constexpr float spacing = 7.0f, thickness = 1.4f;
+    g.setColour (col::bg.withAlpha (0.55f));
+    g.fillRoundedRectangle (r.toFloat (), 8.0f);
+
+    constexpr float spacing = 4.0f, thickness = 0.75f;
     const float span = (float)(r.getWidth () + r.getHeight ());
-    for (float x = -(float)r.getHeight (); x < span; x += spacing) {
+    g.setColour (c.withAlpha (c.getFloatAlpha () * 0.3f));
+    for (float x = -(float)r.getHeight (); x < span; x += spacing)
         g.drawLine ((float)r.getX () + x, (float)r.getBottom (),
                     (float)r.getX () + x + r.getHeight (), (float)r.getY (), thickness);
-    }
+    for (float x = -(float)r.getHeight (); x < span; x += spacing)
+        g.drawLine ((float)r.getX () + x, (float)r.getY (), (float)r.getX () + x + r.getHeight (),
+                    (float)r.getBottom (), thickness);
     g.restoreState ();
 }
 

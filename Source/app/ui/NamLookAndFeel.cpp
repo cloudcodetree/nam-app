@@ -71,6 +71,24 @@ void drawPill (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour fill, j
     }
 }
 
+juce::String elide (const juce::String& text, const juce::Font& font, int maxWidth) {
+    if (maxWidth <= 0) return text;
+    if (juce::GlyphArrangement::getStringWidth (font, text) <= maxWidth) return text;
+    const juce::String ellipsis = juce::String::fromUTF8 ("\xE2\x80\xA6");   // "…"
+    // Binary-search the longest prefix (+ ellipsis) that still fits, rather
+    // than shaving one character at a time -- cheap either way at UI-label
+    // lengths, but this stays O(log n) if a caller ever elides something long.
+    int lo = 0, hi = text.length ();
+    while (lo < hi) {
+        const int mid = (lo + hi + 1) / 2;
+        if (juce::GlyphArrangement::getStringWidth (font, text.substring (0, mid) + ellipsis) <=
+            maxWidth)
+            lo = mid;
+        else hi = mid - 1;
+    }
+    return lo <= 0 ? ellipsis : text.substring (0, lo) + ellipsis;
+}
+
 void drawLockGlyph (juce::Graphics& g, juce::Rectangle<float> b, juce::Colour c) {
     g.setColour (c);
     const float bodyH = b.getHeight () * 0.52f;

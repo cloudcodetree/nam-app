@@ -95,7 +95,7 @@ void PaywallPanel::paint (juce::Graphics& g) {
     // reads as tappable until it's dismissed.
     g.fillAll (juce::Colours::black.withAlpha (0.55f));
 
-    g.setColour (juce::Colour (0xf214101f));
+    g.setColour (col::sheetBg);
     g.fillRoundedRectangle (panelRect_.toFloat (), 14.0f);
     g.setColour (col::inkA (0.18f));
     g.drawRoundedRectangle (panelRect_.toFloat ().reduced (0.5f), 14.0f, 1.0f);

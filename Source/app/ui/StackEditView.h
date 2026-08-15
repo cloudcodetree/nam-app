@@ -51,10 +51,13 @@ private:
     int idx_ = -1;
     bool freeform_ = false;
 
-    juce::Rectangle<int> routingRowRect_, freeformToggleRect_;
+    // ROUTING is two rows at this width: micro-label + FREEFORM toggle on
+    // top, the three routing pills (sized to their own text, never a fixed
+    // width that could clip "STEREO") below.
+    juce::Rectangle<int> routingLabelRect_, freeformToggleRect_, routingPillsRowRect_;
     std::array<juce::Rectangle<int>, 3> routingPillRects_;
 
-    juce::Rectangle<int> contentArea_;   // vertical-scroll viewport, below routingRowRect_
+    juce::Rectangle<int> contentArea_;   // vertical-scroll viewport, below routingPillsRowRect_
     int contentH_ = 0;
     float scrollY_ = 0.0f, pressScrollY_ = 0.0f;
 

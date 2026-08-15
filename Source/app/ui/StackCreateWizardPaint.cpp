@@ -105,7 +105,7 @@ void StackCreateWizard::paintGallery (juce::Graphics& g, int dy) const {
         g.setFont (uiFontTracked (8.0f, true));
         g.setColour (col::accentAlt);
         g.drawText (juce::String (t.genre).toUpperCase (), tagRow, juce::Justification::centredLeft,
-                    false);
+                    true);
 
         int amps = 0, pedals = 0, cabs = 0;
         for (const auto& it : t.stack.chain) {
@@ -121,7 +121,7 @@ void StackCreateWizard::paintGallery (juce::Graphics& g, int dy) const {
         g.setFont (uiFontTracked (8.0f, false));
         g.setColour (col::inkA (0.5f));
         g.drawText (parts.joinIntoString (" " + kDotSep + " "), partsRow,
-                    juce::Justification::centredLeft, false);
+                    juce::Justification::centredLeft, true);
 
         in.removeFromTop (6);
         auto fsRow = in;
@@ -214,7 +214,7 @@ void StackCreateWizard::paintPedalsStep (juce::Graphics& g, int dy) const {
         const auto& e = models_[i];
         const bool on = pedalIncluded (e.id);
         auto r = tr (pedalCardRects_[i]);
-        drawStompCardChrome (g, r, seededHue (juce::String (e.id)), on);
+        drawStompCardChrome (g, r, on);
         auto in = r.reduced (10);
         auto nameR = in.removeFromBottom (18);
         g.setFont (uiFontTracked (9.0f, true));

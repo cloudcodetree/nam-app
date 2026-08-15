@@ -116,7 +116,9 @@ void StackCreateWizard::layout () {
     backRect_ = { headerRect_.getX () + 16, headerRect_.getY (), 32, headerRect_.getHeight () };
     titleRect_ = headerRect_.withTrimmedLeft (56).withTrimmedRight (16);
 
-    subtitleRect_ = b.removeFromTop (32).reduced (20, 0);
+    // 2 lines' worth of 12pt body text -- was 32px (~1.2 lines), which cut
+    // the second wrapped line off at the right edge for longer subtitles.
+    subtitleRect_ = b.removeFromTop (40).reduced (20, 0);
     b.removeFromTop (4);
 
     if (step_ != Step::Gallery) {

@@ -20,6 +20,11 @@ const juce::Colour inkOnAccent{ 0xff100a06 };   // near-black text on orange
 const juce::Colour meterGreen{ 0xff3fae6a };
 const juce::Colour meterLime{ 0xffc8f051 };
 const juce::Colour meterBlue{ 0xff4da3ff };   // output meters (vs lime input)
+// Overlay tokens (was inline 0xa008070f/0xf214101f hex in StackGearPicker,
+// StackItemSheet, StackEditViewPaint, PaywallPanel, PlayScreen,
+// AppShellChrome) -- one named pair so every flyout/sheet/scrim shares it.
+const juce::Colour scrim{ 0xa008070f };     // full-screen dim behind a sheet/overlay
+const juce::Colour sheetBg{ 0xf214101f };   // the sheet/flyout panel itself
 
 inline juce::Colour inkA (float a) { return ink.withAlpha (a); }         // dimmed ink
 inline juce::Colour accentA (float a) { return accent.withAlpha (a); }   // orange washes
@@ -38,6 +43,13 @@ void paintHeroBackground (juce::Graphics& g, juce::Rectangle<int> bounds, bool w
 // A pill / rounded-rect helper: fill + optional 1px stroke.
 void drawPill (juce::Graphics& g, juce::Rectangle<float> r, juce::Colour fill, juce::Colour stroke,
                float strokeWidth = 1.0f);
+
+// Elides `text` to fit `maxWidth` px in `font`, appending "..." (JUCE's own
+// ellipsis glyph via String::getEllipsisString) -- shared helper so text
+// truncation isn't re-solved (and re-broken) in every screen that draws a
+// label into a fixed-width rect. Returns `text` unchanged if it already
+// fits or `maxWidth` is non-positive.
+juce::String elide (const juce::String& text, const juce::Font& font, int maxWidth);
 
 // Vector padlock (rounded-rect body + arc shackle) for gated Pro rows —
 // screens that gate a feature draw this instead of an emoji/unicode glyph.

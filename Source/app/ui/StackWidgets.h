@@ -24,6 +24,12 @@ void drawSetlistChip (juce::Graphics&, juce::Rectangle<int>, const juce::String&
 // every "settings" affordance on Stacks draws this instead).
 void drawGearIcon (juce::Graphics&, juce::Rectangle<float>, juce::Colour);
 
+// Small solid right-pointing triangle -- vector substitute for the "▸"
+// unicode glyph (U+25B8), which Work Sans doesn't cover on Android and
+// rendered as a bare dot/tofu instead of an arrow. Every "advance/perform"
+// affordance (Home's PERFORM pill, PERFORM's NEXT switch) draws this.
+void drawFwdTriangle (juce::Graphics&, juce::Rectangle<float>, juce::Colour);
+
 // "NAM PLAYER" wordmark + gear icon header row, identical on every Stacks
 // state (Home, Detail). `gearRect` is the tap target, in the same
 // coordinate space as `bounds`.
@@ -34,17 +40,12 @@ void drawStacksBrandHeader (juce::Graphics&, juce::Rectangle<int> bounds,
 // when `fs` is assigned (1..8); dim outline + em-dash otherwise (0).
 void drawFsBadge (juce::Graphics&, juce::Rectangle<int>, int fs);
 
-// A colour distinct per chain item, derived from `seed` (its uid) by
-// rotating the hue of `col::accent` -- no new hex values, just a palette
-// transform, so per-pedal variety stays within the "colours from col only"
-// rule.
-juce::Colour seededHue (const juce::String& seed);
-
 // Stomp-box card chrome (pedal cards + full-width POST rows share this
-// body): gradient fill tinted `hue`, LED dot (glowing lime when `on`, dim
-// otherwise), three decorative knob rings. Caller draws name/FS badge on
-// top of this.
-void drawStompCardChrome (juce::Graphics&, juce::Rectangle<int>, juce::Colour hue, bool on);
+// body): accent-tinted gradient fill when `on`, neutral ink wash when
+// bypassed (palette-only -- no per-pedal hue rotation), LED dot (glowing
+// lime when `on`, dim otherwise), three knob rings with indicator lines.
+// Caller draws name/FS badge on top of this.
+void drawStompCardChrome (juce::Graphics&, juce::Rectangle<int>, bool on);
 
 // Decorative diagonal hatch/grille strip -- the AMP card's new visual motif.
 void drawGrilleStrip (juce::Graphics&, juce::Rectangle<int>, juce::Colour);
