@@ -39,6 +39,18 @@ const nam::ChainItem* StackDetailScreen::findItem (const juce::String& uid) cons
     return nullptr;
 }
 
+bool StackDetailScreen::closeTopOverlay () {
+    if (itemSheet_.isVisible ()) {
+        itemSheet_.close ();
+        return true;
+    }
+    if (picker_.isVisible ()) {
+        picker_.close ();
+        return true;
+    }
+    return editView_.closeConfirm ();
+}
+
 void StackDetailScreen::setStack (const nam::Stack& stack, int idx) {
     stack_ = stack;
     idx_ = idx;
@@ -59,8 +71,11 @@ void StackDetailScreen::selectTab (bool perform) {
     performTab_ = perform;
     editView_.setVisible (!performTab_);   // PERFORM shows its own placeholder, not EDIT's content
     if (performTab_) {
+        // Leaving EDIT: none of its overlays (including the inline REMOVE
+        // STACK confirm) should survive into PERFORM or a later re-entry.
         picker_.close ();
         itemSheet_.close ();
+        editView_.closeConfirm ();
     }
     if (onTabChanged) onTabChanged (performTab_);
     repaint ();

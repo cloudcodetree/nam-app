@@ -13,8 +13,22 @@ StackEditView::StackEditView () { setInterceptsMouseClicks (true, true); }
 void StackEditView::setStack (const nam::Stack& stack, int idx) {
     stack_ = stack;
     idx_ = idx;
+    // A stack switch (or even a same-stack repush) must never carry a
+    // REMOVE STACK confirm forward -- it was scoped to whatever stack was
+    // showing when it opened, and leaving it open would let a reflexive
+    // confirm tap delete a completely different stack the user never
+    // asked to remove (found in review: BACK out of an open confirm, open
+    // another stack, "Remove '{other name}'?" is already up).
+    confirmOpen_ = false;
     layout ();
     repaint ();
+}
+
+bool StackEditView::closeConfirm () {
+    if (!confirmOpen_) return false;
+    confirmOpen_ = false;
+    repaint ();
+    return true;
 }
 
 const nam::ChainItem* StackEditView::findItem (const juce::String& uid) const {

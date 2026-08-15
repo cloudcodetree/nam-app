@@ -24,6 +24,12 @@ public:
     // wires stacksHome_/stacksDetail_'s own std::function members.
     StackGearPicker& picker () { return picker_; }
     StackItemSheet& itemSheet () { return itemSheet_; }
+    // Closes whichever overlay is frontmost (item sheet, then picker, then
+    // EDIT's REMOVE STACK confirm) and reports whether one was open. The
+    // owner's back-button chain consults this before popping Detail to
+    // Home -- same "dismiss the overlay first" pattern the paywall sheet
+    // already gets in AppShell::handleBackButton.
+    bool closeTopOverlay ();
 
     std::function<void ()> onBack;
     std::function<void (bool)> onTabChanged;   // fires on any tab switch, user or programmatic

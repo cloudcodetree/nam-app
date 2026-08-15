@@ -710,6 +710,13 @@ bool AppShell::handleBackButton () {
         toggleTuner ();
         return true;
     }
+    // An open Detail overlay (item sheet / gear picker / EDIT's REMOVE
+    // STACK confirm) dismisses first, same as the paywall above -- without
+    // this, back-ing out of an open confirm and reopening a DIFFERENT
+    // stack left the dialog showing over it (review finding on 06d4e74).
+    if (current_ == stacksDetail_.get () && stacksDetail_ != nullptr &&
+        stacksDetail_->closeTopOverlay ())
+        return true;
     // Stack detail backs out to Home first, matching its own ‹ chevron —
     // only a second back press (or one from Home) leaves Stacks for Play.
     if (current_ == stacksDetail_.get ()) {

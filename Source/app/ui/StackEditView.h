@@ -18,6 +18,11 @@ public:
     StackEditView ();
 
     void setStack (const nam::Stack& stack, int idx);
+    // Dismisses the REMOVE STACK confirm sheet if it's open. Returns true
+    // if it was (and got closed) -- lets the owner's back-button chain
+    // treat this the same way it treats the picker/item-sheet overlays
+    // (close the overlay first, don't pop the screen underneath it).
+    bool closeConfirm ();
 
     std::function<void (nam::Stack)> onChanged;          // owner persists + repushes
     std::function<void ()> onRemoveStack;                // fires after the confirm sheet
