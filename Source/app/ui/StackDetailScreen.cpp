@@ -40,12 +40,18 @@ const nam::ChainItem* StackDetailScreen::findItem (const juce::String& uid) cons
 }
 
 bool StackDetailScreen::closeTopOverlay () {
-    if (itemSheet_.isVisible ()) {
-        itemSheet_.close ();
-        return true;
-    }
+    // Order matters: this is z-order, not declaration order. The picker
+    // can be launched FROM the item sheet (AddChannel/Swap) without the
+    // sheet closing itself first, so in the only reachable stacked
+    // configuration the picker sits in front (both call toFront() on
+    // open). Checking it first means BACK peels the frontmost overlay
+    // instead of yanking the sheet out from under a picker still on top.
     if (picker_.isVisible ()) {
         picker_.close ();
+        return true;
+    }
+    if (itemSheet_.isVisible ()) {
+        itemSheet_.close ();
         return true;
     }
     return editView_.closeConfirm ();
