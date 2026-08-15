@@ -647,17 +647,7 @@ void AppShell::openPaywall (const juce::String& reason) {
     if (paywall_ == nullptr) {
         paywall_ = std::make_unique<PaywallPanel> ();
         addChildComponent (*paywall_);
-        paywall_->onClose = [this] {
-            paywall_->setVisible (false);
-            // openPaywall forces nav visible on open (even over PERFORM);
-            // closing must re-derive it the same way show() does rather
-            // than leaving nav visible if PERFORM is what's underneath --
-            // dormant today (no reachable path opens the paywall from
-            // PERFORM) but the asymmetry is exactly what a future call
-            // site would trip.
-            setNavHidden (current_ == stacksDetail_.get () && stacksDetail_ != nullptr &&
-                          stacksDetail_->isPerformTab ());
-        };
+        paywall_->onClose = [this] { dismissPaywall (); };
         paywall_->onBuy = [this] {
             // proCallInFlight_ also gates the buttons themselves (see below),
             // but a defensive re-check here means a stray onBuy call can
@@ -699,9 +689,21 @@ void AppShell::openPaywall (const juce::String& reason) {
     paywall_->toFront (false);
 }
 
+void AppShell::dismissPaywall () {
+    if (paywall_ == nullptr) return;
+    paywall_->setVisible (false);
+    // openPaywall forces nav visible on open (even over PERFORM); dismissal
+    // must re-derive it the same way show() does rather than leaving nav
+    // visible if PERFORM is what's underneath -- dormant today (no
+    // reachable path opens the paywall from PERFORM) but the asymmetry is
+    // exactly what a future call site would trip.
+    setNavHidden (current_ == stacksDetail_.get () && stacksDetail_ != nullptr &&
+                  stacksDetail_->isPerformTab ());
+}
+
 void AppShell::refreshProState () {
     const bool pro = isPro_ && isPro_ ();
-    if (pro && paywall_ != nullptr) paywall_->setVisible (false);
+    if (pro) dismissPaywall ();
     // Lock glyphs: a null service means ungated (desktop/dev builds), same
     // convention as the gate checks above, so PlayScreen must see "unlocked"
     // rather than the isPro_() default of false.
@@ -714,7 +716,7 @@ bool AppShell::handleBackButton () {
     // deliberately survives this per the timeout fix, it just stops being
     // shown until the sheet is reopened.
     if (paywall_ != nullptr && paywall_->isVisible ()) {
-        paywall_->setVisible (false);
+        dismissPaywall ();
         return true;
     }
     if (tunerOpen_) {

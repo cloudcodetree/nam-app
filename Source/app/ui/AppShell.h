@@ -416,6 +416,13 @@ private:
 
     // Pro unlock: paywall overlay + the host's billing services.
     void openPaywall (const juce::String& reason);
+    // Hides the sheet and re-derives nav-hidden the same way show() does,
+    // rather than leaving nav visible over PERFORM if that's what's
+    // underneath. Shared by all three dismiss sites (onClose, back button,
+    // refreshProState going Pro) so they can't drift out of sync again --
+    // only onClose did this before the fix. No-op if the sheet was never
+    // created.
+    void dismissPaywall ();
     std::unique_ptr<PaywallPanel> paywall_;
     std::function<bool ()> isPro_;
     std::function<void (DoneFn)> purchasePro_, restorePro_;
