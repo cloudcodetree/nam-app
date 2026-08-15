@@ -3,6 +3,15 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** PERFORM's STOMP mode (`StackPerformView::layoutGrid`)
+  shows a fixed FS1-FS8 switch grid, resolving an ambiguity in the visual
+  spec's "one switch per chain item that has an fs number" wording: read
+  literally that would only produce switches for ASSIGNED slots, leaving
+  nothing to tap for an unassigned one — but the same spec also requires
+  an unassigned tap to toast ("Assign in EDIT → tap gear → FOOTSWITCH").
+  Fixed 8 slots (matching FS1-8 physical footswitch numbers) is the only
+  reading that satisfies both: each slot resolves to whichever chain item
+  (if any) carries that `fs` number, "—" + toast when none does.
 - **2026-08-15** Stack detail's PERFORM tab (Task 4) is live: on-screen
   SCENES/STOMP switch grid, no MIDI (separate future plan). Engine truth
   stays ONE model + ONE IR — a scene/AMP tap is audible only when the

@@ -60,6 +60,12 @@ void StackPerformView::layoutGrid () {
         cells_.push_back ({ {}, CellKind::Tuner, 0, {} });
         cells_.push_back ({ {}, CellKind::Next, 0, {} });
     } else {
+        // STOMP shows a switch for every FS1-8 slot -- not one switch per
+        // chain item that happens to have an fs -- because an unassigned
+        // slot still needs something to tap for the "Assign in EDIT..."
+        // toast (handleCellTap). Filtering by fs != 0 would leave no
+        // switch to press for a slot nothing is assigned to. See
+        // docs/wiki/decisions.md (2026-08-15, STOMP fixed-slot resolution).
         for (int fs = 1; fs <= 8; ++fs) {
             juce::String uid;
             for (const auto& it : stack_.chain)
