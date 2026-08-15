@@ -2,6 +2,8 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <array>
 #include <functional>
+#include <map>
+#include <string>
 #include <vector>
 #include "model/StackModel.h"
 #include "net/Tone3000Api.h"
@@ -29,6 +31,11 @@ public:
     // isn't, this falls back to the first enabled tab instead.
     void open (nam::GearType initialTab, std::array<bool, 4> disabledTabs, juce::String hint);
     void close ();
+    // Row-thumbnail lookup, keyed by toneId -- pushed by the owner once per
+    // fetch completion (AppShellStackThumbs.cpp's pushPickerThumbs), not
+    // pulled here: every result row is always a real TONE3000 id, so this
+    // never needs the two-id-space routing the Stacks screens do.
+    void setThumbs (std::map<std::string, juce::Image> thumbs);
 
     // Fired on open and on every tab switch; the owner fetches (typically
     // svc_.searchEx) and invokes the callback with the live results.
@@ -38,6 +45,15 @@ public:
         onFetch;
     std::function<void (nam::GearType, nam::ToneInfo)> onPicked;
     std::function<void ()> onDismiss;
+    // Fired only when a fetch reply is actually applied to results_ (i.e.
+    // it survived the fetchGen_/tab_ staleness check below) -- lets the
+    // owner push a matching thumbnail map without redoing that same check
+    // itself. Reviewer MAJOR: the owner used to push thumbs straight off
+    // its own onFetch reply, which only guarded "is this still the same
+    // STACK" -- a reply for a tab the user has since switched away from
+    // (PEDAL fetch lands after the user taps AMP) still passed that guard
+    // and stomped the newer tab's thumbnail map with the old tab's ids.
+    std::function<void (const std::vector<nam::ToneInfo>&)> onResults;
 
     void paint (juce::Graphics&) override;
     void resized () override;
@@ -50,12 +66,14 @@ private:
     void fetchTab ();
     void selectTab (nam::GearType);
     bool tabDisabled (nam::GearType) const;
+    juce::Image thumbFor (const nam::ToneInfo&) const;
 
     nam::GearType tab_ = nam::GearType::Pedal;
     std::array<bool, 4> disabledTabs_{};
     juce::String hint_;
     bool loading_ = false, fetchError_ = false;
     std::vector<nam::ToneInfo> results_;
+    std::map<std::string, juce::Image> thumbs_;
     int fetchGen_ = 0;   // bumped per fetchTab(); a stale async reply is dropped
 
     juce::Rectangle<int> sheetRect_, tabsRect_, captionRect_, hintRect_, listRect_;

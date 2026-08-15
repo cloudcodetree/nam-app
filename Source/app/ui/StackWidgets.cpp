@@ -78,17 +78,37 @@ void drawFsBadge (juce::Graphics& g, juce::Rectangle<int> r, int fs) {
                 r, juce::Justification::centred, false);
 }
 
-void drawStompCardChrome (juce::Graphics& g, juce::Rectangle<int> r, bool on) {
+void drawStompCardChrome (juce::Graphics& g, juce::Rectangle<int> r, bool on,
+                          const juce::Image& art) {
     const auto b = r.toFloat ();
-    // Palette-only wash: accent-tinted when engaged, neutral ink when
-    // bypassed. Was a per-pedal hue rotation of col::accent (seededHue) --
-    // that read as a muddy, off-palette brown-olive gradient; dropped in
-    // favor of the two on-brand states every other card already uses.
-    const auto top = on ? col::accentA (0.20f) : col::inkA (0.07f);
-    const auto bottom = on ? col::accentA (0.05f) : col::inkA (0.015f);
-    juce::ColourGradient grad (top, b.getX (), b.getY (), bottom, b.getX (), b.getBottom (), false);
-    g.setGradientFill (grad);
-    g.fillRoundedRectangle (b, 12.0f);
+    if (art.isValid ()) {
+        // Photo backdrop, clipped to the card, under the same accent/ink
+        // wash (now more opaque) so the LED/knobs/name drawn after this
+        // still read clearly over whatever the artwork looks like.
+        juce::Path clip;
+        clip.addRoundedRectangle (b, 12.0f);
+        g.saveState ();
+        g.reduceClipRegion (clip);
+        g.drawImageWithin (art, r.getX (), r.getY (), r.getWidth (), r.getHeight (),
+                           juce::RectanglePlacement::fillDestination |
+                               juce::RectanglePlacement::centred);
+        const auto wash = on ? col::accentA (0.42f) : col::bg.withAlpha (0.72f);
+        g.setColour (wash);
+        g.fillRoundedRectangle (b, 12.0f);
+        g.restoreState ();
+    } else {
+        // Palette-only wash: accent-tinted when engaged, neutral ink when
+        // bypassed. Was a per-pedal hue rotation of col::accent
+        // (seededHue) -- that read as a muddy, off-palette brown-olive
+        // gradient; dropped in favor of the two on-brand states every
+        // other card already uses.
+        const auto top = on ? col::accentA (0.20f) : col::inkA (0.07f);
+        const auto bottom = on ? col::accentA (0.05f) : col::inkA (0.015f);
+        juce::ColourGradient grad (top, b.getX (), b.getY (), bottom, b.getX (), b.getBottom (),
+                                   false);
+        g.setGradientFill (grad);
+        g.fillRoundedRectangle (b, 12.0f);
+    }
     g.setColour (col::inkA (0.14f));
     g.drawRoundedRectangle (b.reduced (0.5f), 12.0f, 1.0f);
 
@@ -160,6 +180,86 @@ void drawConePair (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour c) {
         g.setColour (c.withAlpha (0.6f));
         g.fillEllipse (x + d * 0.44f, y + d * 0.44f, d * 0.12f, d * 0.12f);
     }
+}
+
+namespace {
+// One gear-type mark, drawn centred in `r` -- the placeholder's payload
+// when no thumbnail is available yet. Kept distinct per type so an amp slot
+// and a cab slot still read differently even both empty.
+void drawGearGlyph (juce::Graphics& g, juce::Rectangle<float> r, nam::GearType type) {
+    g.setColour (col::inkA (0.4f));
+    switch (type) {
+        case nam::GearType::Cab: {
+            const float d = juce::jmin (r.getWidth (), r.getHeight ());
+            const auto ring = r.withSizeKeepingCentre (d, d);
+            g.drawEllipse (ring, 1.4f);
+            g.drawEllipse (ring.reduced (d * 0.3f), 1.2f);
+            g.fillEllipse (ring.withSizeKeepingCentre (d * 0.14f, d * 0.14f));
+            break;
+        }
+        case nam::GearType::Amp: {
+            // Three short "grille" slats.
+            const float bw = r.getWidth () * 0.7f;
+            const float x = r.getCentreX () - bw * 0.5f;
+            for (int i = 0; i < 3; ++i) {
+                const float y = r.getY () + r.getHeight () * (0.22f + (float)i * 0.28f);
+                g.drawLine (x, y, x + bw, y, 1.4f);
+            }
+            break;
+        }
+        case nam::GearType::Pedal: {
+            // Stomp-switch: a ring with a small raised cap.
+            const float d = juce::jmin (r.getWidth (), r.getHeight ()) * 0.7f;
+            const auto ring = r.withSizeKeepingCentre (d, d);
+            g.drawEllipse (ring, 1.4f);
+            g.fillRoundedRectangle (ring.getCentreX () - 3.0f, ring.getY () - 3.0f, 6.0f, 6.0f,
+                                    1.5f);
+            break;
+        }
+        case nam::GearType::Post:
+        default: {
+            // Knob: a ring with a single indicator line.
+            const float d = juce::jmin (r.getWidth (), r.getHeight ()) * 0.72f;
+            const auto knob = r.withSizeKeepingCentre (d, d);
+            g.drawEllipse (knob, 1.4f);
+            g.drawLine (knob.getCentreX (), knob.getCentreY (), knob.getCentreX (),
+                        knob.getY () + 2.0f, 1.4f);
+            break;
+        }
+    }
+}
+}   // namespace
+
+void drawGearThumb (juce::Graphics& g, juce::Rectangle<int> r, const juce::Image& img,
+                    nam::GearType type, float cornerRadius) {
+    const auto rf = r.toFloat ();
+    juce::Path clip;
+    clip.addRoundedRectangle (rf, cornerRadius);
+
+    if (img.isValid ()) {
+        g.saveState ();
+        g.reduceClipRegion (clip);
+        g.drawImageWithin (img, r.getX (), r.getY (), r.getWidth (), r.getHeight (),
+                           juce::RectanglePlacement::fillDestination |
+                               juce::RectanglePlacement::centred);
+        g.restoreState ();
+        g.setColour (col::inkA (0.14f));
+        g.drawRoundedRectangle (rf.reduced (0.5f), cornerRadius, 1.0f);
+        return;
+    }
+
+    // Deliberate empty-slot placeholder -- never a bare hole or a
+    // broken-image look (offline, a template rig's empty toneIds, or the
+    // fetch just hasn't landed yet).
+    g.setColour (col::inkA (0.05f));
+    g.fillRoundedRectangle (rf, cornerRadius);
+    g.setColour (col::inkA (0.14f));
+    g.drawRoundedRectangle (rf.reduced (0.5f), cornerRadius, 1.0f);
+    g.saveState ();
+    g.reduceClipRegion (clip);
+    const float inset = juce::jmin (rf.getWidth (), rf.getHeight ()) * 0.26f;
+    drawGearGlyph (g, rf.reduced (inset), type);
+    g.restoreState ();
 }
 
 }   // namespace nam::ui

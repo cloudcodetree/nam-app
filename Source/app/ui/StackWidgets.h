@@ -27,16 +27,28 @@ void drawFwdTriangle (juce::Graphics&, juce::Rectangle<float>, juce::Colour);
 void drawFsBadge (juce::Graphics&, juce::Rectangle<int>, int fs);
 
 // Stomp-box card chrome (pedal cards + full-width POST rows share this
-// body): accent-tinted gradient fill when `on`, neutral ink wash when
-// bypassed (palette-only -- no per-pedal hue rotation), LED dot (glowing
-// lime when `on`, dim otherwise), three knob rings with indicator lines.
-// Caller draws name/FS badge on top of this.
-void drawStompCardChrome (juce::Graphics&, juce::Rectangle<int>, bool on);
+// body): `art`, if valid, fills the card as a clipped backdrop under a
+// tinted legibility wash; otherwise the same accent-tinted gradient fill
+// (`on`) / neutral ink wash (bypassed) as before (palette-only -- no
+// per-pedal hue rotation). LED dot (glowing lime when `on`, dim otherwise)
+// and three knob rings with indicator lines draw on top either way. Caller
+// draws name/FS badge on top of this.
+void drawStompCardChrome (juce::Graphics&, juce::Rectangle<int>, bool on,
+                          const juce::Image& art = {});
 
 // Decorative diagonal hatch/grille strip -- the AMP card's new visual motif.
 void drawGrilleStrip (juce::Graphics&, juce::Rectangle<int>, juce::Colour);
 
 // Two ring "speaker cone" glyphs -- the CAB row's motif.
 void drawConePair (juce::Graphics&, juce::Rectangle<int>, juce::Colour);
+
+// Gear-artwork thumbnail slot, shared by Home's rig cards, EDIT's AMP/CAB/
+// PEDAL/POST cards, and StackGearPicker's rows: draws `img` clipped to a
+// rounded rect if valid, otherwise a DELIBERATE placeholder -- palette fill
+// + a small vector mark keyed by `type` (amp grille / cab cone / pedal
+// stomp-switch / post knob) -- so a missing or not-yet-fetched thumbnail
+// never reads as an empty hole or a broken image.
+void drawGearThumb (juce::Graphics&, juce::Rectangle<int>, const juce::Image& img,
+                    nam::GearType type, float cornerRadius = 10.0f);
 
 }   // namespace nam::ui

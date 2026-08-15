@@ -313,15 +313,32 @@ void AndroidAudioApp::fetchArtwork(nam::ToneInfo tone) {
         }
         const auto dest = artworkFile(tone.id);
         dest.getParentDirectory().createDirectory();
-        juce::FileOutputStream out(dest);
-        if (!out.openedOk()) return;
-        juce::JPEGImageFormat jpeg;
-        jpeg.setQuality(0.85f);
-        if (!jpeg.writeImageToStream(img, out)) {
-            dest.deleteFile();
-            return;
-        }
-        out.flush();
+        // Write to a unique temp file, THEN atomically rename into place --
+        // the Stacks thumbnail retry (AppShellStackThumbs.cpp) can trigger a
+        // second fetchArtwork for the same id while the first is still
+        // downloading (only existsAsFile() is checked above, not "already in
+        // flight"). juce::FileOutputStream opens at the current end of file
+        // rather than truncating, so two direct writers to `dest` can
+        // interleave their bytes into one permanently-undecodable jpg that
+        // then never gets retried (existsAsFile() stays true forever). Each
+        // writer instead owns its own temp file; whichever finishes last
+        // wins with a clean, complete rename -- never a partial mix.
+        const auto temp =
+            dest.getSiblingFile(dest.getFileNameWithoutExtension() + "_" +
+                                juce::String(juce::Random::getSystemRandom().nextInt64()) + ".tmp");
+        {
+            juce::FileOutputStream out(temp);
+            if (!out.openedOk()) return;
+            juce::JPEGImageFormat jpeg;
+            jpeg.setQuality(0.85f);
+            if (!jpeg.writeImageToStream(img, out)) {
+                out.flush();
+                temp.deleteFile();
+                return;
+            }
+            out.flush();
+        }   // stream closed before the rename below
+        if (!temp.moveFileTo(dest)) temp.deleteFile();
         // Cache hygiene (mirrors pruneModelCache): keep the most recent 64.
         auto dir = dest.getParentDirectory();
         juce::Array<juce::File> files = dir.findChildFiles(juce::File::findFiles, false, "*.jpg");

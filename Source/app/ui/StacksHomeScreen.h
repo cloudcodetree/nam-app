@@ -1,6 +1,8 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <functional>
+#include <map>
+#include <string>
 #include <vector>
 #include "app/ui/StackCreateWizard.h"
 #include "model/StackModel.h"
@@ -21,6 +23,10 @@ public:
     StacksHomeScreen ();
 
     void setStacks (std::vector<nam::Stack> stacks, int current);
+    // Gear-thumbnail lookup, keyed by toneId (the active amp channel, or
+    // failing that the cab) -- pushed alongside setStacks by the owner
+    // (AppShellStackThumbs.cpp); presentation only, never fetched here.
+    void setThumbs (std::map<std::string, juce::Image> thumbs);
 
     std::function<void ()> onCreate;       // "+ NEW STACK" card
     std::function<void (int)> onOpen;      // row body tap -> Detail EDIT
@@ -48,9 +54,16 @@ public:
 private:
     void layout ();
     juce::String metaLine (const nam::Stack&) const;
+    // One rig row's card, pulled out of paint() to stay under the ~60-line
+    // house rule (clang-tidy readability-function-size) once the thumbnail
+    // reflow landed. `dy` is the same list-scroll offset paint() already
+    // computes; `i` indexes both stacks_ and rowRects_.
+    void paintRigCard (juce::Graphics&, size_t i, int dy) const;
 
     std::vector<nam::Stack> stacks_;
     int current_ = -1;
+    std::map<std::string, juce::Image> thumbs_;
+    const juce::Image* thumbFor (const nam::Stack&) const;   // active amp, else cab, else nullptr
 
     StackCreateWizard wizard_;
 

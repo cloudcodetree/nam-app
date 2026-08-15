@@ -2,6 +2,8 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <array>
 #include <functional>
+#include <map>
+#include <string>
 #include <vector>
 #include "model/StackModel.h"
 
@@ -18,6 +20,10 @@ public:
     StackEditView ();
 
     void setStack (const nam::Stack& stack, int idx);
+    // Gear-thumbnail lookup, keyed by toneId (an amp's key is its ACTIVE
+    // channel's toneId, not the item's own -- see thumbFor). Presentation
+    // only: pushed by the owner (AppShellStackThumbs.cpp) alongside setStack.
+    void setThumbs (std::map<std::string, juce::Image> thumbs);
     // Dismisses the REMOVE STACK confirm sheet if it's open. Returns true
     // if it was (and got closed) -- lets the owner's back-button chain
     // treat this the same way it treats the picker/item-sheet overlays
@@ -49,10 +55,15 @@ private:
     void handleContentTap (juce::Point<int> contentLocal);
     void openConfirm ();
     const nam::ChainItem* findItem (const juce::String& uid) const;
+    // Resolves the thumbnail for `it` -- its active channel for an amp
+    // (mirrors AppShellStackThumbs.cpp's pushStackThumbs key), its own
+    // toneId otherwise. {} (paints the placeholder) if not in thumbs_.
+    juce::Image thumbFor (const nam::ChainItem& it) const;
 
     nam::Stack stack_;
     int idx_ = -1;
     bool freeform_ = false;
+    std::map<std::string, juce::Image> thumbs_;
 
     // ROUTING is two rows at this width: micro-label + FREEFORM toggle on
     // top, the three routing pills (sized to their own text, never a fixed

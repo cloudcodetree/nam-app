@@ -31,6 +31,25 @@ void StacksHomeScreen::setStacks (std::vector<nam::Stack> stacks, int current) {
     repaint ();
 }
 
+void StacksHomeScreen::setThumbs (std::map<std::string, juce::Image> thumbs) {
+    thumbs_ = std::move (thumbs);
+    repaint ();
+}
+
+// Active amp (its active channel) first, cab second, nullptr (placeholder)
+// otherwise -- mirrors the Play deck's "one representative image per row"
+// convention. StackModel's helpers already resolve the active-channel
+// indirection, so this doesn't have to.
+const juce::Image* StacksHomeScreen::thumbFor (const nam::Stack& st) const {
+    if (const auto id = nam::StackModel::activeModelToneId (st); !id.empty ())
+        if (auto it = thumbs_.find (id); it != thumbs_.end () && it->second.isValid ())
+            return &it->second;
+    if (const auto id = nam::StackModel::activeIrToneId (st); !id.empty ())
+        if (auto it = thumbs_.find (id); it != thumbs_.end () && it->second.isValid ())
+            return &it->second;
+    return nullptr;
+}
+
 void StacksHomeScreen::resized () {
     layout ();
     wizard_.setBounds (getLocalBounds ());
@@ -69,6 +88,54 @@ void StacksHomeScreen::layout () {
     listContentH_ = juce::jmax (0, y - gap);
     scrollY_ = juce::jlimit (0.0f, (float)juce::jmax (0, listContentH_ - listArea_.getHeight ()),
                              scrollY_);
+}
+
+void StacksHomeScreen::paintRigCard (juce::Graphics& g, size_t i, int dy) const {
+    const auto& st = stacks_[i];
+    auto body = rowRects_[i].body.translated (listArea_.getX (), dy);
+    if (body.getBottom () < listArea_.getY () || body.getY () > listArea_.getBottom ()) return;
+    g.setColour (col::inkA (0.02f));
+    g.fillRoundedRectangle (body.toFloat (), 14.0f);
+    g.setColour (col::inkA (0.12f));
+    g.drawRoundedRectangle (body.toFloat ().reduced (0.5f), 14.0f, 1.0f);
+
+    auto in = body.reduced (16, 10);
+    // Square thumb, full content height, at the card's left -- name/meta/
+    // badge/CONTROLS all reflow around it rather than being laid over it.
+    const int thumbSide = in.getHeight ();
+    auto thumbR = in.removeFromLeft (thumbSide);
+    in.removeFromLeft (12);
+    const auto* thumb = thumbFor (st);
+    drawGearThumb (g, thumbR, thumb != nullptr ? *thumb : juce::Image (), nam::GearType::Amp,
+                   10.0f);
+
+    // Name row is untouched (badge already carves its own 66px off the
+    // right and never conflicted with CONTROLS -- it's a different row).
+    // Only the meta line spans the CONTROLS pill's row, so only IT needs a
+    // right bound: unbounded, a long pedal/amp/scene count ran straight
+    // under the pill (review finding, "0 scenes" swallowed by "CONTROLS").
+    auto topRow = in.removeFromTop (in.getHeight () / 2 + 2);
+    auto badgeRect = topRow.removeFromRight (66).withSizeKeepingCentre (60, 18);
+    g.setFont (uiFont (15.0f, true));
+    g.setColour (col::ink);
+    g.drawText (juce::String (st.name), topRow, juce::Justification::centredLeft, true);
+    drawRoutingBadge (g, badgeRect, st.routing);
+
+    const int performScreenX = rowRects_[i].performBtn.getX () + listArea_.getX ();
+    auto metaRect = in;
+    metaRect.setRight (juce::jmin (metaRect.getRight (), performScreenX - 10));
+    g.setFont (uiFont (11.0f, false));
+    g.setColour (col::inkA (0.45f));
+    g.drawText (metaLine (st), metaRect, juce::Justification::topLeft, true);
+
+    auto perform = rowRects_[i].performBtn.translated (listArea_.getX (), dy);
+    drawPill (g, perform.toFloat (), col::accentA (0.14f), col::accentA (0.5f));
+    g.setFont (uiFontTracked (9.0f, true));
+    g.setColour (col::accentAlt);
+    auto pin = perform.reduced (14, 0);
+    drawFwdTriangle (g, pin.removeFromLeft (7).withSizeKeepingCentre (6, 8).toFloat (),
+                     col::accentAlt);
+    g.drawText ("CONTROLS", pin, juce::Justification::centred, false);
 }
 
 void StacksHomeScreen::paint (juce::Graphics& g) {
@@ -110,37 +177,7 @@ void StacksHomeScreen::paint (juce::Graphics& g) {
         }
     }
 
-    for (size_t i = 0; i < stacks_.size (); ++i) {
-        const auto& st = stacks_[i];
-        auto body = rowRects_[i].body.translated (listArea_.getX (), dy);
-        if (body.getBottom () < listArea_.getY () || body.getY () > listArea_.getBottom ())
-            continue;
-        g.setColour (col::inkA (0.02f));
-        g.fillRoundedRectangle (body.toFloat (), 14.0f);
-        g.setColour (col::inkA (0.12f));
-        g.drawRoundedRectangle (body.toFloat ().reduced (0.5f), 14.0f, 1.0f);
-
-        auto in = body.reduced (16, 10);
-        auto topRow = in.removeFromTop (in.getHeight () / 2 + 2);
-        auto badgeRect = topRow.removeFromRight (66).withSizeKeepingCentre (60, 18);
-        g.setFont (uiFont (15.0f, true));
-        g.setColour (col::ink);
-        g.drawText (juce::String (st.name), topRow, juce::Justification::centredLeft, true);
-        drawRoutingBadge (g, badgeRect, st.routing);
-
-        g.setFont (uiFont (11.0f, false));
-        g.setColour (col::inkA (0.45f));
-        g.drawText (metaLine (st), in, juce::Justification::topLeft, true);
-
-        auto perform = rowRects_[i].performBtn.translated (listArea_.getX (), dy);
-        drawPill (g, perform.toFloat (), col::accentA (0.14f), col::accentA (0.5f));
-        g.setFont (uiFontTracked (9.0f, true));
-        g.setColour (col::accentAlt);
-        auto pin = perform.reduced (14, 0);
-        drawFwdTriangle (g, pin.removeFromLeft (7).withSizeKeepingCentre (6, 8).toFloat (),
-                         col::accentAlt);
-        g.drawText ("CONTROLS", pin, juce::Justification::centred, false);
-    }
+    for (size_t i = 0; i < stacks_.size (); ++i) paintRigCard (g, i, dy);
     g.restoreState ();
 
     if (listContentH_ > listArea_.getHeight ()) {

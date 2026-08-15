@@ -819,8 +819,21 @@ void AppShell::show (Screen s) {
         tunerOpen_ = false;
     }
 
-    // Refresh data-backed screens as they come into view.
-    if (s == Screen::Stacks) pushStacks ();
+    // current_ swaps to the new target BEFORE the pushStacks() refresh below
+    // -- its retry-visibility gate reads current_, previously stale here.
+    juce::Component* target = (s == Screen::Stacks)
+                                  ? (stacksShowDetail_ ? (juce::Component*)stacksDetail_.get ()
+                                                       : (juce::Component*)stacksHome_.get ())
+                                  : (juce::Component*)play_.get ();
+    if (current_ != target) {
+        if (current_ != nullptr) current_->setVisible (false);
+        current_ = target;
+        current_->setBounds (contentBounds ());
+        current_->setVisible (true);
+        current_->toFront (false);
+    }
+    repaint (navBar_);                        // active nav highlight tracks the visible screen
+    if (s == Screen::Stacks) pushStacks ();   // refresh data-backed screens
 
     // Arriving at Play with an audition tone still in the engine: if that
     // tone was hearted into the deck, promote it to the ACTIVE library entry
@@ -855,19 +868,6 @@ void AppShell::show (Screen s) {
         liveModelToneId_.clear ();
         liveIrToneId_.clear ();
     }
-
-    juce::Component* target = (s == Screen::Stacks)
-                                  ? (stacksShowDetail_ ? (juce::Component*)stacksDetail_.get ()
-                                                       : (juce::Component*)stacksHome_.get ())
-                                  : (juce::Component*)play_.get ();
-    repaint (navBar_);   // active nav highlight tracks the visible screen
-
-    if (current_ == target) return;
-    if (current_ != nullptr) current_->setVisible (false);
-    current_ = target;
-    current_->setBounds (contentBounds ());
-    current_->setVisible (true);
-    current_->toFront (false);
 }
 
 void AppShell::setLevels (float in, float out) {

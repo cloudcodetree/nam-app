@@ -283,6 +283,59 @@ private:
     void pushDeckItems ();                            // list/grid rows (AppShellDeck.cpp)
     std::map<std::string, juce::Image> thumbCache_;   // id -> small image (bounded)
     void updateCabChoices ();
+
+    // Stacks-surface gear thumbnails (AppShellStackThumbs.cpp): resolves
+    // artwork for a chain item across BOTH id spaces -- real TONE3000 ids
+    // (svc_.artworkForTone) and local LibraryEntry filenames minted by the
+    // create wizard (artwork_, after matching against getModels_/getIrs_ via
+    // findLocalEntry, same routing AppShellPerform.cpp's startToneLoad
+    // uses) -- plus live gear-picker rows (always real ids). Rescaled +
+    // cached the same bounded way AppShellDeck.cpp's thumbOf does. Per
+    // CLAUDE.md, the Stacks screens stay presentation-only and nam::Stack
+    // (JUCE-free) never carries a juce::Image -- this pushes a separate
+    // toneId->Image lookup alongside setStacks/setStack/picker results.
+    std::map<std::string, juce::Image> stackThumbCache_;   // toneId -> small image (bounded)
+    juce::Image rescaleAndStoreThumb (const std::string& key, const juce::Image& full);
+    juce::Image thumbForTone (const nam::ToneInfo&);
+    // `effectiveId` overrides it.toneId (an amp card shows its ACTIVE
+    // channel's art, which can differ from the item's own toneId).
+    juce::Image artworkForChainItem (const nam::ChainItem& it, const std::string& effectiveId = {});
+    void pushStackThumbs ();   // Home + EDIT
+    // By value, not const&: the retry timer calls this with lastPickerTones_
+    // itself as the argument, and the first line reassigns lastPickerTones_
+    // -- a by-ref self-assignment latent trap the reviewer caught (only
+    // "safe" today by accident of libc++/libstdc++'s vector::operator=
+    // self-check).
+    void pushPickerThumbs (std::vector<nam::ToneInfo>);   // gear-picker rows
+    std::vector<nam::ToneInfo> lastPickerTones_;          // replayed by the retry timer below
+    // Wires picker().onResults -> pushPickerThumbs. Pulled out of
+    // wireGearPicker (AppShellStacks.cpp, already at the no-god-files line
+    // cap) into AppShellStackThumbs.cpp: pushing thumbs from onResults
+    // (fired only once a fetch reply survives the picker's own fetchGen_/
+    // tab_ staleness check) rather than from the raw onFetch reply fixes a
+    // reviewer-caught MAJOR -- onFetch's own guard only checked "same
+    // stack", so a reply for a tab the user had switched away from still
+    // passed it and stomped the newer tab's thumbnail map.
+    void wirePickerThumbPush ();
+
+    // Bounded re-push: artworkForTone is fetch-on-miss (returns {} until the
+    // async fetch lands -- see BrowseServices::artworkForTone), so a first
+    // paint after opening/loading a rig or the picker legitimately has
+    // blanks. A juce::Timer re-pushes at ~700ms for a few attempts then
+    // stops -- never polls forever, and only runs from real state changes
+    // (never from paint()). One shared impl, two independent instances (one
+    // per surface) so Home/EDIT and the picker retry on their own schedules.
+    // Mirrors ApplyTimeoutImpl's owner-backed Timer shape (AppShellPerform.
+    // cpp) so this header's unique_ptr doesn't need juce::Timer's vtable
+    // complete.
+    struct ThumbRetry {
+        virtual ~ThumbRetry () = default;
+        virtual void
+        ensureRunning () = 0;       // arm if not already ticking (keeps its attempt budget)
+        virtual void stop () = 0;   // cancel + reset the attempt budget
+    };
+    struct ThumbRetryImpl;   // defined in AppShellStackThumbs.cpp
+    std::unique_ptr<ThumbRetry> stackThumbRetry_, pickerThumbRetry_;
     // Stacks state (persisted through the host as JSON, v2 ordered-chain
     // model with transparent v1 fixed-slot migration -- see StackModel).
     // Persistence + Home/Detail wiring live in AppShellStacks.cpp; screen

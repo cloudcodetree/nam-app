@@ -130,6 +130,7 @@ if(NAM_BUILD_APP)
             Source/app/ui/AppShellChrome.cpp
             Source/app/ui/AppShellStacks.cpp
             Source/app/ui/AppShellPerform.cpp
+            Source/app/ui/AppShellStackThumbs.cpp
             Source/dsp/ToneEngine.cpp
             Source/dsp/PitchDetector.cpp
             Source/dsp/IrCab.cpp

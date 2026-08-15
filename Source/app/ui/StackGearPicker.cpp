@@ -1,5 +1,6 @@
 #include "app/ui/StackGearPicker.h"
 #include "app/ui/NamLookAndFeel.h"
+#include "app/ui/StackWidgets.h"
 
 using namespace nam::ui;
 
@@ -46,6 +47,17 @@ void StackGearPicker::open (nam::GearType initialTab, std::array<bool, 4> disabl
 
 void StackGearPicker::close () { setVisible (false); }
 
+void StackGearPicker::setThumbs (std::map<std::string, juce::Image> thumbs) {
+    thumbs_ = std::move (thumbs);
+    repaint ();
+}
+
+juce::Image StackGearPicker::thumbFor (const nam::ToneInfo& t) const {
+    if (t.id.empty ()) return {};
+    auto it = thumbs_.find (t.id);
+    return it != thumbs_.end () ? it->second : juce::Image ();
+}
+
 void StackGearPicker::selectTab (nam::GearType t) {
     if (tabDisabled (t) || t == tab_) return;
     tab_ = t;
@@ -79,6 +91,10 @@ void StackGearPicker::fetchTab () {
         self->results_ = ok ? std::move (tones) : std::vector<nam::ToneInfo> ();
         self->layout ();
         self->repaint ();
+        // Past the staleness check above -- this reply IS what the picker
+        // is showing right now, so a thumb push for it can't stomp a
+        // newer tab's map.
+        if (ok && self->onResults) self->onResults (self->results_);
     });
 }
 
@@ -174,6 +190,9 @@ void StackGearPicker::paint (juce::Graphics& g) {
             g.fillRoundedRectangle (row.toFloat (), 10.0f);
             auto rin = row.reduced (14, 8);
             auto tag = rin.removeFromRight (44);
+            drawGearThumb (g, rin.removeFromLeft (rin.getHeight ()), thumbFor (results_[i]), tab_,
+                           8.0f);
+            rin.removeFromLeft (10);
             g.setFont (uiFont (13.0f, false));
             g.setColour (col::ink);
             g.drawText (juce::String (results_[i].title), rin, juce::Justification::centredLeft,

@@ -23,6 +23,7 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
               "title": "Amp One",
               "format": "nam",
               "gearTag": "amp",
+              "imageUrl": "https://example.com/amp-1.jpg",
               "fs": 3,
               "bypassed": false,
               "channels": [
@@ -58,6 +59,7 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     REQUIRE(item.title == "Amp One");
     REQUIRE(item.format == "nam");
     REQUIRE(item.gearTag == "amp");
+    REQUIRE(item.imageUrl == "https://example.com/amp-1.jpg");
     REQUIRE(item.fs == 3);
     REQUIRE_FALSE(item.bypassed);
     REQUIRE(item.channels.size() == 2);
@@ -75,6 +77,7 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     // Unknown keys on both stack and item objects survive the round trip.
     REQUIRE(reparsed["stacks"][0]["notes"] == "custom-stack-field");
     REQUIRE(reparsed["stacks"][0]["chain"][0]["vendorExtra"] == 42);
+    REQUIRE(reparsed["stacks"][0]["chain"][0]["imageUrl"] == "https://example.com/amp-1.jpg");
 
     auto stacks2 = StackModel::parse(out);
     REQUIRE(stacks2.size() == 1);
@@ -82,6 +85,35 @@ TEST_CASE("StackModel v2 round-trip preserves every field incl. unknown keys") {
     REQUIRE(stacks2[0].chain[0].activeChannel == 1);
     REQUIRE(stacks2[0].chain[0].channels.size() == 2);
     REQUIRE(stacks2[0].routing == Stack::Routing::AB);
+    REQUIRE(stacks2[0].chain[0].imageUrl == "https://example.com/amp-1.jpg");
+}
+
+TEST_CASE("StackModel parse defaults imageUrl to empty when the key is absent") {
+    // Files written before this field existed (and any wizard/local-library
+    // item, which never has a fetchable URL to begin with) must parse to an
+    // empty imageUrl rather than throwing or leaving it uninitialized --
+    // artworkForChainItem's fetch-on-miss route treats "" as "no URL, fall
+    // back to the local-library path or the placeholder."
+    static const char* noImageUrlFixture = R"JSON(
+    {
+      "version": 2,
+      "stacks": [
+        {
+          "name": "Old Rig",
+          "uid": "s1",
+          "chain": [
+            {"uid": "i1", "type": "pedal", "toneId": "pedal-1", "title": "P",
+             "format": "nam", "gearTag": "pedal", "fs": 0, "bypassed": false}
+          ]
+        }
+      ]
+    }
+    )JSON";
+
+    auto stacks = StackModel::parse(noImageUrlFixture);
+    REQUIRE(stacks.size() == 1);
+    REQUIRE(stacks[0].chain.size() == 1);
+    REQUIRE(stacks[0].chain[0].imageUrl.empty());
 }
 
 TEST_CASE("StackModel parse zeroes fs on a Cab item -- no UI can clear a stale one") {
@@ -162,6 +194,10 @@ TEST_CASE("StackModel v1 migration maps fixed slots to ordered chain") {
     REQUIRE(st.chain[0].channels.size() == 1);
     REQUIRE(st.chain[0].channels[0].toneId == "amp-x");
     REQUIRE(st.chain[0].activeChannel == 0);
+    // v1 has no imageUrl concept -- migration must leave it empty, not
+    // fabricate one, so artworkForChainItem's fetch-on-miss route falls
+    // back to the local-library path instead of trying a bogus URL.
+    REQUIRE(st.chain[0].imageUrl.empty());
 
     REQUIRE(st.chain[1].type == GearType::Cab);
     REQUIRE(st.chain[1].gearTag == "cab");

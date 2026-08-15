@@ -113,7 +113,7 @@ void StackEditView::paintGuided (juce::Graphics& g, int dy) const {
             const auto* it = findItem (pc.uid);
             if (it == nullptr) continue;
             auto r = tr (pc.body);
-            drawStompCardChrome (g, r, !it->bypassed);
+            drawStompCardChrome (g, r, !it->bypassed, thumbFor (*it));
             g.setFont (uiFont (9.0f, false));
             g.setColour (it->bypassed ? col::inkA (0.3f) : col::inkA (0.78f));
             g.drawText (juce::String (it->title),
@@ -139,6 +139,8 @@ void StackEditView::paintGuided (juce::Graphics& g, int dy) const {
         auto in = r.reduced (14, 10);
         auto top = in.removeFromTop (26);
         drawFsBadge (g, top.removeFromRight (26), amp->fs);
+        drawGearThumb (g, top.removeFromLeft (26), thumbFor (*amp), nam::GearType::Amp, 6.0f);
+        top.removeFromLeft (8);
         g.setFont (displayFont (15.0f));
         g.setColour (col::ink);
         // The card headline follows the ACTIVE channel (item.title only
@@ -181,7 +183,7 @@ void StackEditView::paintGuided (juce::Graphics& g, int dy) const {
         g.setColour (col::inkA (0.02f));
         g.fillRoundedRectangle (r.toFloat (), 10.0f);
         auto in = r.reduced (12, 8);
-        drawConePair (g, in.removeFromLeft (56), col::inkA (0.6f));
+        drawGearThumb (g, in.removeFromLeft (56), thumbFor (*cab), nam::GearType::Cab, 8.0f);
         in.removeFromLeft (10);
         g.setFont (uiFont (12.0f, true));
         g.setColour (col::ink);
@@ -216,6 +218,9 @@ void StackEditView::paintGuided (juce::Graphics& g, int dy) const {
             g.setColour (it->bypassed ? col::inkA (0.2f) : col::meterLime);
             g.fillEllipse (led);
             in.removeFromLeft (6);
+            drawGearThumb (g, in.removeFromLeft (36).withSizeKeepingCentre (36, 36), thumbFor (*it),
+                           nam::GearType::Post, 6.0f);
+            in.removeFromLeft (8);
             auto fsArea = in.removeFromRight (34);
             g.setFont (uiFont (12.0f, false));
             g.setColour (it->bypassed ? col::inkA (0.35f) : col::inkA (0.85f));

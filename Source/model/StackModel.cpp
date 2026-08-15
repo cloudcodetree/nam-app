@@ -44,9 +44,9 @@ Stack::Routing routingFromString(const std::string& s) {
 
 // --- v2 item/scene/stack <-> json -------------------------------------------
 
-constexpr std::array<const char*, 10> kItemKeys{ "uid",      "type",         "toneId", "title",
-                                                 "format",   "gearTag",      "fs",     "bypassed",
-                                                 "channels", "activeChannel" };
+constexpr std::array<const char*, 11> kItemKeys{ "uid",      "type",     "toneId",       "title",
+                                                 "format",   "gearTag",  "imageUrl",     "fs",
+                                                 "bypassed", "channels", "activeChannel" };
 
 ChainItem itemFromJson(const json& cj) {
     ChainItem it;
@@ -56,6 +56,7 @@ ChainItem itemFromJson(const json& cj) {
     it.title = cj.value("title", std::string());
     it.format = cj.value("format", std::string());
     it.gearTag = cj.value("gearTag", std::string());
+    it.imageUrl = cj.value("imageUrl", std::string());
     it.fs = cj.value("fs", 0);
     // A cab footswitch is meaningless (nothing in the chain acts on it) and
     // the item sheet no longer offers FS pills for a Cab -- zero it here so
@@ -85,6 +86,7 @@ json itemToJson(const ChainItem& it) {
     j["title"] = it.title;
     j["format"] = it.format;
     j["gearTag"] = it.gearTag;
+    j["imageUrl"] = it.imageUrl;
     j["fs"] = it.fs;
     j["bypassed"] = it.bypassed;
     json channels = json::array();

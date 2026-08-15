@@ -1,6 +1,8 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <functional>
+#include <map>
+#include <string>
 #include "app/ui/StackEditView.h"
 #include "app/ui/StackGearPicker.h"
 #include "app/ui/StackItemSheet.h"
@@ -20,6 +22,9 @@ public:
     StackDetailScreen ();
 
     void setStack (const nam::Stack& stack, int idx, int count);   // count = setlist length
+    // Gear-thumbnail lookup, keyed by toneId -- forwarded to the EDIT view's
+    // AMP/CAB/PEDAL/POST cards. See AppShellStackThumbs.cpp.
+    void setThumbs (std::map<std::string, juce::Image> thumbs);
     void selectTab (bool perform);   // programmatic (Home's row vs PERFORM pill)
     int currentIndex () const { return idx_; }
     bool isPerformTab () const { return performTab_; }

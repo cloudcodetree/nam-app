@@ -23,6 +23,14 @@ struct ChainItem {
     // label); distinct from `type`, which is the chain's coarser routing
     // category.
     std::string gearTag;
+    // API-supplied artwork URL, captured at the moment a live nam::ToneInfo
+    // is available (EDIT picker add/swap) -- ChainItem itself only stores
+    // toneId/title/format, so without this a re-fetch later (thumbnail
+    // paint) has no imageUrl to hand fetchArtwork and can never succeed even
+    // though the id is real. "" for wizard/local-library items (no ToneInfo
+    // exists for those) and for files written before this field existed --
+    // both fall back to the local-library artwork path or the placeholder.
+    std::string imageUrl;
     int fs = 0;   // 0 = unassigned, 1..8
     bool bypassed = false;
     std::vector<StackChannel> channels;   // amps only; [0] mirrors toneId/title

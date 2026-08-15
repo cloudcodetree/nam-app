@@ -75,6 +75,10 @@ void StackDetailScreen::setStack (const nam::Stack& stack, int idx, int count) {
     repaint ();
 }
 
+void StackDetailScreen::setThumbs (std::map<std::string, juce::Image> thumbs) {
+    editView_.setThumbs (std::move (thumbs));
+}
+
 void StackDetailScreen::selectTab (bool perform) {
     performTab_ = perform;
     editView_.setVisible (!performTab_);

@@ -31,6 +31,21 @@ bool StackEditView::closeConfirm () {
     return true;
 }
 
+void StackEditView::setThumbs (std::map<std::string, juce::Image> thumbs) {
+    thumbs_ = std::move (thumbs);
+    repaint ();
+}
+
+juce::Image StackEditView::thumbFor (const nam::ChainItem& it) const {
+    std::string id = it.toneId;
+    if (it.type == nam::GearType::Amp && !it.channels.empty () && it.activeChannel >= 0 &&
+        it.activeChannel < (int)it.channels.size ())
+        id = it.channels[(size_t)it.activeChannel].toneId;
+    if (id.empty ()) return {};
+    auto found = thumbs_.find (id);
+    return found != thumbs_.end () ? found->second : juce::Image ();
+}
+
 const nam::ChainItem* StackEditView::findItem (const juce::String& uid) const {
     for (const auto& it : stack_.chain)
         if (juce::String (it.uid) == uid) return &it;

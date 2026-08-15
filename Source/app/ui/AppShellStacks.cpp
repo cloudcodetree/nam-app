@@ -76,6 +76,7 @@ void AppShell::pushStacks () {
         if (idx >= 0 && idx < (int)stackList_.size ())
             stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
     }
+    pushStackThumbs ();   // AppShellStackThumbs.cpp -- rig/card art alongside the data above
     // Deliberately NO applyStackToEngine() here. pushStacks is a RENDER
     // call, and finishToneLoad calls it on the failure path -- making it
     // also trigger a load turned an unloadable tone into an unbounded
@@ -97,6 +98,7 @@ void AppShell::openStackDetail (int idx, bool perform) {
     // CONTROLS' setlist stepping falls back to it when Detail has no index.
     currentStack_ = idx;
     stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
+    pushStackThumbs ();   // this path bypasses pushStacks(), which normally covers it
     // show() BEFORE selectTab, and no applyStackToEngine() call here.
     // selectTab fires onTabChanged, whose handler applies the rig; that
     // apply is guarded on this screen being current_, which only show()
@@ -287,6 +289,7 @@ void AppShell::wireGearPicker () {
     stacksDetail_->picker ().onPicked = [this] (nam::GearType tab, nam::ToneInfo tone) {
         applyGearPick (tab, std::move (tone));
     };
+    wirePickerThumbPush ();   // onResults -> pushPickerThumbs (AppShellStackThumbs.cpp)
 
     auto& sheet = stacksDetail_->itemSheet ();
     sheet.onToggleBypass = [this] (juce::String uid) {
@@ -350,6 +353,7 @@ void AppShell::applyGearPick (nam::GearType tab, nam::ToneInfo tone) {
                 it.title = tone.title;
                 it.format = tone.format;
                 it.gearTag = tone.gear;
+                it.imageUrl = tone.imageUrl;   // a later thumbnail fetch has no other source
                 if (it.type == nam::GearType::Amp) {
                     it.channels = { { tone.id, tone.title } };
                     it.activeChannel = 0;
@@ -366,6 +370,7 @@ void AppShell::applyGearPick (nam::GearType tab, nam::ToneInfo tone) {
         it.title = tone.title;
         it.format = tone.format;
         it.gearTag = tone.gear;
+        it.imageUrl = tone.imageUrl;
         if (tab == nam::GearType::Amp) {
             it.channels.push_back ({ tone.id, tone.title });
             it.activeChannel = 0;
