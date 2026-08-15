@@ -37,7 +37,14 @@ void AppShell::loadStacksState () {
     stackList_.clear ();
     currentStack_ = 0;
     if (!svc_.loadStacksJson) return;
-    stackList_ = nam::StackModel::parse (svc_.loadStacksJson ().toStdString ());
+    const auto raw = svc_.loadStacksJson ();
+    stackList_ = nam::StackModel::parse (raw.toStdString ());
+    // parse() degrades unreadable content to {} rather than throwing (a
+    // corrupt file, or one written by a future app version) -- without a
+    // backup, the very next save (any stack edit) would overwrite those raw
+    // bytes with an empty rig list, losing them for good. Back the file up
+    // once, right here, before that can happen.
+    if (stackList_.empty () && raw.isNotEmpty () && svc_.backupStacksJson) svc_.backupStacksJson ();
 }
 
 void AppShell::saveStacksState () {

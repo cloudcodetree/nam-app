@@ -151,6 +151,17 @@ juce::File AndroidAudioApp::stacksFile() {
         .getChildFile("NAM Player/stacks.json");
 }
 
+// See the header comment / AppShell::loadStacksState: called only when
+// StackModel::parse degraded the file's content to {} -- the raw bytes are
+// worth keeping around rather than letting the next save clobber them.
+// Overwrites any earlier .bak (only the most recently unreadable file is
+// worth keeping); a missing source file is a silent no-op.
+void AndroidAudioApp::backupStacksJson() {
+    const auto src = stacksFile();
+    if (!src.existsAsFile()) return;
+    src.copyFileTo(src.getSiblingFile("stacks.json.bak"));
+}
+
 void AndroidAudioApp::doLoadToneLive(nam::ToneInfo tone,
                                      std::function<void(bool, juce::String)> done) {
     const bool isIr = (tone.format == "ir");

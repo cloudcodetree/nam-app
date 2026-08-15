@@ -115,6 +115,13 @@ public:
         // (downloads what it needs; format decides model vs cab impulse).
         std::function<juce::String ()> loadStacksJson;
         std::function<void (juce::String)> saveStacksJson;
+        // Safety net for a stacks.json the host can read as bytes but
+        // StackModel::parse degrades to {} on (corrupt, or written by a
+        // future app version) -- copies the raw file aside (stacks.json.bak)
+        // so it survives the very next save, which would otherwise
+        // overwrite it with an empty rig list. Called by loadStacksState;
+        // the host owns the real file path, AppShell only sees JSON text.
+        std::function<void ()> backupStacksJson;
         DownloadFn loadTone;
         std::function<void (bool)> setTestTone;   // orb panel: output check tone
     };

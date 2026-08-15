@@ -112,6 +112,11 @@ private:
     // the engine, downloading on demand if it isn't cached yet.
     void doLoadToneLive(nam::ToneInfo tone, std::function<void(bool, juce::String)> done);
     static juce::File stacksFile();   // stacks.json under appdata
+    // Safety net for a stacks.json AppShell's StackModel::parse couldn't
+    // make sense of (corrupt or future-version): copies the raw file aside
+    // as stacks.json.bak so it survives the next save. Wired to
+    // BrowseServices::backupStacksJson; a no-op if the file doesn't exist.
+    static void backupStacksJson();
 
     // Runs `then(true)` with a valid token (refreshing silently if needed;
     // recreates the session so it carries the fresh token), else then(false).

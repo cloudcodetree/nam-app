@@ -164,6 +164,7 @@ AndroidAudioApp::AndroidAudioApp() {
         f.getParentDirectory().createDirectory();
         f.replaceWithText(s);
     };
+    browse.backupStacksJson = [] { backupStacksJson(); };
     browse.loadTone = [this](nam::ToneInfo t, AppShell::DoneFn done) {
         doLoadToneLive(std::move(t), std::move(done));
     };
