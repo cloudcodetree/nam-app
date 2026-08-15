@@ -43,7 +43,7 @@ for i in $(seq 1 90); do
 done
 sleep 2
 for i in $(seq 1 20); do
-  conn=$(adb mdns services 2>/dev/null | grep "_adb-tls-connect" | grep -oE "192\.168\.[0-9.]+:[0-9]+" | head -1)
+  conn=$(adb mdns services 2>/dev/null | grep "_adb-tls-connect" | grep -oE "[0-9]+\.[0-9]+\.[0-9.]+:[0-9]+" | head -1)
   if [ -n "$conn" ]; then adb connect "$conn"; break; fi
   sleep 2
 done
@@ -61,6 +61,15 @@ Notes:
 - If the watcher times out because the user hadn't scanned yet, just
   relaunch the watcher loop — the QR stays valid while the phone's pairing
   screen shows it.
+- **Don't assume a `192.168.x` subnet** — Chris's S25 has shown up on
+  `10.24.248.x`. Match any IPv4 (the loop above does); a hardcoded
+  `192\.168\.` grep silently never matches and looks like "pairing failed".
+- **If mDNS discovery finds nothing but the phone says it paired, restart
+  the adb server** (`adb kill-server && adb start-server`): a pairing that
+  already succeeded then shows up directly in `adb devices` as
+  `adb-<SERIAL>-XXXXXX._adb-tls-connect._tcp`, which is usable as the `-s`
+  serial as-is. Verified 2026-08-15 — the pairing had worked all along and
+  only the discovery was stale.
 - Fallback if QR scanning fails: the phone's **Pair device with pairing
   code** screen shows `IP:port` + a 6-digit code; run
   `adb pair <IP:port> <code>` directly.
