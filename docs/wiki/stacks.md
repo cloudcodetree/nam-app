@@ -26,7 +26,7 @@ channels; scenes snapshot a pedal-bypass map plus an amp channel.
 - Deferred to their own plans: MIDI/foot control, dual-amp A/B + stereo
   DSP, audible pedal nodes.
 
-## PERFORM tab
+## CONTROLS tab (code still says "perform" -- label-only rename)
 
 - `StackDetailScreen`'s PERFORM tab hosts `StackPerformView`
   (`Source/app/ui/StackPerformView.h/.cpp` + `...Paint.cpp`), full-bleed
@@ -40,6 +40,11 @@ channels; scenes snapshot a pedal-bypass map plus an amp channel.
   (`AppShell::wirePerformView`/`enterPerform`/`applyScene`/`applyAmpCycle`/
   `stepPerformStack`/`requestToneLoad`/`startToneLoad`), split out of
   `AppShellStacks.cpp` to stay under the 400-line new-file cap.
+- **The engine follows the open rig on BOTH tabs.** `applyStackToEngine`
+  (formerly `enterPerform`) runs from `openStackDetail` and from
+  `pushStacks()` -- the call every stack mutation already funnels through --
+  so editing is audible: swap an amp, cycle a channel or pick a cab and you
+  hear it at once. It is idempotent and guarded on `stacksShowDetail_`.
 - A scene/AMP tap is audible only when the target toneId differs from
   `AppShell::liveModelToneId_`/`liveIrToneId_`. Those are updated by
   PERFORM's own applies and **cleared whenever Play becomes the nav target**

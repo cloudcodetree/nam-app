@@ -3,7 +3,7 @@
 
 // PERFORM tab apply wiring: wirePerformView() connects StackPerformView's
 // callbacks (AppShellStacks.cpp owns wireStacksScreens() itself and just
-// calls this) to enterPerform, which onTabChanged below drives on every
+// calls this) to applyStackToEngine, which onTabChanged below drives on every
 // EDIT->PERFORM transition. Split out of AppShellStacks.cpp per the
 // no-god-files rule -- it was pushing that file past 400 lines.
 //
@@ -48,9 +48,7 @@ struct AppShell::ApplyTimeoutImpl : AppShell::ApplyTimeout, private juce::Timer 
 };
 
 void AppShell::wirePerformView () {
-    stacksDetail_->onTabChanged = [this] (bool perform) {
-        if (perform) enterPerform ();
-    };
+    stacksDetail_->onTabChanged = [this] (bool perform) { applyStackToEngine (); };
 
     auto& perf = stacksDetail_->performView ();
     perf.onExit = [this] { stacksDetail_->selectTab (false); };
@@ -122,7 +120,7 @@ void AppShell::requestToneLoad (int stackIdx, nam::ToneInfo tone, std::function<
     if (!findLocalEntry (tone, probe) && !svc_.loadTone) return;
     if (performApplyInFlight_) {
         // Keyed by resource type so a model request and an IR request that
-        // both arrive mid-flight (enterPerform's model-then-IR pair racing
+        // both arrive mid-flight (applyStackToEngine's model-then-IR pair racing
         // a stack switch) don't collide in one slot -- see AppShell.h.
         auto& slot = (tone.format == "ir") ? pendingIrApply_ : pendingModelApply_;
         slot = { true, stackIdx, juce::String (stackList_[(size_t)stackIdx].uid), std::move (tone),
@@ -268,8 +266,17 @@ void AppShell::handleApplyTimeout (int generation) {
                     std::move (req.onFail), false);
 }
 
-void AppShell::enterPerform () {
-    if (stacksDetail_ == nullptr) return;
+// Make the engine match the open rig: load its active amp channel as the
+// model and its cab as the impulse. Idempotent -- each half is skipped when
+// that tone is already live -- so callers fire it freely (every edit, every
+// open, every tab switch) and only real changes reach the engine. That's
+// what lets EDIT be audible: you hear the rig as you build it, not only
+// once you reach CONTROLS.
+void AppShell::applyStackToEngine () {
+    // Only while a rig is actually on screen; a background push (load,
+    // removal) must not re-point the engine at whatever index Detail last
+    // held.
+    if (stacksDetail_ == nullptr || !stacksShowDetail_) return;
     const int idx = stacksDetail_->currentIndex ();
     if (idx < 0 || idx >= (int)stackList_.size ()) return;
     const auto& st = stackList_[(size_t)idx];
@@ -391,5 +398,5 @@ void AppShell::stepPerformStack (int delta) {
     const int cur = stacksDetail_ != nullptr ? stacksDetail_->currentIndex () : currentStack_;
     const int next = ((cur + delta) % n + n) % n;
     currentStack_ = next;
-    openStackDetail (next, true);   // re-applies via onTabChanged -> enterPerform
+    openStackDetail (next, true);   // re-applies via openStackDetail
 }

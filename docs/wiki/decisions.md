@@ -3,6 +3,25 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** "PERFORM" is now **CONTROLS** in the UI, and **EDIT is
+  audible**: opening a rig (either tab) and every edit that changes the
+  audible truth -- swap an amp, cycle a channel, pick a cab -- loads it into
+  the engine immediately, so you hear the rig as you build it instead of
+  only once you reach the stage view. `enterPerform` was renamed
+  `applyStackToEngine` (it is no longer a PERFORM-entry concept) and hooked
+  into `pushStacks()`, the one call every stack mutation already funnels
+  through, plus `openStackDetail`. It is idempotent -- each half is skipped
+  when that tone is already live -- so firing it on every push costs
+  nothing and can't double-load; it is additionally guarded on
+  `stacksShowDetail_` so a background push (initial load, a removal that
+  already navigated Home) can never re-point the engine at a stale index.
+  Verified on emulator-5554 with temporary instrumentation (removed before
+  commit): opening a rig on the EDIT tab logged both `apply nam id=45679`
+  and `apply ir id=75087`; swapping the cab from the item sheet mid-edit
+  logged `apply ir id=83052`. NOTE: only the user-visible label changed --
+  the code still says "perform" throughout (`StackPerformView`,
+  `AppShellPerform.cpp`, `performTab_`). A mechanical rename is deliberately
+  deferred rather than bundled into a behavior change.
 - **2026-08-15** Stacks UX-correctness batch (5 STILL-OPEN checklist items):
   amp stomp tap now routes to `applyAmpCycle` instead of the meaningless
   bypass toggle (plus a bonus fix found while E2E-verifying it: the STOMP

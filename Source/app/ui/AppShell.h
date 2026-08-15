@@ -327,7 +327,7 @@ private:
     // succeeds.
     std::string liveModelToneId_, liveIrToneId_;
     void wirePerformView ();                        // performView() callbacks (AppShellPerform.cpp)
-    void enterPerform ();                           // apply activeModel/IrToneId if not live
+    void applyStackToEngine ();                     // make the engine match the open rig
     void applyScene (int stackIdx, int sceneIdx);   // SCENES switch tap
     // AMP switch tap (SCENES mode) / amp-mapped STOMP switch tap. `targetUid`
     // empty = first amp in the chain (SCENES mode's onAmpCycle, matching the
@@ -340,7 +340,7 @@ private:
     // One in-flight nam::ToneInfo load at a time; a request that arrives
     // mid-flight parks in the slot matching its resource type (model vs IR,
     // by tone.format) rather than starting a second concurrent
-    // svc_.loadTone call. Two slots, not one -- enterPerform issues a model
+    // svc_.loadTone call. Two slots, not one -- applyStackToEngine issues a model
     // load then an IR load back to back, so a NEXT/‹ › switch or a scene tap
     // that lands while the first is still in flight must not let the IR
     // request overwrite the parked model request (or vice versa). Each slot

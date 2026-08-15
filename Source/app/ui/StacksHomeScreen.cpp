@@ -139,7 +139,7 @@ void StacksHomeScreen::paint (juce::Graphics& g) {
         auto pin = perform.reduced (14, 0);
         drawFwdTriangle (g, pin.removeFromLeft (7).withSizeKeepingCentre (6, 8).toFloat (),
                          col::accentAlt);
-        g.drawText ("PERFORM", pin, juce::Justification::centred, false);
+        g.drawText ("CONTROLS", pin, juce::Justification::centred, false);
     }
     g.restoreState ();
 

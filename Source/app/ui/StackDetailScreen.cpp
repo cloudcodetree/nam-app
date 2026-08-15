@@ -140,7 +140,7 @@ void StackDetailScreen::paint (juce::Graphics& g) {
         g.drawText (label, r, juce::Justification::centred, false);
     };
     tabPill (editTabRect_, "EDIT", !performTab_);
-    tabPill (performTabRect_, "PERFORM", performTab_);
+    tabPill (performTabRect_, "CONTROLS", performTab_);
 }
 
 void StackDetailScreen::mouseDown (const juce::MouseEvent& e) {

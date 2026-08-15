@@ -76,6 +76,11 @@ void AppShell::pushStacks () {
         if (idx >= 0 && idx < (int)stackList_.size ())
             stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
     }
+    // Every stack mutation funnels through here, so this one call is what
+    // makes editing audible -- swap an amp, cycle a channel, pick a cab and
+    // you hear it immediately. No-op unless a rig is on screen and the tone
+    // actually changed (applyStackToEngine is idempotent).
+    applyStackToEngine ();
 }
 
 void AppShell::openStackDetail (int idx, bool perform) {
@@ -87,11 +92,14 @@ void AppShell::openStackDetail (int idx, bool perform) {
     stacksDetail_->itemSheet ().close ();
     stacksShowDetail_ = true;
     // With the SETLIST chips gone, "current" means the rig you last opened --
-    // PERFORM's setlist stepping falls back to it when Detail has no index.
+    // CONTROLS' setlist stepping falls back to it when Detail has no index.
     currentStack_ = idx;
     stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
     stacksDetail_->selectTab (perform);
     show (Screen::Stacks);
+    // Opening a rig makes it audible immediately, on EITHER tab -- you hear
+    // what you're about to edit, not just what you perform.
+    applyStackToEngine ();
 }
 
 void AppShell::openOrbPanel () {
