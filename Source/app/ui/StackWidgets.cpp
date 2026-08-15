@@ -169,32 +169,28 @@ void drawStompCardChrome (juce::Graphics& g, juce::Rectangle<int> r, bool on) {
 }
 
 void drawGrilleStrip (juce::Graphics& g, juce::Rectangle<int> r, juce::Colour c) {
-    // Dark inset panel (reads as an amp's speaker/control recess) with a
-    // low-contrast diagonal weave on top -- thin, tight-spaced, low alpha,
-    // clipped inside the rounded rect, crossed both ways so it reads as
-    // woven cloth. The old version was one pass of widely-spaced alpha-0.5
-    // lines with no panel underneath, which read as a broken/missing
-    // texture rather than an amp detail.
+    // Dark inset panel reading as an amp's recessed grille cloth: a rounded
+    // rect sunk below the card's own fill, a 1px inner edge for depth, and
+    // a very low-contrast horizontal line pattern (slats, not a weave) on
+    // top -- only visible up close, so at card size it reads as texture
+    // instead of noise. The old two-pass DIAGONAL crosshatch read as a
+    // broken/missing-texture pattern rather than an intentional amp detail
+    // (Chris + reviewer feedback on DONE-02-edit.png); this replaces it
+    // rather than tuning its spacing/alpha again.
+    const auto rf = r.toFloat ();
+    g.setColour (col::bg.withAlpha (0.5f));
+    g.fillRoundedRectangle (rf, 8.0f);
+    g.setColour (col::inkA (0.10f));
+    g.drawRoundedRectangle (rf.reduced (0.5f), 8.0f, 1.0f);
+
     g.saveState ();
     juce::Path clip;
-    clip.addRoundedRectangle (r.toFloat (), 8.0f);
+    clip.addRoundedRectangle (rf, 8.0f);
     g.reduceClipRegion (clip);
-    g.setColour (col::bg.withAlpha (0.55f));
-    g.fillRoundedRectangle (r.toFloat (), 8.0f);
-
-    // spacing 6 (not 4): review finding -- the two-pass weave roughly
-    // quadrupled the line count vs. the old single-pass version, and this
-    // repaints on every EDIT scroll-drag frame. 6px keeps the woven-cloth
-    // read while cutting that back down to about 2x, not 4x.
-    constexpr float spacing = 6.0f, thickness = 0.75f;
-    const float span = (float)(r.getWidth () + r.getHeight ());
-    g.setColour (c.withAlpha (c.getFloatAlpha () * 0.3f));
-    for (float x = -(float)r.getHeight (); x < span; x += spacing)
-        g.drawLine ((float)r.getX () + x, (float)r.getBottom (),
-                    (float)r.getX () + x + r.getHeight (), (float)r.getY (), thickness);
-    for (float x = -(float)r.getHeight (); x < span; x += spacing)
-        g.drawLine ((float)r.getX () + x, (float)r.getY (), (float)r.getX () + x + r.getHeight (),
-                    (float)r.getBottom (), thickness);
+    constexpr float spacing = 3.0f;
+    g.setColour (c.withAlpha (c.getFloatAlpha () * 0.14f));
+    for (float y = rf.getY () + spacing; y < rf.getBottom (); y += spacing)
+        g.drawLine (rf.getX (), y, rf.getRight (), y, 1.0f);
     g.restoreState ();
 }
 
