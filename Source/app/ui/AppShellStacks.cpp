@@ -143,10 +143,18 @@ void AppShell::wireStacksScreens () {
         // rather than a fixed literal -- there is no rename UI anywhere in
         // the app (review finding: a fixed "New Rig" for every creation
         // made distinct rigs, and their REMOVE confirms, indistinguishable
-        // on Home the moment there was more than one).
+        // on Home the moment there was more than one). `n` is the uid's
+        // own numeric suffix, not stackList_.size() -- a second
+        // review-round finding: size()-based naming collides after a
+        // delete (create "Rig 2"/"Rig 3", delete "Rig 2", create again ->
+        // size()+1 mints "Rig 3" again). nextStackUid is already
+        // max-existing-index-based (monotonic across deletes, and it
+        // re-mints on a hand-edited duplicate), so deriving the name from
+        // the uid it just minted inherits that guarantee for free instead
+        // of duplicating the logic.
         nam::Stack st;
         st.uid = nam::StackModel::nextStackUid (stackList_);
-        st.name = "Rig " + std::to_string ((int)stackList_.size () + 1);
+        st.name = "Rig " + st.uid.substr (1);   // uid is always "s" + digits
         stackList_.push_back (std::move (st));
         const int idx = (int)stackList_.size () - 1;
         saveStacksState ();
