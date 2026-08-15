@@ -107,7 +107,18 @@ void StackPerformView::paintCell (juce::Graphics& g, const Cell& cell,
             showLed = true;
             if (cell.uid.isNotEmpty ()) {
                 const auto* it = findChainItem (cell.uid);
-                if (it != nullptr) {
+                if (it != nullptr && it->type == nam::GearType::Amp) {
+                    // An amp-mapped switch cycles channels, not bypass (see
+                    // AppShellPerform.cpp's onStompTap) -- the sub-label
+                    // tracks the ACTIVE CHANNEL's title, same as the SCENES
+                    // grid's AMP cell, instead of the item's own static
+                    // title (which a channel cycle never touches). No
+                    // bypass concept applies here, so the LED just stays lit.
+                    if (!it->channels.empty () && it->activeChannel >= 0 &&
+                        it->activeChannel < (int)it->channels.size ())
+                        sub = juce::String (it->channels[(size_t)it->activeChannel].title);
+                    ledOn = true;
+                } else if (it != nullptr) {
                     sub = juce::String (it->title);
                     ledOn = !it->bypassed;
                 }

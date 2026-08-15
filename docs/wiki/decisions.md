@@ -3,6 +3,37 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Stacks UX-correctness batch (5 STILL-OPEN checklist items):
+  amp stomp tap now routes to `applyAmpCycle` instead of the meaningless
+  bypass toggle (plus a bonus fix found while E2E-verifying it: the STOMP
+  grid's amp cell was showing the item's static title, not the active
+  channel's, so the label never visibly changed on tap even once the cycle
+  itself was firing correctly); FS pills hidden on a Cab's item sheet
+  (nothing acts on a cab footswitch); `StackGearPicker`'s disabled-tab
+  treatment generalized from two hardcoded Add-mode bools to an
+  owner-supplied `std::array<bool,4>` + hint string, so AddChannel ("pick
+  an amp capture for this channel") and Swap ("swap must stay the same
+  gear type") now dim the tabs that can't apply instead of silently
+  dropping a mismatched pick; the mid-load failure toast is now gated on
+  the same `stillValid` check its neighbors (`onFail`, save/push) already
+  used, so removing a stack mid-load no longer toasts about a rig that's
+  gone. **Wizard nav policy**: chose discard-on-nav-away (closing the
+  wizard, same as hardware back) over hide-the-nav-while-open — the hide
+  approach would need `setNavHidden` wired at 3+ scattered call sites
+  (wizard open, its own internal back-chevron/onCancel, and
+  `handleBackButton`'s existing close), the exact shape of bug the
+  paywall's `dismissPaywall()` unification fixed earlier; discard is one
+  line in `AppShell::show()` (the single choke point every nav button
+  routes through) reusing the same `closeWizard()` hardware back already
+  calls, so both exits agree on one policy instead of introducing a second.
+  E2E on-device (emulator-5554): amp-mapped switch cycles audibly with a
+  live logcat load and a title that now updates; Cab sheet has no FS row,
+  pedal/amp still do; AddChannel and Swap both show the dimmed tabs + hint;
+  a stack removed mid-load (network blocked via `iptables` to force a
+  genuine in-flight window) produces no orphan toast after the parked
+  request resolves, no crash; wizard opened then dismissed via a nav
+  button leaves no draft behind on returning to STACKS. Headless suite
+  green throughout; Android arm64-v8a RelWithDebInfo build clean.
 - **2026-08-15** Pre-launch hardening batch landed (9df1dc9..8a759c5, 5
   commits): `Stack.uid` replacing every (index,name) async revalidation
   with (index,uid) (TDD, `StackModel::nextStackUid`/`assignMissingStackUids`
@@ -64,15 +95,15 @@ direction is chosen, reversed, or a constraint is discovered.
   (fix before public flip; the SDD workspace is deleted at completion —
   this is the durable copy). **DONE 2026-08-15** in the hardening batch
   (9df1dc9..aac1000, see the newer entry above): Stack.uid; stacks.json.bak;
-  performApplyInFlight_ watchdog; dismissPaywall() factoring. **STILL OPEN:**
-  PERFORM tuner anchor (Play-layout placement); picker mismatched-tab toast in
-  AddChannel/Swap modes; wizard nav policy (nav tappable behind wizard
-  keeps draft, inconsistent w/ back-discard); hoist scrim/sheet hex to
-  NamLookAndFeel (0xa008070f/0xf214101f, old + new sites); PEDALS
+  performApplyInFlight_ watchdog; dismissPaywall() factoring. **DONE
+  2026-08-15** in the UX-correctness batch (see the newer entry above):
+  picker mismatched-tab toast in AddChannel/Swap modes; wizard nav policy;
+  amp stomp tap = bypass LED (now routes to channel cycle); hide FS pills
+  on Cab item sheet; suppress failure toast after stack removal. **STILL
+  OPEN:** PERFORM tuner anchor (Play-layout placement); hoist scrim/sheet
+  hex to NamLookAndFeel (0xa008070f/0xf214101f, old + new sites); PEDALS
   wrapping-grid vs spec horizontal-strip needs Chris's ratification;
-  backport PressRegion machine to StackPerformView; amp stomp tap =
-  bypass LED (route to channel cycle instead); hide FS pills on Cab item
-  sheet; suppress failure toast after stack removal; stacks.md v1 header
+  backport PressRegion machine to StackPerformView; stacks.md v1 header
   rewrite. Deferred phases unchanged: MIDI/foot-control plan, dual-amp
   A/B/stereo DSP, audible pedals, Play-screen mock deltas.
 - **2026-08-15** Critical fix: wizard-built stacks store a `LibraryEntry`

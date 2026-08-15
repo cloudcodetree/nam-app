@@ -62,7 +62,20 @@ void AppShell::wirePerformView () {
     // chain -- see decisions.md), so this is the same plain mutateItem
     // wireGearPicker's onToggleBypass already uses; the unassigned-slot
     // toast is handled entirely inside the view, this never fires for it.
+    // An amp assigned to a switch is the one exception: bypass isn't
+    // surfaced anywhere for an amp (the item sheet only offers it for
+    // pedal/post) and the wizard's own FS-mapping step documents an
+    // amp-mapped switch as "channel cycle" -- so a stomp tap on an amp
+    // uid routes to the same cycle applyAmpCycle already gives the AMP
+    // grid cell, instead of flipping an invisible/meaningless flag.
     perf.onStompTap = [this] (juce::String uid) {
+        const int idx = stacksDetail_ != nullptr ? stacksDetail_->currentIndex () : -1;
+        if (idx >= 0 && idx < (int)stackList_.size ())
+            for (const auto& it : stackList_[(size_t)idx].chain)
+                if (juce::String (it.uid) == uid && it.type == nam::GearType::Amp) {
+                    applyAmpCycle (idx);
+                    return;
+                }
         mutateItem (uid, [] (nam::ChainItem& it) { it.bypassed = !it.bypassed; });
     };
     perf.onAmpCycle = [this] { applyAmpCycle (stacksDetail_->currentIndex ()); };
@@ -123,8 +136,12 @@ void AppShell::finishToneLoad (int stackIdx, juce::String stackUid, std::string 
     if (ok) {
         if (format == "ir") liveIrToneId_ = toneId;
         else liveModelToneId_ = toneId;
-    } else {
-        if (stillValid && onFail) onFail ();
+    } else if (stillValid) {
+        // Gated on stillValid: a stack removed mid-load must not toast about
+        // a rig that no longer exists (the stack the failure belongs to is
+        // gone, so there is nothing left on screen for "couldn't load" to
+        // refer to).
+        if (onFail) onFail ();
         if (stacksDetail_ != nullptr)
             nam::ui::showToast (*stacksDetail_, "couldn't load " + juce::String (title) + " " +
                                                     kEmDash + " check connection");

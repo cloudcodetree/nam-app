@@ -6,7 +6,6 @@ using namespace nam::ui;
 namespace {
 const juce::String kDotSep = juce::String::fromUTF8 ("\xC2\xB7");   // ·
 const juce::String kCaption = "live from TONE3000 " + kDotSep + " downloads on add";
-const juce::String kDisabledHint = "one amp per stack for now";
 
 const char* tabLabel (nam::GearType t) {
     switch (t) {
@@ -24,14 +23,20 @@ StackGearPicker::StackGearPicker () {
     setVisible (false);
 }
 
-bool StackGearPicker::tabDisabled (nam::GearType t) const {
-    return (t == nam::GearType::Amp && ampDisabled_) || (t == nam::GearType::Cab && cabDisabled_);
-}
+bool StackGearPicker::tabDisabled (nam::GearType t) const { return disabledTabs_[(size_t)t]; }
 
-void StackGearPicker::open (nam::GearType initialTab, bool ampDisabled, bool cabDisabled) {
-    ampDisabled_ = ampDisabled;
-    cabDisabled_ = cabDisabled;
-    tab_ = tabDisabled (initialTab) ? nam::GearType::Pedal : initialTab;
+void StackGearPicker::open (nam::GearType initialTab, std::array<bool, 4> disabledTabs,
+                            juce::String hint) {
+    disabledTabs_ = disabledTabs;
+    hint_ = std::move (hint);
+    if (tabDisabled (initialTab)) {
+        tab_ = initialTab;   // fallback: first enabled tab, if any
+        for (int i = 0; i < 4; ++i)
+            if (!disabledTabs_[(size_t)i]) {
+                tab_ = (nam::GearType)i;
+                break;
+            }
+    } else tab_ = initialTab;
     if (auto* parent = getParentComponent ()) setBounds (parent->getLocalBounds ());
     setVisible (true);
     toFront (false);
@@ -88,7 +93,7 @@ void StackGearPicker::layout () {
     tabsRect_ = in.removeFromTop (36);
     in.removeFromTop (6);
     captionRect_ = in.removeFromTop (16);
-    if (ampDisabled_ || cabDisabled_) {
+    if (hint_.isNotEmpty ()) {
         hintRect_ = in.removeFromTop (16);
         in.removeFromTop (4);
     } else hintRect_ = {};
@@ -140,7 +145,7 @@ void StackGearPicker::paint (juce::Graphics& g) {
     if (!hintRect_.isEmpty ()) {
         g.setFont (uiFont (10.0f, false));
         g.setColour (col::accentAlt.withAlpha (0.75f));
-        g.drawText (kDisabledHint, hintRect_, juce::Justification::centredLeft, false);
+        g.drawText (hint_, hintRect_, juce::Justification::centredLeft, false);
     }
 
     g.saveState ();

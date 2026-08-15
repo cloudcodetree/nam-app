@@ -1,5 +1,6 @@
 #include "app/ui/AppShell.h"
 #include <algorithm>
+#include <array>
 #include "app/ui/StackWidgets.h"
 #include "model/Entitlements.h"
 
@@ -207,12 +208,32 @@ void AppShell::openGearPicker (nam::GearType hint, GearPickerMode mode, juce::St
 
     gearPickerMode_ = mode;
     gearPickerTargetUid_ = std::move (targetUid);
-    // AddChannel/Swap operate on an EXISTING item, so the one-amp/one-cab
-    // singleton cap doesn't apply to them -- only a brand-new Add is gated.
-    const bool gated = mode == GearPickerMode::Add;
-    const bool ampDisabled = gated && !nam::StackModel::canAdd (st, nam::GearType::Amp);
-    const bool cabDisabled = gated && !nam::StackModel::canAdd (st, nam::GearType::Cab);
-    stacksDetail_->picker ().open (hint, ampDisabled, cabDisabled);
+
+    // Which tabs a pick could actually apply to, and why not otherwise --
+    // applyGearPick's own early-returns used to be the ONLY enforcement, so
+    // a mismatched-tab pick just closed the picker with nothing visibly
+    // happening. Disabling the tab (dim + no-op tap, same house pattern
+    // Add's singleton cap already used) plus a hint string turns that into
+    // visible feedback instead.
+    std::array<bool, 4> disabled{ false, false, false, false };
+    juce::String hintText;
+    if (mode == GearPickerMode::Add) {
+        // AddChannel/Swap operate on an EXISTING item, so the one-amp/
+        // one-cab-per-stack singleton cap doesn't apply to them -- only a
+        // brand-new Add is gated by it.
+        disabled[(size_t)nam::GearType::Amp] = !nam::StackModel::canAdd (st, nam::GearType::Amp);
+        disabled[(size_t)nam::GearType::Cab] = !nam::StackModel::canAdd (st, nam::GearType::Cab);
+        if (disabled[(size_t)nam::GearType::Amp] || disabled[(size_t)nam::GearType::Cab])
+            hintText = "one amp per stack for now";
+    } else if (mode == GearPickerMode::AddChannel) {
+        // Only an amp tone is a valid channel capture.
+        for (int i = 0; i < 4; ++i) disabled[(size_t)i] = (nam::GearType)i != nam::GearType::Amp;
+        hintText = "pick an amp capture for this channel";
+    } else {   // Swap: must stay the same gear type as the item being replaced
+        for (int i = 0; i < 4; ++i) disabled[(size_t)i] = (nam::GearType)i != hint;
+        hintText = "swap must stay the same gear type";
+    }
+    stacksDetail_->picker ().open (hint, disabled, hintText);
 }
 
 void AppShell::wireGearPicker () {

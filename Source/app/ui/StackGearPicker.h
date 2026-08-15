@@ -17,11 +17,17 @@ class StackGearPicker : public juce::Component {
 public:
     StackGearPicker ();
 
-    // `ampDisabled`/`cabDisabled`: true when the stack already has one
-    // (StackModel::canAdd) -- those tabs render dim with the "one amp per
-    // stack for now" hint and reject taps. Re-opening (e.g. tab switch)
-    // re-fetches.
-    void open (nam::GearType initialTab, bool ampDisabled, bool cabDisabled);
+    // `disabledTabs` (indexed by nam::GearType) render dim and reject taps
+    // -- covers three distinct reasons a tab can be off-limits: Add mode's
+    // one-amp/one-cab-per-stack singleton cap (StackModel::canAdd), Add
+    // Channel needing an amp tone specifically, and Swap needing the SAME
+    // gear type as the item being replaced. `hint`, shown under the caption
+    // when any tab is disabled, explains why (e.g. "one amp per stack for
+    // now"); empty = no disabled tabs, no hint row. Re-opening (e.g. tab
+    // switch) re-fetches. `initialTab` is expected to already be an enabled
+    // one (every call site opens on the tab it knows is valid); if it
+    // isn't, this falls back to the first enabled tab instead.
+    void open (nam::GearType initialTab, std::array<bool, 4> disabledTabs, juce::String hint);
     void close ();
 
     // Fired on open and on every tab switch; the owner fetches (typically
@@ -46,7 +52,8 @@ private:
     bool tabDisabled (nam::GearType) const;
 
     nam::GearType tab_ = nam::GearType::Pedal;
-    bool ampDisabled_ = false, cabDisabled_ = false;
+    std::array<bool, 4> disabledTabs_{};
+    juce::String hint_;
     bool loading_ = false, fetchError_ = false;
     std::vector<nam::ToneInfo> results_;
     int fetchGen_ = 0;   // bumped per fetchTab(); a stale async reply is dropped

@@ -48,6 +48,7 @@ void StackItemSheet::layout () {
     const bool pedalOrPost =
         item_.type == nam::GearType::Pedal || item_.type == nam::GearType::Post;
     const bool isAmp = item_.type == nam::GearType::Amp;
+    const bool isCab = item_.type == nam::GearType::Cab;
     const int w = contentRect_.getWidth ();
     constexpr int gap = 16, pillGap = 8;
 
@@ -91,9 +92,14 @@ void StackItemSheet::layout () {
         addChannelRect_ = {};
     }
 
-    fsLabelRect_ = { 0, y, w, 16 };
-    y += 20;
-    {
+    // A footswitch is meaningless on a Cab (nothing in the chain acts on
+    // it -- the row only exists for items PERFORM's STOMP grid can target:
+    // pedal/amp bypass-or-cycle, post bypass), so the whole row (label +
+    // NONE/FS1-8 pills) is skipped for it, same as the CHANNELS row above
+    // being amp-only.
+    if (!isCab) {
+        fsLabelRect_ = { 0, y, w, 16 };
+        y += 20;
         constexpr int pillW = 68, pillH = 32;
         int cx = 0, rowY = y;
         for (int i = 0; i < 9; ++i) {
@@ -105,6 +111,9 @@ void StackItemSheet::layout () {
             cx += pillW + pillGap;
         }
         y = rowY + pillH + gap;
+    } else {
+        fsLabelRect_ = {};
+        fsPillRects_.fill ({});
     }
 
     if (pedalOrPost) {
@@ -187,17 +196,19 @@ void StackItemSheet::paint (juce::Graphics& g) {
         g.drawText ("+ CAPTURE", addR, juce::Justification::centred, false);
     }
 
-    g.setFont (uiFontTracked (9.0f, true));
-    g.setColour (col::inkA (0.4f));
-    g.drawText ("FOOTSWITCH", tr (fsLabelRect_), juce::Justification::centredLeft, false);
-    for (int i = 0; i < 9; ++i) {
-        const auto r = tr (fsPillRects_[(size_t)i]);
-        const bool sel = item_.fs == i;
-        drawPill (g, r.toFloat (), sel ? col::accentA (0.14f) : juce::Colours::transparentBlack,
-                  sel ? col::accent : col::inkA (0.2f));
-        g.setFont (uiFont (10.0f, sel));
-        g.setColour (sel ? col::accent : col::inkA (0.6f));
-        g.drawText (fsPillLabel (i), r, juce::Justification::centred, false);
+    if (!fsLabelRect_.isEmpty ()) {
+        g.setFont (uiFontTracked (9.0f, true));
+        g.setColour (col::inkA (0.4f));
+        g.drawText ("FOOTSWITCH", tr (fsLabelRect_), juce::Justification::centredLeft, false);
+        for (int i = 0; i < 9; ++i) {
+            const auto r = tr (fsPillRects_[(size_t)i]);
+            const bool sel = item_.fs == i;
+            drawPill (g, r.toFloat (), sel ? col::accentA (0.14f) : juce::Colours::transparentBlack,
+                      sel ? col::accent : col::inkA (0.2f));
+            g.setFont (uiFont (10.0f, sel));
+            g.setColour (sel ? col::accent : col::inkA (0.6f));
+            g.drawText (fsPillLabel (i), r, juce::Justification::centred, false);
+        }
     }
 
     {
@@ -281,11 +292,12 @@ void StackItemSheet::mouseUp (const juce::MouseEvent& e) {
         if (onAddChannel) onAddChannel (uid);
         return;
     }
-    for (int i = 0; i < 9; ++i)
-        if (fsPillRects_[(size_t)i].contains (cp)) {
-            if (onSetFs) onSetFs (uid, i);
-            return;
-        }
+    if (!fsLabelRect_.isEmpty ())
+        for (int i = 0; i < 9; ++i)
+            if (fsPillRects_[(size_t)i].contains (cp)) {
+                if (onSetFs) onSetFs (uid, i);
+                return;
+            }
     if (swapBtnRect_.contains (cp)) {
         if (onSwap) onSwap (uid);
         return;

@@ -802,6 +802,15 @@ void AppShell::show (Screen s) {
     // every exit path.
     setNavHidden (s == Screen::Stacks && stacksShowDetail_ && stacksDetail_ != nullptr &&
                   stacksDetail_->isPerformTab ());
+    // Same policy as handleBackButton's closeWizard() check: the create
+    // wizard is a screen-level child of stacksHome_, so the bottom nav
+    // staying tappable BEHIND it (BROWSE/FAVORITES/MORE all route through
+    // here) previously left it open -- with its in-progress draft -- for
+    // when Stacks was shown again, unlike hardware back which explicitly
+    // discards it. Any nav call that leaves Stacks now discards the same
+    // way, so both exits agree. No-op if the wizard isn't open or `s` stays
+    // Stacks (e.g. the STACKS nav button itself, which only re-shows Home).
+    if (s != Screen::Stacks && stacksHome_ != nullptr) stacksHome_->closeWizard ();
     closeIoPanel ();
     closeMoreMenu ();
     if (paywall_ != nullptr) paywall_->setVisible (false);
