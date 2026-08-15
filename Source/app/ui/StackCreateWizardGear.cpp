@@ -19,6 +19,42 @@ nam::ChainItem* findByUid (nam::Stack& s, const juce::String& uid) {
         if (juce::String (it.uid) == uid) return &it;
     return nullptr;
 }
+const nam::ChainItem* findAmp (const nam::Stack& s) {
+    for (const auto& it : s.chain)
+        if (it.type == nam::GearType::Amp) return &it;
+    return nullptr;
+}
+
+// No scene editor exists yet (see docs/wiki/decisions.md) -- without this, a
+// stack saves with zero scenes and PERFORM's SCENES grid is empty from the
+// moment it's created. Minimum-viable seed: one Scene per amp channel,
+// named after the channel (or "Scene {n}" if the channel has no title), so
+// PERFORM has something to switch between immediately. Pedal bypass is
+// mirrored from the stack's current (all-on for a guided build; whatever
+// the template shipped with for a template pick) state rather than
+// hardcoded, so this stays correct if either ever changes. Free function
+// (not a StackCreateWizard member) so both the guided-build path
+// (draft_, via seedScenes() below) and pickTemplate's freshly-cloned stack
+// -- which never touches draft_ -- share the one seeding path instead of
+// each needing its own copy.
+void seedScenesFor (nam::Stack& s) {
+    s.scenes.clear ();
+    const auto* amp = findAmp (s);
+    if (amp == nullptr || amp->channels.empty ()) {
+        s.activeScene = -1;
+        return;
+    }
+    for (int i = 0; i < (int)amp->channels.size (); ++i) {
+        nam::Scene sc;
+        const auto& title = amp->channels[(size_t)i].title;
+        sc.name = title.empty () ? ("Scene " + std::to_string (i + 1)) : title;
+        sc.ampChannel = i;
+        for (const auto& it : s.chain)
+            if (it.type == nam::GearType::Pedal) sc.pedalBypass[it.uid] = it.bypassed;
+        s.scenes.push_back (std::move (sc));
+    }
+    s.activeScene = 0;
+}
 }   // namespace
 
 // --- Gear mutation (steps 1-3) -----------------------------------------
@@ -229,37 +265,17 @@ void StackCreateWizard::pickTemplate (int idx) {
         item.uid = nam::StackModel::nextUid (cloned);
         cloned.chain.push_back (std::move (item));
     }
+    // Templates are data-only Stack literals with NO .scenes of their own
+    // (StackTemplates.h) -- without this, a template pick hit the exact
+    // empty-SCENES symptom seedScenesFor exists to prevent. Seed the clone
+    // the same way a guided build does (see seedScenesFor above) rather
+    // than duplicating the logic here.
+    seedScenesFor (cloned);
     if (onSave) onSave (cloned, {});   // template pick: no toast, per spec
     close ();
 }
 
-// No scene editor exists yet (see docs/wiki/decisions.md) -- without this,
-// a wizard-built stack saves with zero scenes and PERFORM's SCENES grid is
-// empty from the moment it's created. Minimum-viable seed: one Scene per
-// amp channel, named after the channel (or "Scene {n}" if the channel has
-// no title), so PERFORM has something to switch between immediately. Pedal
-// bypass is mirrored from the chain's current (all-on, as built -- nothing
-// in the wizard toggles bypass) state rather than hardcoded, so this stays
-// correct if that ever changes. Template picks (pickTemplate) are untouched
-// -- a template already defines its own scenes.
-void StackCreateWizard::seedScenes () {
-    draft_.scenes.clear ();
-    const auto* amp = ampItem ();
-    if (amp == nullptr || amp->channels.empty ()) {
-        draft_.activeScene = -1;
-        return;
-    }
-    for (int i = 0; i < (int)amp->channels.size (); ++i) {
-        nam::Scene sc;
-        const auto& title = amp->channels[(size_t)i].title;
-        sc.name = title.empty () ? ("Scene " + std::to_string (i + 1)) : title;
-        sc.ampChannel = i;
-        for (const auto& it : draft_.chain)
-            if (it.type == nam::GearType::Pedal) sc.pedalBypass[it.uid] = it.bypassed;
-        draft_.scenes.push_back (std::move (sc));
-    }
-    draft_.activeScene = 0;
-}
+void StackCreateWizard::seedScenes () { seedScenesFor (draft_); }
 
 void StackCreateWizard::doSave () {
     syncFsIntoChain ();

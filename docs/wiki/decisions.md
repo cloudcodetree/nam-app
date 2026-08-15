@@ -30,8 +30,12 @@ direction is chosen, reversed, or a constraint is discovered.
   seeds one Scene per amp channel (name = channel title or "Scene {n}",
   pedalBypass mirrors the as-built all-on state, `activeScene = 0`) so
   PERFORM's SCENES grid isn't empty from creation — interim until a real
-  scene editor exists; template picks (`pickTemplate`) are untouched and
-  keep whatever scenes the template defines.
+  scene editor exists. Corrected 2026-08-15 (fix round 2): the original
+  version of this entry claimed template picks (`pickTemplate`) already
+  defined their own scenes and were left untouched — false, the three
+  `StackTemplates.h` literals set no `.scenes` at all, so a template pick
+  hit the exact same empty-SCENES symptom; `pickTemplate` now seeds its
+  cloned stack too, via a shared `seedScenesFor` free function.
 - **2026-08-15** Stack creation wizard (Task 5, final Phase A task) ships:
   step-0 template gallery (Plexi Crunch/Modern Metal/Clean Platform, data-
   only `StackTemplates.h`, cloned with fresh `nextUid` sequence on pick,

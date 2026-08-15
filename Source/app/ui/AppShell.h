@@ -361,6 +361,19 @@ private:
     // svc_.loadTone. False (out untouched) if no getter is wired or no
     // entry matches.
     bool findLocalEntry (const nam::ToneInfo& tone, nam::LibraryEntry& out) const;
+    // startToneLoad's completion: shared by the local (synchronous) and
+    // network (svc_.loadTone callback) routes so both resolve the SAME
+    // live-id/persist/pending-drain machinery. Pulled out of startToneLoad
+    // as its own named function (was an inline lambda) to keep startToneLoad
+    // itself under the ~60-line function-size rule.
+    void finishToneLoad (int stackIdx, juce::String stackName, std::string toneId,
+                         std::string title, std::string format, std::function<void ()> onFail,
+                         bool ok);
+    // Starts the next parked request in `slot`, if any and still valid (the
+    // stack it targeted may have vanished while parked). Returns true if a
+    // load was started (the OTHER slot gets no turn this round -- it drains
+    // on that load's own completion). Called only from finishToneLoad.
+    bool drainPendingToneApply (PendingToneApply& slot);
 
     bool navHidden_ = false;   // PERFORM stage view; see setNavHidden
     void pushPairChoices ();   // PAIR row matches the card's gear
