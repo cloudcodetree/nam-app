@@ -3,6 +3,30 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Stacks Redesign Phase A COMPLETE (f2d133b..c40b881, 19
+  commits): ordered-chain StackModel (v2 json, v1 migration), Home
+  (setlist chips), Detail EDIT (guided + freeform, live picker, item
+  sheet, REMOVE STACK), Detail PERFORM (on-screen scenes/stomp, nav-hidden
+  stage view, local-first applies), Create wizard (templates + 4-step
+  flow, scene seeding). Final whole-branch review verdict: ready for
+  internal testing after the two Criticals landed (stale live-ids across
+  Play↔PERFORM; two-slot pending apply split). **Pre-launch checklist**
+  (fix before public flip; the SDD workspace is deleted at completion —
+  this is the durable copy): Stack.uid field replacing (index,name) async
+  identity (retires 4 ledger items; templates make duplicate names the
+  default); stacks.json.bak before overwriting an unparseable non-empty
+  file; performApplyInFlight_ 30s watchdog; dismissPaywall() factoring
+  (handleBackButton/refreshProState lack onClose's nav re-derive); PERFORM
+  tuner anchor (Play-layout placement); picker mismatched-tab toast in
+  AddChannel/Swap modes; wizard nav policy (nav tappable behind wizard
+  keeps draft, inconsistent w/ back-discard); hoist scrim/sheet hex to
+  NamLookAndFeel (0xa008070f/0xf214101f, old + new sites); PEDALS
+  wrapping-grid vs spec horizontal-strip needs Chris's ratification;
+  backport PressRegion machine to StackPerformView; amp stomp tap =
+  bypass LED (route to channel cycle instead); hide FS pills on Cab item
+  sheet; suppress failure toast after stack removal; stacks.md v1 header
+  rewrite. Deferred phases unchanged: MIDI/foot-control plan, dual-amp
+  A/B/stereo DSP, audible pedals, Play-screen mock deltas.
 - **2026-08-15** Critical fix: wizard-built stacks store a `LibraryEntry`
   id (filename, e.g. `keep_75774.nam`) in `ChainItem::toneId` by design —
   they're inherently local (`LibraryEntry` has no TONE3000 tone id field).
