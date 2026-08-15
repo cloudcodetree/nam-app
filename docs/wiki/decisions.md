@@ -440,6 +440,18 @@ direction is chosen, reversed, or a constraint is discovered.
 - **2026-08-11** TDD is the rule in the JUCE-free core; device verification
   (emulator/phone) is the E2E bar for UI flows. Why: the JUCE layer has no
   unit harness; the core does, and test-first caught the reclamation edge.
+- **2026-08-15** Bottom nav is persistent on EVERY screen, including
+  PERFORM — reverses the stage-view nav-hide from the Stacks redesign
+  mock. Why: Chris's explicit direction on device review. The
+  `AppShell::setNavHidden`/`navHidden_` mechanism (and every derivation/
+  restore call site: `show()`, `openPaywall`/`dismissPaywall`,
+  `wirePerformView`'s `onTabChanged`, `AppShellChrome.cpp`'s paint/
+  mouseDown guards, `contentBounds()`/`resized()`) was deleted outright
+  rather than defaulted off — it existed only to serve the now-reversed
+  behavior, and removing it shrank AppShell.cpp/AppShellChrome.cpp.
+  PERFORM still lays out inside `contentBounds()` like every other
+  screen; its exit chevron and back-chain (PERFORM → EDIT → Home) are
+  unchanged.
 - **2026-08-11** RT buffer hand-off = raw atomic pointer + message-thread
   shared_ptr owners + block-gated retire. Why: libc++ shared_ptr atomics
   lock; count-based reclamation has no happens-before (both were BLOCKed).

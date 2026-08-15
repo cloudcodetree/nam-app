@@ -64,12 +64,6 @@ public:
     // Play (let the OS do the default = leave the app).
     bool handleBackButton ();
 
-    // Stage-view exception: PERFORM hides the bottom nav entirely (full-bleed
-    // switch grid). AppShellChrome.cpp's paint/mouseDown honor this; resized/
-    // contentBounds give the reclaimed strip to whichever screen is showing.
-    // Idempotent -- safe to call with the value already in effect.
-    void setNavHidden (bool hidden);
-
     // TONE3000 / Browse services, owned by the host. Auditioning renders the
     // demo riff through a model; leaving Browse stops the demo automatically.
     using DoneFn = std::function<void (bool, juce::String)>;
@@ -408,7 +402,6 @@ private:
     // on that load's own completion). Called only from finishToneLoad.
     bool drainPendingToneApply (PendingToneApply& slot);
 
-    bool navHidden_ = false;   // PERFORM stage view; see setNavHidden
     void pushPairChoices ();   // PAIR row matches the card's gear
     std::vector<nam::LibraryEntry> keptModelsSorted () const;
     int cabBuiltinCount_ = 0;   // names beyond this are kept IRs

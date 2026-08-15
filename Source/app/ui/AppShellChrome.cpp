@@ -6,15 +6,7 @@
 // pickers, and their hit-testing. Split out of AppShell.cpp per the
 // no-god-files rule; screen orchestration stays in AppShell.cpp.
 
-void AppShell::setNavHidden (bool hidden) {
-    if (navHidden_ == hidden) return;
-    navHidden_ = hidden;
-    resized ();   // gives/reclaims the nav strip to whichever screen is showing
-    repaint ();
-}
-
 void AppShell::paint (juce::Graphics& g) {
-    if (navHidden_) return;   // PERFORM stage view: no bottom chrome at all
     // Global bottom chrome only — screens paint everything above it.
     g.setColour (nam::ui::col::bg);
     g.fillRect (navBar_);
@@ -523,7 +515,6 @@ void AppShell::handleIoUpAt (juce::Point<int> p) {
 }
 
 void AppShell::mouseDown (const juce::MouseEvent& e) {
-    if (navHidden_) return;   // PERFORM stage view: no bottom chrome to hit-test
     const auto p = e.getPosition ();
 
     if (ioPanelOpen_) {   // taps on the nav while the panel is up just close it

@@ -643,7 +643,6 @@ void AppShell::setProPriceText (juce::String price) {
 }
 
 void AppShell::openPaywall (const juce::String& reason) {
-    setNavHidden (false);   // paywall always takes the nav-visible layout, even over PERFORM
     if (paywall_ == nullptr) {
         paywall_ = std::make_unique<PaywallPanel> ();
         addChildComponent (*paywall_);
@@ -692,13 +691,6 @@ void AppShell::openPaywall (const juce::String& reason) {
 void AppShell::dismissPaywall () {
     if (paywall_ == nullptr) return;
     paywall_->setVisible (false);
-    // openPaywall forces nav visible on open (even over PERFORM); dismissal
-    // must re-derive it the same way show() does rather than leaving nav
-    // visible if PERFORM is what's underneath -- dormant today (no
-    // reachable path opens the paywall from PERFORM) but the asymmetry is
-    // exactly what a future call site would trip.
-    setNavHidden (current_ == stacksDetail_.get () && stacksDetail_ != nullptr &&
-                  stacksDetail_->isPerformTab ());
 }
 
 void AppShell::refreshProState () {
@@ -739,8 +731,8 @@ bool AppShell::handleBackButton () {
         stacksDetail_->closeTopOverlay ())
         return true;
     // PERFORM is a stage view within Detail, not its own screen: back exits
-    // it to EDIT first (nav restored via onTabChanged -> setNavHidden), same
-    // "peel the overlay before popping the screen" shape as the check above.
+    // it to EDIT first, same "peel the overlay before popping the screen"
+    // shape as the check above.
     // Only once EDIT is showing does the chain below get to pop to Home.
     if (current_ == stacksDetail_.get () && stacksDetail_ != nullptr &&
         stacksDetail_->isPerformTab ()) {
@@ -796,12 +788,6 @@ void AppShell::toggleTuner () {
 }
 
 void AppShell::show (Screen s) {
-    // Nav-hidden is derived fresh from the target screen every call, so any
-    // navigation away from Detail's PERFORM tab (Home, Play, or re-entering
-    // Detail on EDIT) restores it -- no need to scatter restore calls across
-    // every exit path.
-    setNavHidden (s == Screen::Stacks && stacksShowDetail_ && stacksDetail_ != nullptr &&
-                  stacksDetail_->isPerformTab ());
     // Same policy as handleBackButton's closeWizard() check: the create
     // wizard is a screen-level child of stacksHome_, so the bottom nav
     // staying tappable BEHIND it (BROWSE/FAVORITES/MORE all route through
@@ -922,18 +908,14 @@ void AppShell::setTunerPitch (float hz) {
 }
 
 juce::Rectangle<int> AppShell::contentBounds () const {
-    if (navHidden_) return getLocalBounds ();   // PERFORM: full-bleed, nav strip reclaimed
     auto b = getLocalBounds ();
     b.removeFromBottom (navBar_.getHeight ());
     return b;
 }
 
 void AppShell::resized () {
-    const auto full = getLocalBounds ();
-    auto b = full;
+    auto b = getLocalBounds ();
     // Bottom chrome: BROWSE / FAVORITES | status orb | DOWNLOADED / STACKS.
-    // Computed unconditionally (even nav-hidden) so it lands in the right
-    // place the moment nav is restored.
     navBar_ = b.removeFromBottom (juce::jmax (72, getHeight () / 12));
     const int orbD = juce::jmin (58, navBar_.getHeight () - 10);
     orbRect_ = { navBar_.getCentreX () - orbD / 2, navBar_.getCentreY () - orbD / 2, orbD, orbD };
@@ -965,11 +947,10 @@ void AppShell::resized () {
         ioBufPill_ = pills.removeFromRight (70).withSizeKeepingCentre (70, 28);
     }
 
-    const auto contentArea = navHidden_ ? full : b;
     for (juce::Component* c :
          { (juce::Component*)play_.get (), (juce::Component*)stacksHome_.get (),
            (juce::Component*)stacksDetail_.get () })
-        if (c != nullptr) c->setBounds (contentArea);
+        if (c != nullptr) c->setBounds (b);
     if (paywall_ != nullptr) paywall_->setBounds (getLocalBounds ());
 
     // The tuner overlay tracks the Play tuner panel, not the screen grid.

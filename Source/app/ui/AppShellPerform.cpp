@@ -49,7 +49,6 @@ struct AppShell::ApplyTimeoutImpl : AppShell::ApplyTimeout, private juce::Timer 
 
 void AppShell::wirePerformView () {
     stacksDetail_->onTabChanged = [this] (bool perform) {
-        setNavHidden (perform);
         if (perform) enterPerform ();
     };
 

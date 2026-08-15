@@ -4,11 +4,12 @@
 #include <vector>
 #include "model/StackModel.h"
 
-// Stack detail PERFORM tab: full-bleed stage view. The owner
+// Stack detail PERFORM tab: stage view laid out inside AppShell's normal
+// content area (bottom nav stays visible and functional, same as every
+// other screen -- Chris's explicit direction, see decisions.md). The owner
 // (StackDetailScreen) gives this component its WHOLE area -- no brand
 // header / back-chevron / EDIT|PERFORM tab pill survives underneath; the
-// small ‹ exit chevron drawn here is the only way out (AppShell hides the
-// bottom nav for the same reason, see AppShell::setNavHidden). On-screen
+// small ‹ exit chevron drawn here is still the way back to EDIT. On-screen
 // switches only -- MIDI learn, the EXP row, and the physical-controller map
 // from the design are a separate future plan (Phase A scope; see the SDD
 // notes doc's "Stack detail — PERFORM tab" section).
