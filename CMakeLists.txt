@@ -126,6 +126,7 @@ if(NAM_BUILD_APP)
             Source/model/IrLoader.cpp
             Source/model/LibraryStore.cpp
             Source/model/LibraryImporter.cpp
+            Source/model/StackModel.cpp
             # TONE3000: OAuth2 PKCE + search/download (same code as desktop; the
             # loopback redirect works on Android — the on-device browser reaches
             # 127.0.0.1, so TONE3000's existing redirect_uri whitelist applies).
@@ -187,6 +188,7 @@ if(NAM_BUILD_APP)
             Source/model/IrLoader.cpp
             Source/model/LibraryStore.cpp
             Source/model/LibraryImporter.cpp
+            Source/model/StackModel.cpp
             Source/net/Pkce.cpp
             Source/net/Tone3000Api.cpp)
         target_include_directories(NamPlayer PRIVATE Source ${CMAKE_SOURCE_DIR}/extern/dr_wav
