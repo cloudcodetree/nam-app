@@ -34,6 +34,34 @@ direction is chosen, reversed, or a constraint is discovered.
   request resolves, no crash; wizard opened then dismissed via a nav
   button leaves no draft behind on returning to STACKS. Headless suite
   green throughout; Android arm64-v8a RelWithDebInfo build clean.
+  **Review round 1** (adversarial, VERDICT PASS, no BLOCKER) caught two
+  MAJORs in this same batch, fixed same-commit: (1) `applyAmpCycle`'s
+  `(prevChannel+1) % channels.size()` is a no-op at `size()==1`, so a
+  switch mapped to a single-channel amp went from "toggles a meaningless
+  LED" to "does visibly nothing at all" (title/LED unchanged, plus a
+  wasted `stacks.json` write) -- `onStompTap` now toasts "only one channel
+  — add more in EDIT" instead of calling the cycle when
+  `channels.size() <= 1`. (2) `finishToneLoad`'s `stillValid` (index AND
+  uid match at that exact index) is the right predicate for `onFail`/
+  save/push, which index `stackList_[stackIdx]` directly and would
+  corrupt a DIFFERENT stack shifted onto that index by an unrelated
+  earlier removal -- but gating the failure toast on the same strict
+  predicate (this batch's item-4 fix) meant a stack that merely shifted,
+  not vanished, silently lost its failure toast too. Split into
+  `stillValid` (strict, still gates the mutations) and a looser
+  `stillExists` (uid found anywhere in `stackList_`) that gates the toast
+  alone. Two MINORs fixed alongside: the Add-mode picker hint said "one
+  amp per stack for now" even when only CAB was dimmed (now names
+  whichever tab(s) are actually disabled); the STOMP cell's amp sub-label
+  now falls back to the item's own title when `channels` is empty (a
+  hand-edited/future-version-file case, unreachable from any in-app flow
+  today) instead of painting blank. One MINOR left deliberately
+  unfixed and tracked: a Cab item's `fs` field isn't zeroed on load, so a
+  hand-edited stacks.json with a stale nonzero cab `fs` still occupies a
+  STOMP slot with no item-sheet control left to clear it -- the reviewer
+  confirmed no in-app write path can produce this today (the sheet no
+  longer offers FS pills for a Cab going forward), so it's noted rather
+  than given its own `StackModel::parse` migration step.
 - **2026-08-15** Pre-launch hardening batch landed (9df1dc9..8a759c5, 5
   commits): `Stack.uid` replacing every (index,name) async revalidation
   with (index,uid) (TDD, `StackModel::nextStackUid`/`assignMissingStackUids`

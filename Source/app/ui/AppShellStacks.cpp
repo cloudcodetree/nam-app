@@ -221,10 +221,16 @@ void AppShell::openGearPicker (nam::GearType hint, GearPickerMode mode, juce::St
         // AddChannel/Swap operate on an EXISTING item, so the one-amp/
         // one-cab-per-stack singleton cap doesn't apply to them -- only a
         // brand-new Add is gated by it.
-        disabled[(size_t)nam::GearType::Amp] = !nam::StackModel::canAdd (st, nam::GearType::Amp);
-        disabled[(size_t)nam::GearType::Cab] = !nam::StackModel::canAdd (st, nam::GearType::Cab);
-        if (disabled[(size_t)nam::GearType::Amp] || disabled[(size_t)nam::GearType::Cab])
-            hintText = "one amp per stack for now";
+        const bool ampDisabled = !nam::StackModel::canAdd (st, nam::GearType::Amp);
+        const bool cabDisabled = !nam::StackModel::canAdd (st, nam::GearType::Cab);
+        disabled[(size_t)nam::GearType::Amp] = ampDisabled;
+        disabled[(size_t)nam::GearType::Cab] = cabDisabled;
+        // Named per which tab is actually dimmed -- a stack with a cab but
+        // no amp only has CAB disabled, and "one amp per stack" would name
+        // the wrong limit.
+        if (ampDisabled && cabDisabled) hintText = "one amp and one cab per stack for now";
+        else if (ampDisabled) hintText = "one amp per stack for now";
+        else if (cabDisabled) hintText = "one cab per stack for now";
     } else if (mode == GearPickerMode::AddChannel) {
         // Only an amp tone is a valid channel capture.
         for (int i = 0; i < 4; ++i) disabled[(size_t)i] = (nam::GearType)i != nam::GearType::Amp;

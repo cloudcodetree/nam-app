@@ -73,7 +73,17 @@ void AppShell::wirePerformView () {
         if (idx >= 0 && idx < (int)stackList_.size ())
             for (const auto& it : stackList_[(size_t)idx].chain)
                 if (juce::String (it.uid) == uid && it.type == nam::GearType::Amp) {
-                    applyAmpCycle (idx);
+                    // A single-channel amp has nothing to cycle TO --
+                    // applyAmpCycle's modulo is a no-op at n==1, which would
+                    // otherwise make the tap silently do nothing (no LED, no
+                    // title change, no toast) while still paying for a
+                    // stacks.json write. Toast instead, same pattern as the
+                    // unassigned-slot case in StackPerformView.
+                    if (it.channels.size () <= 1) {
+                        if (stacksDetail_ != nullptr)
+                            nam::ui::showToast (*stacksDetail_, "only one channel " + kEmDash +
+                                                                    " add more in EDIT");
+                    } else applyAmpCycle (idx);
                     return;
                 }
         mutateItem (uid, [] (nam::ChainItem& it) { it.bypassed = !it.bypassed; });
@@ -130,19 +140,37 @@ void AppShell::finishToneLoad (int stackIdx, juce::String stackUid, std::string 
     // Re-validate: the stack this load was for may have been removed (or
     // the index reused by a different one) while the round trip was in
     // flight. Keyed by uid rather than name -- a rename mid-flight must not
-    // be mistaken for the stack having been swapped out.
+    // be mistaken for the stack having been swapped out. Strict on purpose:
+    // onFail/saveStacksState/pushStacks below all index stackList_[stackIdx]
+    // directly, so this must confirm THIS EXACT index still holds the stack
+    // the load was for -- an unrelated stack removed earlier in the list can
+    // shift a DIFFERENT stack onto stackIdx, and a stale onFail must never
+    // mutate that one instead.
     const bool stillValid = stackIdx >= 0 && stackIdx < (int)stackList_.size () &&
                             juce::String (stackList_[(size_t)stackIdx].uid) == stackUid;
+    // Looser than stillValid on purpose: the failure toast only needs to
+    // know the rig is still around to care about, not that it's still at
+    // THIS index -- searched by uid so a stack merely shifted by an
+    // unrelated removal still gets told its load failed, instead of
+    // `stillValid` going false (index now out of range or reused by a
+    // different stack) and silently swallowing a genuine failure for a
+    // stack that's still very much on screen.
+    bool stillExists = stillValid;
+    if (!stillExists)
+        for (const auto& s : stackList_)
+            if (juce::String (s.uid) == stackUid) {
+                stillExists = true;
+                break;
+            }
     if (ok) {
         if (format == "ir") liveIrToneId_ = toneId;
         else liveModelToneId_ = toneId;
-    } else if (stillValid) {
-        // Gated on stillValid: a stack removed mid-load must not toast about
-        // a rig that no longer exists (the stack the failure belongs to is
-        // gone, so there is nothing left on screen for "couldn't load" to
-        // refer to).
-        if (onFail) onFail ();
-        if (stacksDetail_ != nullptr)
+    } else {
+        if (stillValid && onFail) onFail ();
+        // Gated on stillExists (not stillValid): a stack removed mid-load
+        // must not toast about a rig that no longer exists anywhere, but a
+        // stack that merely moved still deserves to hear its load failed.
+        if (stillExists && stacksDetail_ != nullptr)
             nam::ui::showToast (*stacksDetail_, "couldn't load " + juce::String (title) + " " +
                                                     kEmDash + " check connection");
     }

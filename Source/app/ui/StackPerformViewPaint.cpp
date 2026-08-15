@@ -114,9 +114,14 @@ void StackPerformView::paintCell (juce::Graphics& g, const Cell& cell,
                     // grid's AMP cell, instead of the item's own static
                     // title (which a channel cycle never touches). No
                     // bypass concept applies here, so the LED just stays lit.
-                    if (!it->channels.empty () && it->activeChannel >= 0 &&
-                        it->activeChannel < (int)it->channels.size ())
-                        sub = juce::String (it->channels[(size_t)it->activeChannel].title);
+                    // Falls back to the item's own title when channels is
+                    // empty (only reachable via a hand-edited/future-version
+                    // stacks.json -- every in-app producer seeds channels[0])
+                    // so the mapped gear's identity is never blank.
+                    sub = (!it->channels.empty () && it->activeChannel >= 0 &&
+                           it->activeChannel < (int)it->channels.size ())
+                              ? juce::String (it->channels[(size_t)it->activeChannel].title)
+                              : juce::String (it->title);
                     ledOn = true;
                 } else if (it != nullptr) {
                     sub = juce::String (it->title);
