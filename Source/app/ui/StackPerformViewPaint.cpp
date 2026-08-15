@@ -157,12 +157,17 @@ void StackPerformView::paintCell (juce::Graphics& g, const Cell& cell,
     // lines with a huge empty gap between them instead of the cell just
     // looking bigger).
     auto content = r.reduced (10, 8);
+    // The LED clearance indents the WHOLE block (both rows), not just the
+    // title -- review finding: indenting only titleRow left title and
+    // sub-label starting at different x, a ragged left edge on every STOMP
+    // switch (showLed is only true there; SCENES' device verification
+    // never exercised this branch).
+    if (showLed) content.removeFromLeft (12);
     constexpr int titleH = 20, subH = 16, blockGap = 6;
     auto block = content.withSizeKeepingCentre (content.getWidth (), titleH + blockGap + subH);
     auto titleRow = block.removeFromTop (titleH);
     block.removeFromTop (blockGap);
     auto subRow = block;
-    if (showLed) titleRow.removeFromLeft (12);   // clears the LED dot painted above
     // NEXT's forward glyph is a vector triangle, not the "▸" unicode
     // character -- Work Sans doesn't cover U+25B8 on Android, where it
     // rendered as a bare dot instead of an arrow (see drawFwdTriangle).

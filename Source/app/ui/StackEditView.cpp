@@ -44,11 +44,12 @@ void StackEditView::layout () {
     // Row 1: "ROUTING" micro-label + FREEFORM toggle. Row 2: the three
     // routing pills, each sized to its own label text (never a fixed
     // shared width -- at this component's width a 3-way equal split left
-    // no room for "STEREO", which clipped to "STERE"). Row 1 is a full
-    // 32px tall (not just the label's own text height) so the FREEFORM
-    // pill keeps its touch target -- review finding: a text-height-only
-    // row shrank its effective (.expanded(4)) hit area to 28px.
-    auto labelRow = b.removeFromTop (32);
+    // no room for "STEREO", which clipped to "STERE"). Row 1 is 36px tall
+    // (not just the label's own text height) so the FREEFORM pill's
+    // effective (.expanded(4)) touch target clears the codebase's own
+    // >=44px bar -- review finding: a text-height-only row had shrunk it
+    // to 28px; an interim 32px row still landed short at 40px.
+    auto labelRow = b.removeFromTop (36);
     routingLabelRect_ = labelRow.withWidth (62);
     freeformToggleRect_ = labelRow.removeFromRight (100);
 
