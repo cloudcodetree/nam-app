@@ -96,9 +96,9 @@ void StackDetailScreen::selectTab (bool perform) {
 }
 
 void StackDetailScreen::layout () {
-    auto b = getLocalBounds ();
-    headerRect_ = b.removeFromTop (52);
-    gearRect_ = { headerRect_.getRight () - 52, headerRect_.getCentreY () - 21, 42, 42 };
+    // No brand header row: the functional row (back / name / EDIT-PERFORM)
+    // is this screen's only chrome, per CLAUDE.md's one-chrome-grammar rule.
+    auto b = getLocalBounds ().withTrimmedTop (12);
 
     auto tabRow = b.removeFromTop (52).reduced (20, 8);
     backRect_ = tabRow.removeFromLeft (28);
@@ -123,7 +123,6 @@ void StackDetailScreen::paint (juce::Graphics& g) {
     if (performTab_) return;
 
     paintHeroBackground (g, getLocalBounds ());
-    drawStacksBrandHeader (g, headerRect_, gearRect_);
 
     g.setFont (uiFont (20.0f, false));
     g.setColour (col::inkA (0.7f));
@@ -147,10 +146,6 @@ void StackDetailScreen::paint (juce::Graphics& g) {
 void StackDetailScreen::mouseDown (const juce::MouseEvent& e) {
     const auto p = e.getPosition ();
 
-    if (gearRect_.expanded (4).contains (p)) {
-        if (onSettings) onSettings ();
-        return;
-    }
     if (backRect_.expanded (8).contains (p)) {
         if (onBack) onBack ();
         return;

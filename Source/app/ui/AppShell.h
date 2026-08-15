@@ -288,7 +288,7 @@ private:
     // Persistence + Home/Detail wiring live in AppShellStacks.cpp; screen
     // orchestration (show/resized/handleBackButton) stays here.
     std::vector<nam::Stack> stackList_;
-    int currentStack_ = 0;            // SETLIST "current" chip (session-only)
+    int currentStack_ = 0;            // last-opened rig (session-only)
     bool stacksShowDetail_ = false;   // which child is visible under Screen::Stacks
     void loadStacksState ();
     void saveStacksState ();

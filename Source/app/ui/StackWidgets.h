@@ -16,25 +16,11 @@ void showToast (juce::Component& parent, juce::String msg);
 // stack running two amp chains at once), dim ink otherwise.
 void drawRoutingBadge (juce::Graphics&, juce::Rectangle<int>, nam::Stack::Routing);
 
-// SETLIST strip chip: accent border/bg/text when active, inkA(.16) border
-// otherwise.
-void drawSetlistChip (juce::Graphics&, juce::Rectangle<int>, const juce::String& text, bool active);
-
-// Vector gear glyph (Android colour-emoji fallback breaks the unicode ⚙, so
-// every "settings" affordance on Stacks draws this instead).
-void drawGearIcon (juce::Graphics&, juce::Rectangle<float>, juce::Colour);
-
 // Small solid right-pointing triangle -- vector substitute for the "▸"
 // unicode glyph (U+25B8), which Work Sans doesn't cover on Android and
 // rendered as a bare dot/tofu instead of an arrow. Every "advance/perform"
 // affordance (Home's PERFORM pill, PERFORM's NEXT switch) draws this.
 void drawFwdTriangle (juce::Graphics&, juce::Rectangle<float>, juce::Colour);
-
-// "NAM PLAYER" wordmark + gear icon header row, identical on every Stacks
-// state (Home, Detail). `gearRect` is the tap target, in the same
-// coordinate space as `bounds`.
-void drawStacksBrandHeader (juce::Graphics&, juce::Rectangle<int> bounds,
-                            juce::Rectangle<int> gearRect);
 
 // Circular footswitch-assignment badge (~26px): accent ring + filled digit
 // when `fs` is assigned (1..8); dim outline + em-dash otherwise (0).

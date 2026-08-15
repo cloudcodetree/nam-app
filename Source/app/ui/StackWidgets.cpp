@@ -58,57 +58,11 @@ void drawRoutingBadge (juce::Graphics& g, juce::Rectangle<int> r, nam::Stack::Ro
     g.drawText (label, r, juce::Justification::centred, false);
 }
 
-void drawSetlistChip (juce::Graphics& g, juce::Rectangle<int> r, const juce::String& text,
-                      bool active) {
-    drawPill (g, r.toFloat (), active ? col::accentA (0.16f) : juce::Colours::transparentBlack,
-              active ? col::accent : col::inkA (0.16f));
-    g.setFont (uiFont (11.0f, active));
-    g.setColour (active ? col::accent : col::inkA (0.6f));
-    g.drawText (text, r.reduced (10, 0), juce::Justification::centred, false);
-}
-
-void drawGearIcon (juce::Graphics& g, juce::Rectangle<float> b, juce::Colour c) {
-    const float cx = b.getCentreX (), cy = b.getCentreY ();
-    const float rOuter = b.getWidth () * 0.30f, rInner = b.getWidth () * 0.13f;
-    g.setColour (c);
-    constexpr int kTeeth = 8;
-    for (int i = 0; i < kTeeth; ++i) {
-        const float a = (float)i / (float)kTeeth * juce::MathConstants<float>::twoPi;
-        juce::Path tooth;
-        tooth.addRoundedRectangle (-1.6f, -rOuter - 3.0f, 3.2f, 6.0f, 1.0f);
-        tooth.applyTransform (juce::AffineTransform::rotation (a).translated (cx, cy));
-        g.fillPath (tooth);
-    }
-    g.drawEllipse (cx - rOuter, cy - rOuter, rOuter * 2.0f, rOuter * 2.0f, 2.0f);
-    g.fillEllipse (cx - rInner, cy - rInner, rInner * 2.0f, rInner * 2.0f);
-}
-
 void drawFwdTriangle (juce::Graphics& g, juce::Rectangle<float> b, juce::Colour c) {
     juce::Path p;
     p.addTriangle (b.getX (), b.getY (), b.getX (), b.getBottom (), b.getRight (), b.getCentreY ());
     g.setColour (c);
     g.fillPath (p);
-}
-
-void drawStacksBrandHeader (juce::Graphics& g, juce::Rectangle<int> bounds,
-                            juce::Rectangle<int> gearRect) {
-    g.setFont (uiFontTracked (11.0f, true));
-    // Left-inset to match every other screen's 20px content padding -- the
-    // wordmark used to start flush at bounds.getX() (0), jammed into the
-    // screen edge.
-    auto nameRect =
-        bounds.withTrimmedLeft (20).withTrimmedRight (bounds.getWidth () - gearRect.getX () + 8);
-    // "NAM " in dim ink, "PLAYER" in accent -- drawn as two adjoining runs
-    // since JUCE text layout has no inline-colour-span primitive.
-    const juce::String namPart = "NAM ", playerPart = "PLAYER";
-    const auto font = uiFontTracked (11.0f, true);
-    const float w1 = juce::GlyphArrangement::getStringWidth (font, namPart);
-    g.setColour (col::inkA (0.55f));
-    g.drawText (namPart, nameRect, juce::Justification::centredLeft, false);
-    g.setColour (col::accent);
-    g.drawText (playerPart, nameRect.withTrimmedLeft ((int)w1), juce::Justification::centredLeft,
-                false);
-    drawGearIcon (g, gearRect.toFloat ().reduced (10.0f), col::inkA (0.7f));
 }
 
 void drawFsBadge (juce::Graphics& g, juce::Rectangle<int> r, int fs) {

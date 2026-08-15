@@ -86,6 +86,9 @@ void AppShell::openStackDetail (int idx, bool perform) {
     stacksDetail_->picker ().close ();
     stacksDetail_->itemSheet ().close ();
     stacksShowDetail_ = true;
+    // With the SETLIST chips gone, "current" means the rig you last opened --
+    // PERFORM's setlist stepping falls back to it when Detail has no index.
+    currentStack_ = idx;
     stacksDetail_->setStack (stackList_[(size_t)idx], idx, (int)stackList_.size ());
     stacksDetail_->selectTab (perform);
     show (Screen::Stacks);
@@ -120,20 +123,13 @@ void AppShell::wireStacksScreens () {
         }
         stacksHome_->wizard ().open ((int)stackList_.size ());
     };
-    stacksHome_->onSetCurrent = [this] (int i) {
-        if (i < 0 || i >= (int)stackList_.size ()) return;
-        currentStack_ = i;
-        pushStacks ();
-    };
     stacksHome_->onOpen = [this] (int i) { openStackDetail (i, false); };
     stacksHome_->onPerform = [this] (int i) { openStackDetail (i, true); };
-    stacksHome_->onSettings = [this] { openOrbPanel (); };
 
     stacksDetail_->onBack = [this] {
         stacksShowDetail_ = false;
         show (Screen::Stacks);
     };
-    stacksDetail_->onSettings = [this] { openOrbPanel (); };
     stacksDetail_->onRemoveStack = [this] {
         const int idx = stacksDetail_->currentIndex ();
         if (idx < 0 || idx >= (int)stackList_.size ()) return;

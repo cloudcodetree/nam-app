@@ -7,20 +7,24 @@
 
 // Stacks Home: the ordered-chain rig list (replaces the old fixed-6-slot
 // StacksScreen accordion). Rows navigate to a dedicated Stack detail screen
-// instead of expanding in place; a SETLIST chip strip picks which stack is
-// "current" without navigating. Presentation only -- data and actions are
-// injected by the owner (AppShellStacks.cpp).
+// instead of expanding in place, and "+ NEW STACK" is the first card in the
+// same list rather than a header pill. Presentation only -- data and actions
+// are injected by the owner (AppShellStacks.cpp).
+//
+// Stripped 2026-08-15 (Chris): the brand wordmark, screen title, blurb,
+// settings gear, and SETLIST chip strip are all gone. The gear was redundant with
+// the bottom nav's status orb, and the chips only set a "current" marker
+// whose one real consumer (PERFORM's setlist stepping) prefers the open
+// stack's own index anyway.
 class StacksHomeScreen : public juce::Component {
 public:
     StacksHomeScreen ();
 
     void setStacks (std::vector<nam::Stack> stacks, int current);
 
-    std::function<void ()> onCreate;          // "+ NEW STACK"
-    std::function<void (int)> onOpen;         // row body tap -> Detail EDIT
-    std::function<void (int)> onPerform;      // "PERFORM" pill -> Detail PERFORM
-    std::function<void (int)> onSetCurrent;   // SETLIST chip tap
-    std::function<void ()> onSettings;        // gear icon -> orb I/O flyout
+    std::function<void ()> onCreate;       // "+ NEW STACK" card
+    std::function<void (int)> onOpen;      // row body tap -> Detail EDIT
+    std::function<void (int)> onPerform;   // "PERFORM" pill -> Detail PERFORM
 
     // "+ NEW STACK" opens this directly (the owner's onCreate gate wraps the
     // call, then reaches in via this accessor) -- same pattern as
@@ -43,7 +47,6 @@ public:
 
 private:
     void layout ();
-    juce::String chipLabel (size_t i) const;
     juce::String metaLine (const nam::Stack&) const;
 
     std::vector<nam::Stack> stacks_;
@@ -51,16 +54,12 @@ private:
 
     StackCreateWizard wizard_;
 
-    juce::Rectangle<int> headerRect_, gearRect_, titleRowRect_, newBtnRect_, subtitleRect_,
-        setlistLabelRect_, chipsRect_, listArea_;
+    juce::Rectangle<int> listArea_;
 
-    // SETLIST strip: horizontal-scroll chips, content-local rects (x=0 at
-    // the strip's left edge) translated by chipScrollX_ at paint/hit time.
-    std::vector<juce::Rectangle<int>> chipRects_;
-    int chipsContentW_ = 0;
-    float chipScrollX_ = 0.0f, chipPressScrollX_ = 0.0f;
-
-    // Stack rows: vertical-scroll list, same content-local convention.
+    // List content is content-local (y=0 at the list's top), translated by
+    // scrollY_ at paint/hit time. The NEW STACK card is the first card and
+    // shares the rows' geometry.
+    juce::Rectangle<int> newCardRect_;
     struct RowRect {
         juce::Rectangle<int> body, performBtn;
     };
@@ -68,10 +67,8 @@ private:
     int listContentH_ = 0;
     float scrollY_ = 0.0f, pressScrollY_ = 0.0f;
 
-    // One press/drag/tap state machine shared by both scrollable regions;
-    // pressRegion_ selects which one a drag/tap resolves against.
-    enum class Region { None, Chips, List };
-    Region pressRegion_ = Region::None;
+    // Press/drag/tap state machine for the one scrollable region.
+    bool pressedInList_ = false;
     juce::Point<int> pressPos_;
     bool moved_ = false;
 

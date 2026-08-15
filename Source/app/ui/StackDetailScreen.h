@@ -39,7 +39,6 @@ public:
 
     std::function<void ()> onBack;
     std::function<void (bool)> onTabChanged;   // fires on any tab switch, user or programmatic
-    std::function<void ()> onSettings;         // gear icon -> orb I/O flyout
     std::function<void ()> onRemoveStack;      // EDIT's REMOVE STACK, after its confirm
     std::function<void (int, nam::Stack)> onChanged;   // EDIT's local mutations (freeform reorder)
     // "+ ADD" in a section, or freeform's "+ ADD GEAR" -> the owner computes
@@ -66,8 +65,7 @@ private:
     StackItemSheet itemSheet_;
     StackPerformView performView_;
 
-    juce::Rectangle<int> headerRect_, gearRect_, backRect_, nameRect_, editTabRect_,
-        performTabRect_, bodyRect_;
+    juce::Rectangle<int> backRect_, nameRect_, editTabRect_, performTabRect_, bodyRect_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StackDetailScreen)
 };

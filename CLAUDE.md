@@ -48,6 +48,16 @@ growth, god functions, unregistered sources) are MAJOR.
 
 ## UI house rules
 
+- **Screens share one chrome grammar.** The bottom nav is the ONLY
+  persistent chrome and is visible and functional on **every** screen — no
+  screen hides it, and no screen draws its own substitute for it. A screen
+  may have at most ONE header row, and only if that row is **functional**
+  (back chevron, tab switch, the view's own controls). No per-screen brand
+  wordmarks, decorative screen titles, or subtitle blurbs: content starts
+  at the top. A new screen copies an existing screen's edge padding, header
+  height, card geometry, and scroll behavior rather than inventing its own
+  — if it needs to differ, that's a decision for `docs/wiki/decisions.md`,
+  not a local choice. Reviewer treats a second chrome grammar as a finding.
 - Every flyout/dropdown/overlay is **height-capped and scrollable**, never
   full screen; overlays paint LAST in `paint()`.
 - Non-ASCII glyphs only via `juce::String::fromUTF8`; prefer vector
