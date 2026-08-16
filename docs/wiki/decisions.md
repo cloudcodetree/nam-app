@@ -3,6 +3,36 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-16** Foot control started for real, against the Chocolate Plus.
+  Architecture is the one locked in controllers.md: a JUCE-free
+  `ControlMap` (Source/model, unit-tested) turns normalized `ControlEvent`s
+  into `ControlAction`s via user-owned bindings, and `MidiControl`
+  (Source/app) is the first transport. **JUCE already ships the hard part** --
+  `JuceMidiSupport.java` scans on the standard BLE-MIDI service UUID
+  (`03B80E5A-...`) and pairs via `MidiManager`, and we already link
+  `juce_audio_utils` for `BluetoothMidiDevicePairingDialogue`, so no custom
+  GATT/JNI work is needed (unlike Spark Control). In-app pairing is
+  MANDATORY, not a nicety: Android cannot pair a BLE MIDI device from system
+  settings, because the MIDI ports only exist once an app calls
+  `openBluetoothDevice()`.
+  Two decisions worth keeping: **(1)** learned bindings default to channel 0
+  ("any channel"), because the pedal's global MIDI channel is user-editable
+  and channel-pinned bindings would all break at once if it changed;
+  bindings are 1:1 in both directions so a re-learn moves a switch instead of
+  leaving a duplicate that double-fires. **(2)** Momentary vs toggle cannot
+  be distinguished in general -- a momentary pedal sends 127 then 0, a toggle
+  pedal alternates 127/0 -- so `FirePolicy::Auto` guesses. **Chris's call:
+  when uncertain, guess TOGGLE and fire**, because a dropped stomp is
+  invisible mid-song while a spurious action is at least legible as a fault.
+  Auto only guesses once per switch: a 0 arriving within
+  `kMomentaryReleaseWindowMs` (400ms) of its press can only be a foot
+  lifting, which latches that switch as momentary for good -- without that,
+  any momentary switch held longer than the window would double-fire on
+  every release.
+  Manifest now declares BLUETOOTH_SCAN/CONNECT plus the API<=30
+  ACCESS_FINE_LOCATION path (minSdk is 29, and JUCE maps
+  `RuntimePermissions::bluetoothMidi` differently either side of API 31).
+  Not yet built: the Controllers UI (pair/monitor/learn) and action dispatch.
 - **2026-08-15** Chris acquired the **M-Vave Chocolate Plus**, the first
   hardware target for foot control. Device reference researched and written
   up as its own spoke ([chocolate-plus.md](chocolate-plus.md)) rather than

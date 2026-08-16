@@ -5,6 +5,28 @@ through one transport-agnostic control layer. Not yet scheduled; this spoke
 holds the architecture direction + hardware research so the eventual spec
 starts warm.
 
+## Status (2026-08-16)
+
+The control layer EXISTS as of this date, in two pieces:
+`Source/model/ControlMap.{h,cpp}` (JUCE-free, unit-tested in
+`tests/test_control_map.cpp`) and `Source/app/MidiControl.{h,cpp}` (the MIDI
+transport: opens every USB/BLE input, normalizes to `ControlEvent`, drains on
+the message thread via `AsyncUpdater`). Bindings persist to
+`<appdata>/NAM Player/controls.json`. Still missing: the Controllers UI
+(pair / live monitor / learn) and the dispatch that makes actions do
+anything. Nothing is user-reachable yet.
+
+Key implementation facts, so they are not re-derived:
+- JUCE's Android BLE MIDI support is complete -- scan filtered on the BLE
+  MIDI service UUID plus `MidiManager` pairing, exposed as
+  `BluetoothMidiDevicePairingDialogue` (juce_audio_utils, already linked).
+- **In-app pairing is mandatory on Android** -- a BLE MIDI device paired from
+  system settings has no MIDI ports until an app calls
+  `openBluetoothDevice()`.
+- MIDI callbacks arrive on a JUCE MIDI thread, NOT the message or audio
+  thread; everything hops before touching UI or engine.
+- `FirePolicy` resolves the momentary/toggle ambiguity -- see decisions.md.
+
 ## Architecture direction
 
 - One internal **control-event layer**: sources emit normalized events

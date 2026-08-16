@@ -23,10 +23,12 @@ add_executable(nam_tests
     test_entitlements.cpp
     test_reverb.cpp
     test_stack_model.cpp
+    test_control_map.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/IrLoader.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryStore.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/LibraryImporter.cpp
     ${CMAKE_SOURCE_DIR}/Source/model/StackModel.cpp
+    ${CMAKE_SOURCE_DIR}/Source/model/ControlMap.cpp
     ${CMAKE_SOURCE_DIR}/Source/net/Pkce.cpp
     ${CMAKE_SOURCE_DIR}/Source/net/Tone3000Api.cpp)
 target_compile_features(nam_tests PRIVATE cxx_std_17)
