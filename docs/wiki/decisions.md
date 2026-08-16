@@ -3,6 +3,25 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-15** Chris acquired the **M-Vave Chocolate Plus**, the first
+  hardware target for foot control. Device reference researched and written
+  up as its own spoke ([chocolate-plus.md](chocolate-plus.md)) rather than
+  buried in controllers.md, because it will be developed against directly.
+  The load-bearing finding: **the "factory defaults" are contested** — three
+  sources give three different answers for what A/B/C/D send out of the box
+  (CC 20-23, vs named CC functions, vs "nothing documented, program it
+  yourself"), and every value is user-editable in CubeSuite anyway. That
+  vindicates the already-locked MIDI-learn direction: the app must bind what
+  the pedal actually sends and must never require the vendor app. Confirmed
+  useful facts: it advertises as `FootCtrl` over BLE and pairs on power-up
+  with no button ritual; the Plus adds a USB HOST port (rear switch to `H` +
+  B+C to disable Bluetooth) and a 3.5 mm TRS that is both MIDI out (3.3 V)
+  and the expression input; modes cover PC banks, per-switch custom CC with
+  momentary/toggle, advanced custom with SysEx-as-hex, and a mixed
+  MIDI/keyboard/page-turner mode; firmware v11 has bricking reports, v12
+  fixed them. The spoke ends with a "verify on the real unit" procedure --
+  pair it, log raw MIDI, replace the REPORTED block with observed values --
+  which must happen before the MIDI spec is written.
 - **2026-08-15** Stacks stripped to its bone: **a list of rigs, each an
   ordered chain you edit. Nothing else.** Guided mode (PEDALS/AMP/POST
   sections), the create wizard + its 3 built-in templates, CONTROLS/PERFORM

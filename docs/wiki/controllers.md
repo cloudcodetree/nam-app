@@ -33,11 +33,15 @@ starts warm.
 
 ## Hardware facts (researched 2026-08-12/13)
 
-- **M-Vave Chocolate Plus (~$50)** — recommended first target: 4 switches,
-  BLE MIDI + USB MIDI + TRS, aux jack doubles as expression-pedal input
-  (mode set in CubeSuite; exp sends assignable CC; inverted-sweep quirk is
-  fixable there or app-side). Pair with M-Audio EX-P (~$20); jack may be
-  3.5mm (adapter for 1/4" pedals). Base Chocolate lacks the exp jack.
+- **M-Vave Chocolate Plus (~$50)** — first hardware target, and **Chris now
+  owns one (2026-08-15)**. Full device reference, including BLE pairing name
+  (`FootCtrl`), operating modes, and which "factory defaults" are actually
+  contested across sources: **[chocolate-plus.md](chocolate-plus.md)**.
+  Short version: 4 switches (+2 combinations), BLE MIDI + USB device/host +
+  3.5 mm TRS that doubles as the expression input, PC/CC/Note/SysEx. Pair
+  with M-Audio EX-P (~$20); the Plus's 3.5 mm jack is pickier about
+  expression pedals than the base Chocolate's 1/4". Base Chocolate lacks the
+  exp jack entirely.
 - **Spark Control / Control X** — proprietary BLE (see above). Control X:
   6 switches + 2 expression inputs; original: 4 switches, no exp.
 - Others w/ exp inputs: Hotone Ampero Control (~$89), XSONIC AIRSTEP

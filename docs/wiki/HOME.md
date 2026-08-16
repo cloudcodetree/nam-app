@@ -13,6 +13,8 @@ the same commit (or add a dated line to [decisions.md](decisions.md)).
 | [ui-system.md](ui-system.md) | Hi-Fi design system, nav, card anatomy, overlays, deck views |
 | [tone3000.md](tone3000.md) | API facts, OAuth/PKCE, search params, keep/save semantics |
 | [stacks.md](stacks.md) | Stacks feature: slots, apply rules, persistence |
+| [controllers.md](controllers.md) | Foot controllers: transport-agnostic control layer, hardware research |
+| [chocolate-plus.md](chocolate-plus.md) | M-Vave Chocolate Plus device reference (Chris owns one) |
 | [build-deploy.md](build-deploy.md) | Android build, devices, adb-qr, clang tools, tests |
 | [review-gate.md](review-gate.md) | Hooks pipeline: sanitize → format → adversarial review → auto-push |
 | [decisions.md](decisions.md) | Rolling decision log (dated, one entry per decision, with WHY) |
