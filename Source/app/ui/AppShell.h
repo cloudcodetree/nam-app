@@ -12,8 +12,10 @@
 #include "app/ui/AudioSettingsState.h"
 #include "app/ui/PaywallPanel.h"
 #include "app/ui/StacksHomeScreen.h"
+#include "app/ui/ControllersScreen.h"
 #include "app/ui/StackDetailScreen.h"
 #include "app/ui/TunerScreen.h"
+#include "app/MidiControl.h"
 #include "model/StackModel.h"
 
 // Soft-paywall strategy for Stacks (Task 8, freemium Pro-unlock). Shared by
@@ -174,7 +176,7 @@ public:
     void mouseDown (const juce::MouseEvent&) override;
 
 private:
-    enum class Screen { Play, Stacks };
+    enum class Screen { Play, Stacks, Controllers };
     void show (Screen s);
     void toggleTuner ();     // expand/collapse the tuner overlay
     void runPlayBrowse ();   // structured search from filter state
@@ -189,6 +191,12 @@ private:
     // not its own Screen enumerator (AppShellStacks.cpp).
     std::unique_ptr<StacksHomeScreen> stacksHome_;
     std::unique_ptr<StackDetailScreen> stacksDetail_;
+    // Foot-controller setup, reached from the ⋯ menu. Ungated.
+    std::unique_ptr<ControllersScreen> controllers_;
+    // The MIDI transport itself. Owned here so it outlives the screen and
+    // keeps receiving stomps while the user is on Play or Stacks -- the whole
+    // point of a foot controller.
+    std::unique_ptr<nam::MidiControl> midi_;
     std::unique_ptr<TunerScreen> tuner_;   // overlay above Play, not a screen
     // Invisible click-catcher under the tuner card: any tap outside the card
     // collapses it (nav taps stay live — the scrim covers content only).
@@ -244,7 +252,7 @@ private:
     // ⋯ menu: small overlay above the nav's right corner (house overlay style).
     bool moreOpen_ = false;
     juce::Rectangle<int> moreRect_;
-    juce::Rectangle<int> moreDownloadedRect_;
+    juce::Rectangle<int> moreDownloadedRect_, moreControllersRect_;
     ClickAway moreScrim_;
     void openMoreMenu ();
     void closeMoreMenu ();
@@ -350,6 +358,16 @@ private:
     void saveStacksState ();
     void pushStacks ();
     void wireStacksScreens ();   // Home/Detail callbacks
+    void wireControllers ();     // MidiControl + ControllersScreen (AppShellControls.cpp)
+    void runControlAction (nam::ControlAction);   // dispatch (AppShellControls.cpp)
+    void pushControllerState ();                  // refresh the screen from MidiControl
+    void setControlMute (bool mute);              // foot-controller output mute
+    void stepStack (int delta);                   // foot-controller rig stepping
+    void swapToPreviousStack ();                  // foot-controller A/B compare
+    // Rig the A/B switch flips back to; -1 until two rigs have been opened.
+    int previousStackIdx_ = -1;
+    bool controlMuted_ = false;
+    float preMuteOutputDb_ = 0.0f;
     void openStackDetail (int idx);
     // What a StackGearPicker pick means: a brand-new chain item (canAdd
     // gated), a new channel appended to an existing amp item, or a

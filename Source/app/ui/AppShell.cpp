@@ -239,6 +239,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         });
     };
     wireStacksScreens ();   // Home/Detail callbacks (AppShellStacks.cpp)
+    wireControllers ();     // foot control (AppShellControls.cpp)
 
     play_->onTuner = [this] { toggleTuner (); };
     tuner_->onBack = [this] {
@@ -258,6 +259,11 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
         if (moreOpen_ && moreDownloadedRect_.contains (p)) {
             closeMoreMenu ();
             setDeckMode (1);
+            return;
+        }
+        if (moreOpen_ && moreControllersRect_.contains (p)) {
+            closeMoreMenu ();
+            show (Screen::Controllers);
             return;
         }
         closeMoreMenu ();
@@ -792,10 +798,11 @@ void AppShell::show (Screen s) {
 
     // current_ swaps to the new target BEFORE the pushStacks() refresh below
     // -- its retry-visibility gate reads current_, previously stale here.
-    juce::Component* target = (s == Screen::Stacks)
-                                  ? (stacksShowDetail_ ? (juce::Component*)stacksDetail_.get ()
-                                                       : (juce::Component*)stacksHome_.get ())
-                                  : (juce::Component*)play_.get ();
+    juce::Component* target = (juce::Component*)play_.get ();
+    if (s == Screen::Stacks)
+        target = stacksShowDetail_ ? (juce::Component*)stacksDetail_.get ()
+                                   : (juce::Component*)stacksHome_.get ();
+    else if (s == Screen::Controllers) target = (juce::Component*)controllers_.get ();
     if (current_ != target) {
         if (current_ != nullptr) current_->setVisible (false);
         current_ = target;
@@ -805,6 +812,7 @@ void AppShell::show (Screen s) {
     }
     repaint (navBar_);                        // active nav highlight tracks the visible screen
     if (s == Screen::Stacks) pushStacks ();   // refresh data-backed screens
+    if (s == Screen::Controllers) pushControllerState ();
 
     // Arriving at Play with an audition tone still in the engine: if that
     // tone was hearted into the deck, promote it to the ACTIVE library entry

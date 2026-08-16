@@ -17,12 +17,23 @@ public:
     void prepare(int sampleRate, int maxBlock);
     void setModel(std::shared_ptr<nam::NamModel> m);   // hand-off (see .cpp)
     void setInputDb(float db) { inGain_.setDb(db); }
-    void setOutputDb(float db) { outGain_.setDb(db); }
+    void setOutputDb(float db) {
+        outDb_ = db;
+        outGain_.setDb(db);
+    }
+    // Last level set, so a mute can restore what the user had rather than
+    // snapping to a default. Message-thread only; never read in render().
+    float outputDb() const { return outDb_; }
 
     // Signal-chain stage controls (forward to the nodes).
     void setGateEnabled(bool on) { gate_.setEnabled(on); }
     void setGateThresholdDb(float db) { gate_.setThresholdDb(db); }
     void setIrEnabled(bool on) { irCab_.setEnabled(on); }
+    // Whole-chain bypass (foot-controller CHAIN BYPASS): dry input straight
+    // to output. relaxed is right -- it gates nothing but its own branch, and
+    // a one-block delay in taking effect is inaudible.
+    void setBypassed(bool on) { bypassed_.store(on, std::memory_order_relaxed); }
+    bool isBypassed() const { return bypassed_.load(std::memory_order_relaxed); }
     void setImpulse(std::shared_ptr<const std::vector<float>> ir) {
         irCab_.setImpulse(std::move(ir));
     }
@@ -104,5 +115,7 @@ private:
     // free a zero-completed-blocks retiree when NO render is in flight — a
     // completed-block count alone proves completion, not absence.
     std::atomic<bool> inRender_{ false };
+    std::atomic<bool> bypassed_{ false };
+    float outDb_ = 0.0f;
 };
 }   // namespace dsp

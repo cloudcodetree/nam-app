@@ -72,7 +72,11 @@ void ToneEngine::render(const float* in, float* out, int numSamples) {
     const auto t0 = std::chrono::steady_clock::now();
 
     nam::NamModel* m = active_.load(std::memory_order_acquire);
-    if (m) {
+    // Bypass wins over everything, model or not: copy the whole block dry.
+    // Checked before the chain so a bypassed engine costs nothing.
+    if (bypassed_.load(std::memory_order_relaxed)) {
+        for (int i = 0; i < numSamples; ++i) out[i] = in[i];
+    } else if (m) {
         // Signal order: input gain -> gate -> model -> IR cab -> EQ ->
         //               delay -> reverb -> output gain.
         // scratch_ is preallocated in prepare() so this stays

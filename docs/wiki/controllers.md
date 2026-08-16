@@ -7,7 +7,16 @@ starts warm.
 
 ## Status (2026-08-16)
 
-The control layer EXISTS as of this date, in two pieces:
+The feature is USER-REACHABLE as of 2026-08-16: ⋯ menu -> Controllers.
+Ungated (Chris's call). The screen pairs a BLE pedal, shows a live monitor of
+incoming MIDI, and binds any switch to any of eight actions with a per-binding
+FirePolicy. Dispatch is wired: rig next/prev, tone next/prev, tuner, mute,
+chain bypass, A/B rig.
+**NOT yet verified against real hardware** -- the emulator has no MIDI device,
+so pairing and actual stomps are unproven. That is the remaining step, and it
+doubles as the chocolate-plus.md "verify on the real unit" procedure.
+
+The control layer itself, in two pieces:
 `Source/model/ControlMap.{h,cpp}` (JUCE-free, unit-tested in
 `tests/test_control_map.cpp`) and `Source/app/MidiControl.{h,cpp}` (the MIDI
 transport: opens every USB/BLE input, normalizes to `ControlEvent`, drains on

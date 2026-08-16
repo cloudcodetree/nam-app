@@ -3,6 +3,27 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-16** Foot control is now user-reachable and UNGATED (⋯ ->
+  Controllers). Chris reversed an in-flight "gate it": controller support is
+  app-native so gating would be legitimate under the parity rule, but it
+  ships free.
+  Screen lives in `ControllersScreen` + `AppShellControls.cpp` (dispatch);
+  AppShell.cpp grew only 8 lines (Screen enumerator, show() target, ⋯ hit,
+  wire call) because it is past the 800-line ceiling -- construction and
+  parenting happen in the new file instead. The screen exposes FirePolicy per
+  binding, which the round-2 review made a hard requirement.
+  Two things this forced into the engine: `ToneEngine::setBypassed` (RT-safe
+  relaxed atomic, checked before the chain, copies the whole block dry -- the
+  CHAIN BYPASS action needed a real bypass rather than a fake one) and
+  `ToneEngine::outputDb()` so MUTE restores the user's level instead of
+  snapping to a default. Both landed with tests.
+  UI bug worth remembering: `paintBindingRow` reserved a hardcoded 178px for
+  the trailing controls while `layout()` computed their widths separately, so
+  every long action label elided ("Previous t...", "Tuner on/..."). Both now
+  derive from shared constants, and the labels were shortened to fit a phone
+  row. Verified on emulator-5554: menu row, screen, scrolling, LEARN arming
+  with a CANCEL escape. NOT verified: real MIDI input -- the emulator has no
+  MIDI device, so the Chocolate itself is still the outstanding test.
 - **2026-08-16** **Stacks is now soft-gated: one free rig for everyone.**
   Chris flipped `kSoftPaywall` to true (AppShell.h), which was built as a
   single-constant switch for exactly this. Free users now reach the STACKS

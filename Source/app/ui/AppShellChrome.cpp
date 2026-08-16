@@ -346,6 +346,25 @@ void AppShell::paintOverChildren (juce::Graphics& g) {
         g.setFont (nam::ui::uiFont (13.0f, true));
         g.setColour (active ? nam::ui::col::accent : nam::ui::col::inkA (0.85f));
         g.drawText ("Downloaded", in.withTrimmedLeft (12), juce::Justification::centredLeft, false);
+
+        // Controllers (foot control). Ungated -- no lock glyph.
+        const bool ctlActive = (current_ == controllers_.get ());
+        if (ctlActive) {
+            g.setColour (nam::ui::col::accentA (0.10f));
+            g.fillRoundedRectangle (moreControllersRect_.toFloat (), 9.0f);
+        }
+        auto cin = moreControllersRect_.reduced (14, 10);
+        const auto cb = cin.removeFromLeft (18).toFloat ().withSizeKeepingCentre (16.0f, 16.0f);
+        g.setColour (ctlActive ? nam::ui::col::accent : nam::ui::col::inkA (0.7f));
+        // Two stacked footswitch discs -- a pedalboard, not a generic gear.
+        g.drawEllipse (cb.getX () + 1.0f, cb.getY () + 1.0f, 6.0f, 6.0f, 1.6f);
+        g.drawEllipse (cb.getX () + 9.0f, cb.getY () + 1.0f, 6.0f, 6.0f, 1.6f);
+        g.drawEllipse (cb.getX () + 1.0f, cb.getY () + 9.0f, 6.0f, 6.0f, 1.6f);
+        g.drawEllipse (cb.getX () + 9.0f, cb.getY () + 9.0f, 6.0f, 6.0f, 1.6f);
+        g.setFont (nam::ui::uiFont (13.0f, true));
+        g.setColour (ctlActive ? nam::ui::col::accent : nam::ui::col::inkA (0.85f));
+        g.drawText ("Controllers", cin.withTrimmedLeft (12), juce::Justification::centredLeft,
+                    false);
     }
 }
 
@@ -363,11 +382,12 @@ void AppShell::closeIoPanel () {
 
 void AppShell::openMoreMenu () {
     // Content-sized, right-anchored above the nav (house overlay style).
-    constexpr int rowH = 46, w = 210, numRows = 1;
+    constexpr int rowH = 46, w = 210, numRows = 2;
     moreRect_ = { getWidth () - w - 12, navBar_.getY () - rowH * numRows - 20, w,
                   rowH * numRows + 12 };
     auto rows = moreRect_.reduced (6);
     moreDownloadedRect_ = rows.removeFromTop (rowH);
+    moreControllersRect_ = rows.removeFromTop (rowH);
     moreOpen_ = true;
     moreScrim_.setBounds (contentBounds ());
     moreScrim_.setVisible (true);
@@ -545,11 +565,11 @@ void AppShell::mouseDown (const juce::MouseEvent& e) {
         return;
     }
     if (navStacksRect_.contains (p)) {
-        // kSoftPaywall (public launch) lets everyone into Stacks; the first
-        // rig is free and creation of a second one is gated instead (see
-        // wireStacksScreens's onCreate in AppShellStacks.cpp). Until then
-        // this nav hit stays the hard gate, matching the Task 5
-        // internal-testing config.
+        // kSoftPaywall is ON: everyone reaches Stacks and the first rig is
+        // free; creation of a SECOND one is what gets gated (see
+        // wireStacksScreens's onCreate in AppShellStacks.cpp). The paywall
+        // branch below is the kSoftPaywall==false hard-gate path, kept so the
+        // constant remains a real switch.
         if (!kGatesEnabled || kSoftPaywall || !isPro_ || isPro_ ()) {
             stacksShowDetail_ = false;   // STACKS nav always lands on Home
             show (Screen::Stacks);

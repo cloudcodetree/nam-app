@@ -12,16 +12,18 @@ struct ActionMeta {
     const char* label;
 };
 
-// Display order for the bindings UI. Ids are persisted -- never rename one.
+// Display order for the bindings UI. Ids are PERSISTED -- never rename one.
+// Labels are display-only and kept short: the row reserves ~180px for the
+// LEARN/policy/clear controls, so longer text elides on a phone.
 const ActionMeta kActions[] = {
     { ControlAction::RigNext, "rig.next", "Next rig" },
-    { ControlAction::RigPrev, "rig.prev", "Previous rig" },
-    { ControlAction::ToneNext, "tone.next", "Next tone in list" },
-    { ControlAction::TonePrev, "tone.prev", "Previous tone in list" },
-    { ControlAction::TunerToggle, "tuner.toggle", "Tuner on/off" },
-    { ControlAction::OutputMute, "output.mute", "Mute output" },
-    { ControlAction::ChainBypass, "chain.bypass", "Bypass chain" },
-    { ControlAction::RigCompare, "rig.compare", "A/B compare rig" },
+    { ControlAction::RigPrev, "rig.prev", "Prev rig" },
+    { ControlAction::ToneNext, "tone.next", "Next tone" },
+    { ControlAction::TonePrev, "tone.prev", "Prev tone" },
+    { ControlAction::TunerToggle, "tuner.toggle", "Tuner" },
+    { ControlAction::OutputMute, "output.mute", "Mute" },
+    { ControlAction::ChainBypass, "chain.bypass", "Bypass" },
+    { ControlAction::RigCompare, "rig.compare", "A/B rig" },
 };
 
 const char* kindId(ControlKind k) {

@@ -316,3 +316,28 @@ TEST_CASE("ToneEngine full chain: model + gate + IR + EQ + delay + reverb stays 
     for (float v : out) REQUIRE(std::isfinite(v));
     REQUIRE(e.overCapacityCount() == 0u);
 }
+
+TEST_CASE("ToneEngine: bypass passes the dry signal through untouched") {
+    // Foot-controller CHAIN BYPASS. Must write the WHOLE block and must not
+    // depend on a model being loaded.
+    dsp::ToneEngine e;
+    e.prepare(48000.0, 64);
+    e.setInputDb(12.0f);   // deliberately non-unity: bypass ignores the chain
+    e.setOutputDb(-6.0f);
+
+    std::vector<float> in(64), out(64, -999.0f);
+    for (int i = 0; i < 64; ++i) in[i] = 0.25f * std::sin(0.1f * (float)i);
+
+    e.setBypassed(true);
+    REQUIRE(e.isBypassed());
+    e.render(in.data(), out.data(), 64);
+    for (int i = 0; i < 64; ++i) REQUIRE(out[i] == Catch::Approx(in[i]));
+
+    // Unbypassing restores processing (in-gain alone makes it differ).
+    e.setBypassed(false);
+    e.render(in.data(), out.data(), 64);
+    bool anyDifferent = false;
+    for (int i = 0; i < 64; ++i)
+        if (std::fabs(out[i] - in[i]) > 1.0e-6f) anyDifferent = true;
+    REQUIRE(anyDifferent);
+}
