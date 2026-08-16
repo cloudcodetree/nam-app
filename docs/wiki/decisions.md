@@ -3,6 +3,34 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-16** Foot-control review round 1: the gate found five MAJORs in
+  the freshly-landed control layer, four of them in the TDD core, and the
+  root cause is worth remembering -- **the tests encoded the happy path the
+  implementation already took**. The learn test asserted `sig.number` but
+  never `sig.channel`, so the channel-agnostic rule written into BOTH the
+  header comment and the decision log above was never actually implemented
+  and nothing noticed. A green suite is evidence about the assertions you
+  wrote, not the behavior you intended.
+  Fixed, each with the test that reproduces it: learn now zeroes the channel;
+  `fromJson` wraps `value()` in try/catch (it THROWS on a type mismatch, and
+  such a file still parses as valid JSON so the discard guard cannot catch
+  it -- same reason StackModel does this); `Auto` requires a rising edge for
+  high values (it fired on every event >= 64, so a sweeping expression pedal
+  produced one action per MIDI message); Program Changes bypass edge
+  detection entirely (MidiControl synthesizes 127 for each, so an
+  edge-triggered policy fired once then went permanently dead); and the BLE
+  pairing rescan moved to the dialogue's exit callback, since
+  `BluetoothMidiDevicePairingDialogue::open()` returns when the overlay is
+  CONSTRUCTED, not when pairing finishes -- the old code could never see the
+  pedal it just paired. That callback holds a weak liveness token, not a bare
+  `this`, because the dialogue outlives the service if the app is
+  backgrounded mid-pairing.
+  One earlier assumption was SUPERSEDED: Auto used to fire when a switch's
+  first-ever event was low (reasoning: a toggle switch could power up "on"
+  and swallow the first stomp). An expression pedal's first message is also
+  low, so that rule let a resting pedal fire actions by itself. A low now
+  only counts as a press once it follows a high. Cost is one missed press in
+  the rare boot-"on" case; the next stomp works.
 - **2026-08-16** Foot control started for real, against the Chocolate Plus.
   Architecture is the one locked in controllers.md: a JUCE-free
   `ControlMap` (Source/model, unit-tested) turns normalized `ControlEvent`s

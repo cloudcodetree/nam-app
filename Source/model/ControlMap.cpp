@@ -115,6 +115,14 @@ bool shouldFire(const ControlBinding& binding, const ControlEvent& ev, FireState
     const bool wasHigh = st.lastValue >= kControlHighThreshold;
     const bool risingEdge = high && !wasHigh;
 
+    // A program change has no value axis at all -- MidiControl synthesizes
+    // 127 for every one -- so edge detection would fire once and then leave
+    // the binding permanently dead. Each PC IS a discrete press.
+    if (ev.sig.kind == ControlKind::ProgramChange) {
+        st.lastValue = ev.value;
+        return true;
+    }
+
     bool fire = false;
 
     switch (binding.policy) {
@@ -128,15 +136,21 @@ bool shouldFire(const ControlBinding& binding, const ControlEvent& ev, FireState
 
         case FirePolicy::Auto:
             if (high) {
-                fire = true;
-            } else if (!st.primed) {
-                // Opening with a low value tells us nothing; treat it as a
-                // press rather than swallowing the user's first stomp.
-                fire = true;
+                // Only the CROSSING is a press. A continuous controller
+                // sweeping past the threshold streams high values, and
+                // firing on each would spray actions.
+                fire = risingEdge;
+            } else if (!wasHigh) {
+                // A low that did not follow a high is not a press at all --
+                // it is either the first thing this signature ever sent
+                // (startup state) or a controller sweeping through its low
+                // range. Firing here would let a resting expression pedal
+                // trigger actions on its own.
+                fire = false;
             } else if (st.sawRelease) {
                 // Confirmed momentary: lows are releases, never presses.
                 fire = false;
-            } else if (wasHigh && ev.timeMs - st.lastEdgeMs <= kMomentaryReleaseWindowMs) {
+            } else if (ev.timeMs - st.lastEdgeMs <= kMomentaryReleaseWindowMs) {
                 // Too fast to be a human pressing again -- this is the
                 // release half of a momentary stomp. Latch it.
                 st.sawRelease = true;
@@ -149,7 +163,6 @@ bool shouldFire(const ControlBinding& binding, const ControlEvent& ev, FireState
 
     if (risingEdge) st.lastEdgeMs = ev.timeMs;
     st.lastValue = ev.value;
-    st.primed = true;
     return fire;
 }
 
@@ -166,12 +179,17 @@ ControlAction ControlMap::handle(const ControlEvent& ev) {
     // be bound to.
     if (learning_ != ControlAction::None) {
         if (!high) return ControlAction::None;
-        bind(ev.sig, learning_);
+        // Learn channel-agnostically: the pedal's global MIDI channel is
+        // user-editable, and pinning the binding to whichever channel
+        // happened to arrive would break every binding at once the day it
+        // changes.
+        ControlSignature learned = ev.sig;
+        learned.channel = 0;
+        bind(learned, learning_);
         learning_ = ControlAction::None;
         // Seed the fire state from the press that did the learning so the
         // matching release is not read as a fresh stomp.
         auto& st = fireState_[stateKey(ev.sig)];
-        st.primed = true;
         st.lastValue = ev.value;
         st.lastEdgeMs = ev.timeMs;
         st.sawRelease = false;
@@ -259,15 +277,27 @@ ControlMap ControlMap::fromJson(const nlohmann::json& j) {
     for (const auto& e : *it) {
         if (!e.is_object()) continue;
         ControlBinding b;
-        b.sig.kind = kindFromId(e.value("kind", std::string("cc")));
-        b.sig.channel = e.value("channel", 0);
-        b.sig.number = e.value("number", 0);
-        b.action = controlActionFromId(e.value("action", std::string()));
-        b.policy = firePolicyFromId(e.value("policy", std::string("auto")));
-        // An action this build does not know parses to None; keep the row so
-        // the round-trip is lossless, but it can never fire.
-        nlohmann::json extra = e;
-        for (const char* k : kKnown) extra.erase(k);
+        nlohmann::json extra;
+        // value() THROWS on a type mismatch (a string where an int belongs)
+        // rather than returning the default, and such a file still parses as
+        // valid JSON, so the discard check upstream cannot catch it. Same
+        // guard StackModel uses, for the same reason: a corrupt config must
+        // never stop the app from starting.
+        try {
+            b.sig.kind = kindFromId(e.value("kind", std::string("cc")));
+            b.sig.channel = e.value("channel", 0);
+            b.sig.number = e.value("number", 0);
+            b.action = controlActionFromId(e.value("action", std::string()));
+            b.policy = firePolicyFromId(e.value("policy", std::string("auto")));
+            // An action this build does not know parses to None; keep the row
+            // so the round-trip is lossless, but it can never fire.
+            extra = e;
+            for (const char* k : kKnown) extra.erase(k);
+        } catch (const nlohmann::json::exception&) {
+            // Drop the unreadable row entirely rather than persisting a
+            // half-populated binding that would fire on the wrong switch.
+            continue;
+        }
         m.bindings_.push_back(b);
         m.extras_.push_back(std::move(extra));
     }

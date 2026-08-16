@@ -58,6 +58,70 @@ TEST_CASE("Learn binds the next pressed switch and consumes that press") {
     REQUIRE(b->sig.number == 20);
 }
 
+TEST_CASE("Learned bindings are channel-agnostic") {
+    // The pedal's global MIDI channel is user-editable, so pinning a learned
+    // binding to whatever channel happened to arrive would silently break
+    // every binding the day the user changes it.
+    ControlMap m;
+    m.beginLearn(ControlAction::RigNext);
+    REQUIRE(m.handle(ev(cc(20, 7), 127, 0)) == ControlAction::None);
+
+    const auto* b = m.bindingFor(ControlAction::RigNext);
+    REQUIRE(b != nullptr);
+    REQUIRE(b->sig.number == 20);
+    REQUIRE(b->sig.channel == 0);
+
+    // ...and it really does answer to a different channel afterwards.
+    REQUIRE(m.handle(ev(cc(20, 3), 127, 1000)) == ControlAction::RigNext);
+}
+
+TEST_CASE("A program change fires every time under any policy") {
+    // A PC carries no release half -- MidiControl synthesizes 127 for each
+    // one -- so an edge-triggered policy would fire once and then go
+    // permanently dead.
+    ControlSignature pc{ ControlKind::ProgramChange, 1, 5 };
+    for (auto policy : { FirePolicy::Auto, FirePolicy::Momentary, FirePolicy::Toggle }) {
+        ControlBinding b{ pc, ControlAction::RigNext, policy };
+        FireState st;
+        REQUIRE(shouldFire(b, ev(pc, 127, 0), st));
+        REQUIRE(shouldFire(b, ev(pc, 127, 1000), st));
+        REQUIRE(shouldFire(b, ev(pc, 127, 2000), st));
+    }
+}
+
+TEST_CASE("Auto does not fire repeatedly while a controller ramps") {
+    // An expression pedal sweeping past the threshold sends a stream of
+    // rising values; only the crossing is a "press".
+    ControlBinding b{ cc(24), ControlAction::OutputMute, FirePolicy::Auto };
+    FireState st;
+    REQUIRE_FALSE(shouldFire(b, ev(cc(24), 10, 0), st));
+    REQUIRE_FALSE(shouldFire(b, ev(cc(24), 40, 20), st));
+    REQUIRE(shouldFire(b, ev(cc(24), 70, 40), st));   // crosses 64 -- one fire
+    REQUIRE_FALSE(shouldFire(b, ev(cc(24), 90, 60), st));
+    REQUIRE_FALSE(shouldFire(b, ev(cc(24), 127, 80), st));
+}
+
+TEST_CASE("Corrupt or wrongly-typed controls.json never throws") {
+    // A config written by a broken build must leave the app startable. This
+    // is the same contract StackModel keeps, and for the same reason.
+    json bad;
+    bad["bindings"] = json::array();
+    bad["bindings"].push_back({ { "kind", "cc" },
+                                { "channel", "1" },   // string, not int
+                                { "number", 20 },
+                                { "action", "rig.next" } });
+    bad["bindings"].push_back({ { "kind", 7 },   // number, not string
+                                { "channel", 1 },
+                                { "number", "twenty" },
+                                { "action", 12 } });
+    REQUIRE_NOTHROW(ControlMap::fromJson(bad));
+
+    // Rows that cannot be understood are skipped rather than half-applied.
+    REQUIRE_NOTHROW(ControlMap::fromJson(json::object()));
+    REQUIRE_NOTHROW(ControlMap::fromJson(json("not an object")));
+    REQUIRE(ControlMap::fromJson(json("not an object")).bindings().empty());
+}
+
 TEST_CASE("Bindings are 1:1 in both directions") {
     ControlMap m;
     m.bind(cc(20), ControlAction::RigNext);
@@ -196,12 +260,18 @@ TEST_CASE("Auto latches momentary, so a long-held switch stops double-firing") {
     REQUIRE_FALSE(shouldFire(b, ev(cc(22), 0, 7000), st));
 }
 
-TEST_CASE("Auto fires when the very first event of a switch is low") {
-    // A toggle pedal can come up in its "off" half, so the user's first
-    // stomp arrives as a 0. Swallowing it would look like a dead switch.
+TEST_CASE("Auto ignores a low value that never followed a high") {
+    // Superseded an earlier assumption that a first-seen low should fire (to
+    // catch a toggle switch powering up "on"): an expression pedal's first
+    // message is low too, so that rule let a resting pedal trigger actions.
+    // A low only counts as a press once the alternation is established.
     ControlBinding b{ cc(23), ControlAction::ChainBypass, FirePolicy::Auto };
     FireState st;
-    REQUIRE(shouldFire(b, ev(cc(23), 0, 0), st));
+    REQUIRE_FALSE(shouldFire(b, ev(cc(23), 0, 0), st));
+    REQUIRE_FALSE(shouldFire(b, ev(cc(23), 0, 1000), st));
+    // Once it has gone high, a later low IS the toggle's next press.
+    REQUIRE(shouldFire(b, ev(cc(23), 127, 2000), st));
+    REQUIRE(shouldFire(b, ev(cc(23), 0, 9000), st));
 }
 
 TEST_CASE("ControlMap dispatches a bound momentary stomp exactly once") {

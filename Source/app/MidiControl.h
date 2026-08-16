@@ -77,6 +77,10 @@ private:
     // aftertouch, sysex...), which are dropped rather than queued.
     static bool toControlEvent(const juce::MidiMessage&, ControlEvent&);
 
+    // Liveness token for callbacks that can outlive this object (the BLE
+    // pairing dialogue). Reset in the destructor; observers hold weak refs.
+    std::shared_ptr<int> alive_ = std::make_shared<int>(0);
+
     std::vector<std::unique_ptr<juce::MidiInput>> inputs_;
     ControlMap map_;
 

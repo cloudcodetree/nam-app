@@ -20,6 +20,7 @@ MidiControl::~MidiControl() {
     // MIDI thread can be mid-callback into a half-destroyed object.
     closeAll();
     cancelPendingUpdate();
+    alive_.reset();
 }
 
 void MidiControl::refreshDevices() {
@@ -167,11 +168,20 @@ void MidiControl::showBluetoothPairing(std::function<void(bool)> done) {
                 if (done) done(false);
                 return;
             }
-            const bool opened = juce::BluetoothMidiDevicePairingDialogue::open();
-            // Pairing adds MIDI ports, but nothing tells us when -- rescan
-            // as the dialogue closes so a freshly paired pedal is live
-            // without the user hunting for a refresh button.
-            if (opened) refreshDevices();
+            // open() returns as soon as the overlay is CONSTRUCTED, not when
+            // the user finishes pairing, so rescanning on its return value
+            // would always run too early and miss the pedal. The exit
+            // callback is the only point at which new MIDI ports can exist.
+            // The dialogue can outlive this service (user backgrounds the app
+            // mid-pairing), so the callback holds a weak token rather than a
+            // bare `this` -- MidiControl is not a Component, so there is no
+            // SafePointer to reach for.
+            auto* onClose = juce::ModalCallbackFunction::create(
+                [this, guard = std::weak_ptr<int>(alive_)](int) {
+                    if (guard.expired()) return;
+                    refreshDevices();
+                });
+            const bool opened = juce::BluetoothMidiDevicePairingDialogue::open(onClose);
             if (done) done(opened);
         });
 #else

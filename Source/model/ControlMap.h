@@ -90,7 +90,6 @@ struct FireState {
     int lastValue = 0;
     std::uint32_t lastEdgeMs = 0;   // time of the most recent 0 -> high edge
     bool sawRelease = false;        // a high -> 0 edge has been observed
-    bool primed = false;            // any event seen at all yet
 };
 
 // A high value is anything at or above this; MIDI switches send 127 but
