@@ -26,6 +26,9 @@ Key implementation facts, so they are not re-derived:
 - MIDI callbacks arrive on a JUCE MIDI thread, NOT the message or audio
   thread; everything hops before touching UI or engine.
 - `FirePolicy` resolves the momentary/toggle ambiguity -- see decisions.md.
+- **UI requirement:** the Controllers screen must expose FirePolicy per
+  binding. Auto double-fires a momentary switch held past 400ms (undecidable
+  by timing), and the per-binding Momentary override is the only cure.
 
 ## Architecture direction
 

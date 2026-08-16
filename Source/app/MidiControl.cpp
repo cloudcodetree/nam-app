@@ -2,6 +2,8 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
+#include <algorithm>
+
 namespace nam {
 
 namespace {
@@ -25,7 +27,11 @@ MidiControl::~MidiControl() {
 
 void MidiControl::refreshDevices() {
     const auto available = juce::MidiInput::getAvailableDevices();
-    const auto before = inputs_.size();
+    // Compare identities, not the count: swapping one pedal for another
+    // leaves the count equal and would notify nobody.
+    std::vector<juce::String> before;
+    for (const auto& in : inputs_) before.push_back(in->getIdentifier());
+    std::sort(before.begin(), before.end());
 
     // Drop inputs whose device disappeared (pedal switched off / unpaired).
     for (std::size_t i = inputs_.size(); i-- > 0;) {
@@ -53,7 +59,10 @@ void MidiControl::refreshDevices() {
         }
     }
 
-    if (inputs_.size() != before && onDevicesChanged) onDevicesChanged();
+    std::vector<juce::String> after;
+    for (const auto& in : inputs_) after.push_back(in->getIdentifier());
+    std::sort(after.begin(), after.end());
+    if (after != before && onDevicesChanged) onDevicesChanged();
 }
 
 void MidiControl::closeAll() {
@@ -163,7 +172,13 @@ void MidiControl::showBluetoothPairing(std::function<void(bool)> done) {
     // JUCE asserts hard if the dialogue is opened without this permission,
     // and the scan silently returns nothing, so the request is not optional.
     juce::RuntimePermissions::request(
-        juce::RuntimePermissions::bluetoothMidi, [this, done = std::move(done)](bool granted) {
+        juce::RuntimePermissions::bluetoothMidi,
+        [this, guard = std::weak_ptr<int>(alive_), done = std::move(done)](bool granted) {
+            // The permission prompt outlives this service just as the pairing
+            // dialogue does -- and for LONGER, since it comes first. Guarding
+            // only the nested modal callback fixed the hazard one level too
+            // deep.
+            if (guard.expired()) return;
             if (!granted) {
                 if (done) done(false);
                 return;

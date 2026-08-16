@@ -122,6 +122,53 @@ TEST_CASE("Corrupt or wrongly-typed controls.json never throws") {
     REQUIRE(ControlMap::fromJson(json("not an object")).bindings().empty());
 }
 
+TEST_CASE("A note switch fires at any velocity") {
+    // Foot switches that send notes are not velocity-sensitive; a pedal
+    // sending note-on velocity 30 must still count as a press, or the switch
+    // is both un-learnable and un-fireable.
+    ControlSignature note{ ControlKind::Note, 1, 60 };
+    ControlMap m;
+    m.beginLearn(ControlAction::TunerToggle);
+    REQUIRE(m.handle(ev(note, 30, 0)) == ControlAction::None);   // learns
+    REQUIRE(m.bindingFor(ControlAction::TunerToggle) != nullptr);
+
+    // note-off (0) is the release; a later low-velocity note-on is a press.
+    REQUIRE(m.handle(ev(note, 0, 30)) == ControlAction::None);
+    REQUIRE(m.handle(ev(note, 12, 2000)) == ControlAction::TunerToggle);
+}
+
+TEST_CASE("Overlapping bindings cannot coexist") {
+    // handle() dispatches by wildcard match but bind() used to dedup by
+    // exact equality, so a channel-0 and a channel-1 binding of the same CC
+    // both persisted and whichever lost the scan was silently dead.
+    ControlMap m;
+    m.bind({ ControlKind::Cc, 0, 20 }, ControlAction::RigNext);
+    m.bind({ ControlKind::Cc, 1, 20 }, ControlAction::TunerToggle);
+
+    REQUIRE(m.bindings().size() == 1);
+    REQUIRE(m.bindingFor(ControlAction::RigNext) == nullptr);
+    REQUIRE(m.bindingFor(ControlAction::TunerToggle) != nullptr);
+    REQUIRE(m.handle(ev(cc(20, 1), 127, 0)) == ControlAction::TunerToggle);
+}
+
+TEST_CASE("KNOWN LIMIT: Auto double-fires a momentary switch held past the window") {
+    // Documented, not accidental. Held longer than kMomentaryReleaseWindowMs,
+    // a momentary release is indistinguishable from a toggle press by timing
+    // alone, and the chosen policy is to guess toggle and fire. The escape
+    // hatch is the per-binding FirePolicy::Momentary override, which the
+    // Controllers UI must expose for exactly this reason.
+    ControlBinding b{ cc(25), ControlAction::RigNext, FirePolicy::Auto };
+    FireState st;
+    REQUIRE(shouldFire(b, ev(cc(25), 127, 0), st));
+    REQUIRE(shouldFire(b, ev(cc(25), 0, 3000), st));   // <-- the extra fire
+
+    // Setting the override explicitly is what makes it behave.
+    ControlBinding fixed{ cc(25), ControlAction::RigNext, FirePolicy::Momentary };
+    FireState st2;
+    REQUIRE(shouldFire(fixed, ev(cc(25), 127, 0), st2));
+    REQUIRE_FALSE(shouldFire(fixed, ev(cc(25), 0, 3000), st2));
+}
+
 TEST_CASE("Bindings are 1:1 in both directions") {
     ControlMap m;
     m.bind(cc(20), ControlAction::RigNext);

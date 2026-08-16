@@ -3,6 +3,28 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-16** Foot-control review round 2: five more MAJORs, all fixed
+  except one that is now a DOCUMENTED LIMIT rather than a bug.
+  Fixed: the `RuntimePermissions` callback captured a bare `this` while the
+  modal callback nested INSIDE it had a liveness guard -- the round-1 fix
+  closed the hazard one level too deep, and the outer callback lives longer;
+  note-mode switches below velocity 64 were un-learnable and un-fireable, so
+  "high" is now kind-aware (`isControlHigh`: any note-on is a press, since a
+  foot switch sending notes is not velocity-sensitive); `bind()` deduped by
+  exact signature equality while `handle()` dispatches by WILDCARD match, so
+  a channel-0 and a channel-1 binding of the same CC both persisted and one
+  was silently dead -- dedup now uses the same overlap test as dispatch; and
+  `onDevicesChanged` fired on input-COUNT change, so swapping one pedal for
+  another notified nobody (now compares identifier sets).
+  NOT fixed, deliberately: `FirePolicy::Auto` double-fires a momentary switch
+  HELD longer than the 400ms release window. Held that long, a momentary
+  release is genuinely indistinguishable from a toggle press by timing alone,
+  and Chris's policy is to guess toggle and fire. Widening the window would
+  contradict that preference (it makes Auto MORE likely to swallow an event).
+  The escape hatch is the per-binding `FirePolicy::Momentary` override, so
+  **the Controllers UI MUST expose the policy per binding** -- that is now a
+  requirement, not a nicety. Captured as a named KNOWN LIMIT test so it is
+  intentional rather than accidental.
 - **2026-08-16** Foot-control review round 1: the gate found five MAJORs in
   the freshly-landed control layer, four of them in the TDD core, and the
   root cause is worth remembering -- **the tests encoded the happy path the

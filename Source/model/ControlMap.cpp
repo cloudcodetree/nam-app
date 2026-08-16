@@ -110,9 +110,14 @@ FirePolicy firePolicyFromId(const std::string& s) {
 // latches st.sawRelease and the switch is treated as momentary from then on.
 // That matters because a momentary switch HELD longer than the window would
 // otherwise double-fire on release every single time.
+bool isControlHigh(ControlKind kind, int value) {
+    if (kind == ControlKind::Note) return value > 0;
+    return value >= kControlHighThreshold;
+}
+
 bool shouldFire(const ControlBinding& binding, const ControlEvent& ev, FireState& st) {
-    const bool high = ev.value >= kControlHighThreshold;
-    const bool wasHigh = st.lastValue >= kControlHighThreshold;
+    const bool high = isControlHigh(ev.sig.kind, ev.value);
+    const bool wasHigh = isControlHigh(ev.sig.kind, st.lastValue);
     const bool risingEdge = high && !wasHigh;
 
     // A program change has no value axis at all -- MidiControl synthesizes
@@ -172,7 +177,7 @@ std::string ControlMap::stateKey(const ControlSignature& s) {
 }
 
 ControlAction ControlMap::handle(const ControlEvent& ev) {
-    const bool high = ev.value >= kControlHighThreshold;
+    const bool high = isControlHigh(ev.sig.kind, ev.value);
 
     // Learn consumes the event rather than also firing it: the switch the
     // user is assigning must not simultaneously trigger whatever it used to
@@ -214,7 +219,11 @@ void ControlMap::bind(const ControlSignature& sig, ControlAction action, FirePol
     // AND any prior binding of this action, so a re-learn moves the switch
     // instead of leaving a stale duplicate that double-fires.
     for (std::size_t i = bindings_.size(); i-- > 0;) {
-        if (bindings_[i].sig == sig || bindings_[i].action == action) {
+        // Overlap, not exact equality: handle() dispatches by wildcard
+        // match, so a channel-0 and a channel-1 binding of the same CC would
+        // both persist while only one could ever fire.
+        if (bindings_[i].sig.matches(sig) || sig.matches(bindings_[i].sig) ||
+            bindings_[i].action == action) {
             bindings_.erase(bindings_.begin() + static_cast<long>(i));
             if (i < extras_.size()) extras_.erase(extras_.begin() + static_cast<long>(i));
         }

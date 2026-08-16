@@ -96,6 +96,12 @@ struct FireState {
 // nothing guarantees it, and some controllers ramp.
 inline constexpr int kControlHighThreshold = 64;
 
+// Whether a value counts as "pressed" for this kind. Notes are the exception:
+// a foot switch wired to send notes is not velocity-sensitive, so ANY note-on
+// is a press and only note-off (0) is a release. Applying the CC threshold to
+// notes would make a velocity-30 switch both un-learnable and un-fireable.
+bool isControlHigh(ControlKind, int value);
+
 // Auto treats a 0 arriving within this long of the press as the RELEASE half
 // of a momentary stomp rather than a fresh toggle press. Anything slower is
 // a human pressing again.
