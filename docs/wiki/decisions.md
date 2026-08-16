@@ -3,6 +3,20 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-16** **Stacks is now soft-gated: one free rig for everyone.**
+  Chris flipped `kSoftPaywall` to true (AppShell.h), which was built as a
+  single-constant switch for exactly this. Free users now reach the STACKS
+  screen and can build and hear ONE complete rig; Pro is required only for
+  the second (`Entitlements::kFreeRigs == 1`, already tested). Previously the
+  STACKS nav button itself was hard-gated, so free users never saw the
+  feature. Why: a locked door teaches nothing -- letting someone build a rig
+  and hear it IS the argument for Pro, and it keeps the free tier a real
+  product rather than a demo. Note this does not interact with the parity
+  rule either way: Stacks is app-native, so gating the SECOND rig stays
+  legitimate.
+  Same conversation: **foot-controller support will NOT be gated** -- Chris
+  reversed an earlier "gate it" mid-build. Controllers is app-native and so
+  could legitimately be Pro, but it ships free.
 - **2026-08-16** Foot-control review round 2: five more MAJORs, all fixed
   except one that is now a DOCUMENTED LIMIT rather than a bug.
   Fixed: the `RuntimePermissions` callback captured a bare `this` while the

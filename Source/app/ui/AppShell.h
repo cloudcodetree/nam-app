@@ -19,13 +19,16 @@
 // Soft-paywall strategy for Stacks (Task 8, freemium Pro-unlock). Shared by
 // AppShellStacks.cpp (rig-creation gate) and AppShellChrome.cpp (STACKS nav
 // gate) so both touchpoints flip together.
-//   false (current/internal-testing default): the STACKS nav button itself
-//   is hard-gated in AppShellChrome.cpp -- free users never reach the
-//   screen, matching the Task 5 config as shipped.
-//   true (public-launch config): the nav gate lets everyone in; the first
-//   rig is free and AppShellStacks.cpp's wireStacksScreens onCreate gates
-//   creation of a SECOND rig instead. Flip this one constant at public launch.
-constexpr bool kSoftPaywall = false;
+//   false: the STACKS nav button itself is hard-gated in
+//   AppShellChrome.cpp -- free users never reach the screen at all.
+//   true (CURRENT, Chris's call 2026-08-16): the nav gate lets everyone in;
+//   the first rig is free forever (Entitlements::kFreeRigs) and
+//   AppShellStacks.cpp's wireStacksScreens onCreate gates creation of a
+//   SECOND rig instead.
+// Why soft: a locked door teaches nothing. Letting someone BUILD a rig and
+// hear it is the actual argument for Pro, and it keeps the free tier honest
+// rather than a demo.
+constexpr bool kSoftPaywall = true;
 
 // Master switch for ALL Pro gating (nav/layout/demo/rig gates + lock
 // glyphs), driven by the build: set NAM_GATES_ENABLED=0 in .env to develop
