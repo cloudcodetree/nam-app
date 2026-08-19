@@ -44,7 +44,12 @@ const char* controlActionLabel(ControlAction);
 // Every real action, in UI display order (excludes None).
 const std::vector<ControlAction>& allControlActions();
 
-enum class ControlKind { Cc, Note, ProgramChange };
+// Key is a BLE HID foot controller arriving as a KEYBOARD -- the M-Vave
+// Chocolate Plus ships in this mode, and Android binds it as
+// "FootCtrlPlus Keyboard" rather than a MIDI device. `number` is the JUCE
+// key code. Because learn captures whatever arrives, the app never needs to
+// know which keycodes a given pedal sends.
+enum class ControlKind { Cc, Note, ProgramChange, Key };
 
 // Identity of "the thing the user pressed", independent of its value.
 struct ControlSignature {

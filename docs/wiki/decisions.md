@@ -3,6 +3,33 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-19** **BLE HID is now a first-class control transport**, built
+  because Chris's Chocolate Plus turned out to ship in keyboard mode, not
+  MIDI mode (see chocolate-plus.md OBSERVED). Android binds it as
+  `FootCtrlPlus Keyboard` and `dumpsys midi` shows zero devices, so the
+  app's BLE-MIDI scan correctly finds nothing -- a connected BLE peripheral
+  stops advertising, so a MIDI-service-filtered scan cannot see it.
+  The key insight that unblocked this: **learn means we never need to know a
+  pedal's keycodes**. The transport-agnostic layer was built for exactly
+  this, so `ControlKind::Key` + `AppShell::keyPressed` was a small addition
+  rather than the reverse-engineering exercise it looked like. Chris does
+  NOT have to install CubeSuite to use the pedal.
+  Keys are DISCRETE like program changes -- JUCE surfaces only `keyPressed`,
+  there is no release -- so both bypass edge detection via `isDiscreteKind`,
+  or a binding would fire once and go dead forever. Unclaimed keys are passed
+  back so the layer never eats normal input.
+  Two bugs the emulator caught, both of which would have hit the real pedal:
+  `dispatchEvent` fired `onEvent` BEFORE `map_.handle()`, and the UI refresh
+  was wired to `onEvent` -- so a completed learn repainted the row from
+  pre-learn state and it sat stuck on "press a switch...". And a learned
+  binding was never SAVED, so it would not survive a restart. Both fixed; the
+  MIDI batch drain now routes through the same `dispatchEvent` so the two
+  transports cannot drift.
+  Verified on emulator-5554 by injecting keystrokes (`adb shell input
+  keyevent 92`), which is precisely how a BLE HID pedal presents: learn
+  captured `KEY 65545`, it persisted to controls.json, survived a restart,
+  and stepped Rig 1 -> Rig 2 -> Rig 1 from the Play screen. Real Bluetooth
+  remains unverified -- the emulator has no radio.
 - **2026-08-16** Foot control is now user-reachable and UNGATED (⋯ ->
   Controllers). Chris reversed an in-flight "gate it": controller support is
   app-native so gating would be legitimate under the parity rule, but it

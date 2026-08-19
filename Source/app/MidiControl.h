@@ -40,6 +40,11 @@ public:
     std::function<void(ControlEvent)> onEvent;
     // Input list changed (device connected, paired, or lost).
     std::function<void()> onDevicesChanged;
+    // The binding map changed under us -- i.e. an incoming press COMPLETED a
+    // learn. Fired after the change, so a handler that re-reads the map sees
+    // the new state; wiring UI refresh to onEvent instead reads it too early
+    // and leaves the row stuck showing "press a switch...".
+    std::function<void()> onMapChanged;
 
     // Opens every MIDI input not already open, and drops ones that vanished.
     // Safe to call repeatedly; that is how a newly paired pedal is picked up.
@@ -49,6 +54,13 @@ public:
     // Names of the currently open inputs, for the settings UI.
     std::vector<juce::String> openDeviceNames() const;
     bool hasOpenDevice() const { return !inputs_.empty(); }
+
+    // Runs an event from a NON-MIDI transport through the same ControlMap
+    // (BLE HID keyboards -- see ControlKind::Key). Returns true if it was
+    // consumed: either it fired an action or learn captured it. Callers use
+    // that to decide whether to swallow the input, so an unbound key still
+    // reaches whatever else wanted it. Message thread only.
+    bool dispatchEvent(const ControlEvent&);
 
     // --- bindings (message thread only) ---------------------------------
     ControlMap& map() { return map_; }

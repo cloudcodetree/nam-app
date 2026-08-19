@@ -361,9 +361,13 @@ private:
     void wireControllers ();     // MidiControl + ControllersScreen (AppShellControls.cpp)
     void runControlAction (nam::ControlAction);   // dispatch (AppShellControls.cpp)
     void pushControllerState ();                  // refresh the screen from MidiControl
-    void setControlMute (bool mute);              // foot-controller output mute
-    void stepStack (int delta);                   // foot-controller rig stepping
-    void swapToPreviousStack ();                  // foot-controller A/B compare
+    // BLE HID foot controllers arrive as a KEYBOARD, not a MIDI device (the
+    // Chocolate Plus ships this way). Unbound keys are passed through so
+    // normal input still works. Defined in AppShellControls.cpp.
+    bool keyPressed (const juce::KeyPress&) override;
+    void setControlMute (bool mute);   // foot-controller output mute
+    void stepStack (int delta);        // foot-controller rig stepping
+    void swapToPreviousStack ();       // foot-controller A/B compare
     // Rig the A/B switch flips back to; -1 until two rigs have been opened.
     int previousStackIdx_ = -1;
     bool controlMuted_ = false;

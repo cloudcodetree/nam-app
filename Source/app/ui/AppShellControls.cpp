@@ -67,17 +67,32 @@ void AppShell::wireControllers () {
     midi_->onEvent = [this] (nam::ControlEvent e) {
         // Only the visible setup screen cares about raw traffic; feeding it
         // while elsewhere would repaint a hidden component every stomp.
-        if (current_ == controllers_.get ()) {
-            controllers_->pushEvent (e);
-            // A learn completes on an incoming press, so the binding list has
-            // to re-read itself rather than wait for the next tap.
-            pushControllerState ();
-        }
+        if (current_ == controllers_.get ()) controllers_->pushEvent (e);
+    };
+    midi_->onMapChanged = [this] {
+        // A press completed a learn: persist it (otherwise the binding is
+        // lost on restart) and re-read the rows.
+        midi_->save ();
+        pushControllerState ();
     };
     midi_->onAction = [this] (ControlAction a) { runControlAction (a); };
 
     midi_->load ();
     midi_->refreshDevices ();
+
+    // A BLE HID pedal delivers key events, and they only reach this component
+    // if it can hold focus. Keys the control layer does not claim are passed
+    // straight back, so this never eats normal input.
+    setWantsKeyboardFocus (true);
+}
+
+bool AppShell::keyPressed (const juce::KeyPress& k) {
+    if (midi_ == nullptr) return false;
+    nam::ControlEvent e;
+    e.sig = { nam::ControlKind::Key, 0, k.getKeyCode () };
+    e.value = 127;   // a key press has no release half; it IS the press
+    e.timeMs = (std::uint32_t)juce::Time::getMillisecondCounter ();
+    return midi_->dispatchEvent (e);
 }
 
 void AppShell::pushControllerState () {

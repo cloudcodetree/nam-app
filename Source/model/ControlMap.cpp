@@ -30,14 +30,22 @@ const char* kindId(ControlKind k) {
     switch (k) {
         case ControlKind::Note: return "note";
         case ControlKind::ProgramChange: return "pc";
+        case ControlKind::Key: return "key";
         case ControlKind::Cc: break;
     }
     return "cc";
 }
 
+// Kinds that carry no release half: each event IS one discrete press, so
+// edge detection would fire once and then leave the binding dead forever.
+bool isDiscreteKind(ControlKind k) {
+    return k == ControlKind::ProgramChange || k == ControlKind::Key;
+}
+
 ControlKind kindFromId(const std::string& s) {
     if (s == "note") return ControlKind::Note;
     if (s == "pc") return ControlKind::ProgramChange;
+    if (s == "key") return ControlKind::Key;
     return ControlKind::Cc;
 }
 
@@ -122,10 +130,10 @@ bool shouldFire(const ControlBinding& binding, const ControlEvent& ev, FireState
     const bool wasHigh = isControlHigh(ev.sig.kind, st.lastValue);
     const bool risingEdge = high && !wasHigh;
 
-    // A program change has no value axis at all -- MidiControl synthesizes
-    // 127 for every one -- so edge detection would fire once and then leave
-    // the binding permanently dead. Each PC IS a discrete press.
-    if (ev.sig.kind == ControlKind::ProgramChange) {
+    // Program changes and HID key presses have no value axis at all -- the
+    // transport synthesizes 127 for each -- so edge detection would fire once
+    // and then leave the binding permanently dead. Each one IS a press.
+    if (isDiscreteKind(ev.sig.kind)) {
         st.lastValue = ev.value;
         return true;
     }

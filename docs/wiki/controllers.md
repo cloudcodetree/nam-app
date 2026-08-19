@@ -55,8 +55,13 @@ Key implementation facts, so they are not re-derived:
      Needs a custom GATT client (Java in JuceActivity + JNI — generic BLE
      is outside JUCE/Android-MIDI). Label as community-protocol support;
      may break on vendor firmware updates. Chris owns a Spark controller.
-  3. **BLE HID (page-turner) mode** — pedals that pair as keyboards; key
-     events via JUCE. Cheap breadth for the store release, lowest priority.
+  3. **BLE HID (page-turner) mode** — DONE (2026-08-19), and promoted from
+     "lowest priority" because Chris's Chocolate Plus ships in this mode.
+     Pedals that pair as keyboards deliver key events, which
+     `AppShell::keyPressed` normalizes into `ControlKind::Key` and runs
+     through the same ControlMap. Unclaimed keys are passed through so
+     normal input still works. Because learn captures whatever arrives, the
+     app never needs to know a pedal's keycodes.
 - **App-side calibration beats vendor apps**: bind whatever the pedal sends
   (factory defaults suffice), auto-calibrate expression range in-app
   ("rock through full range"), invert in the mapping. Goal: users never

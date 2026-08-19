@@ -327,3 +327,49 @@ TEST_CASE("ControlMap dispatches a bound momentary stomp exactly once") {
     REQUIRE(m.handle(ev(cc(20), 127, 0)) == ControlAction::RigNext);
     REQUIRE(m.handle(ev(cc(20), 0, 40)) == ControlAction::None);
 }
+
+TEST_CASE("Key switches fire on every press (no release exists)") {
+    // A BLE HID foot controller arrives as a KEYBOARD. JUCE surfaces only
+    // keyPressed -- there is no key-release callback -- so a key, like a
+    // program change, IS a discrete press and edge detection would fire once
+    // and then go dead.
+    ControlSignature key{ ControlKind::Key, 0, 93 };   // 93 = Android PAGE_UP
+    for (auto policy : { FirePolicy::Auto, FirePolicy::Momentary, FirePolicy::Toggle }) {
+        ControlBinding b{ key, ControlAction::RigNext, policy };
+        FireState st;
+        REQUIRE(shouldFire(b, ev(key, 127, 0), st));
+        REQUIRE(shouldFire(b, ev(key, 127, 900), st));
+        REQUIRE(shouldFire(b, ev(key, 127, 1800), st));
+    }
+}
+
+TEST_CASE("A key switch can be learned and dispatched like any other") {
+    // The whole point of the transport-agnostic layer: we never need to know
+    // WHICH keycode a pedal sends, because learn captures whatever arrives.
+    ControlSignature key{ ControlKind::Key, 0, 92 };
+    ControlMap m;
+    m.beginLearn(ControlAction::TunerToggle);
+    REQUIRE(m.handle(ev(key, 127, 0)) == ControlAction::None);   // learns, does not fire
+
+    const auto* b = m.bindingFor(ControlAction::TunerToggle);
+    REQUIRE(b != nullptr);
+    REQUIRE(b->sig.kind == ControlKind::Key);
+    REQUIRE(b->sig.number == 92);
+
+    REQUIRE(m.handle(ev(key, 127, 500)) == ControlAction::TunerToggle);
+    REQUIRE(m.handle(ev(key, 127, 1000)) == ControlAction::TunerToggle);
+
+    // A different key is not this binding.
+    ControlSignature other{ ControlKind::Key, 0, 93 };
+    REQUIRE(m.handle(ev(other, 127, 1500)) == ControlAction::None);
+}
+
+TEST_CASE("Key bindings round-trip through JSON") {
+    ControlMap m;
+    m.bind({ ControlKind::Key, 0, 66 }, ControlAction::ChainBypass);
+    auto back = ControlMap::fromJson(m.toJson());
+    const auto* b = back.bindingFor(ControlAction::ChainBypass);
+    REQUIRE(b != nullptr);
+    REQUIRE(b->sig.kind == ControlKind::Key);
+    REQUIRE(b->sig.number == 66);
+}

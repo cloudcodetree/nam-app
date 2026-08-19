@@ -121,15 +121,28 @@ void MidiControl::handleAsyncUpdate() {
         batch.swap(queue_);
     }
 
-    for (const auto& e : batch) {
-        // The monitor sees everything, including traffic from switches that
-        // are not bound to anything -- that is what makes it useful for
-        // discovering what the pedal actually sends.
-        if (onEvent) onEvent(e);
+    // Shared with the HID key path so learn-completion and notification
+    // ordering cannot drift between transports.
+    for (const auto& e : batch) dispatchEvent(e);
+}
 
-        const auto action = map_.handle(e);
-        if (action != ControlAction::None && onAction) onAction(action);
+bool MidiControl::dispatchEvent(const ControlEvent& e) {
+    const bool wasLearning = map_.isLearning();
+    if (onEvent) onEvent(e);
+
+    const auto action = map_.handle(e);
+    const bool learnCompleted = wasLearning && !map_.isLearning();
+    // AFTER the map has changed, never before -- see onMapChanged.
+    if (learnCompleted && onMapChanged) onMapChanged();
+
+    if (action != ControlAction::None) {
+        if (onAction) onAction(action);
+        return true;
     }
+    // Learn swallowed it (handle() returns None while binding), which still
+    // counts as consumed -- otherwise the key doubles as app input while the
+    // user is assigning it.
+    return learnCompleted;
 }
 
 juce::File MidiControl::bindingsFile() {

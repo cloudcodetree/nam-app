@@ -20,12 +20,14 @@ constexpr std::size_t kMonitorRows = 5;
 constexpr int kClearW = 26, kPolicyW = 52, kLearnW = 62, kCtlGap = 6;
 constexpr int kControlsW = kClearW + kCtlGap + kPolicyW + kCtlGap + kLearnW;
 
-// "CC 20" / "CC 20 ch3" / "NOTE 60" / "PC 5". Channel is omitted when 0,
+// "CC 20" / "CC 20 ch3" / "NOTE 60" / "PC 5" / "KEY 92" (a BLE HID pedal
+// arriving as a keyboard). Channel is omitted when 0,
 // which is what learned bindings use ("any channel") -- printing "ch0" would
 // read as a real channel number.
 juce::String describeSignature (const ControlSignature& s) {
     juce::String kind = s.kind == ControlKind::Note            ? "NOTE"
                         : s.kind == ControlKind::ProgramChange ? "PC"
+                        : s.kind == ControlKind::Key           ? "KEY"
                                                                : "CC";
     juce::String out = kind + " " + juce::String (s.number);
     if (s.channel != 0) out += " ch" + juce::String (s.channel);
@@ -184,7 +186,7 @@ void ControllersScreen::paintMonitorCard (juce::Graphics& g, juce::Rectangle<int
     if (monitor_.empty ()) {
         g.setFont (uiFont (13.0f, false));
         g.setColour (col::inkA (0.4f));
-        g.drawText ("Press a switch on your pedal", inner.removeFromTop (18),
+        g.drawText ("Stomp a switch on your pedal", inner.removeFromTop (18),
                     juce::Justification::centredLeft, true);
         return;
     }

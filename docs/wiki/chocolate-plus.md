@@ -109,6 +109,34 @@ REPORTED item above at once:
 
 Until step 3 happens, this page is research, not truth.
 
+## OBSERVED on Chris's unit (2026-08-16/19, via adb)
+
+First real-hardware data. These SUPERSEDE the REPORTED block above where
+they overlap.
+
+- **It advertises as `FootCtrlPlus`**, not `FootCtrl` (that name came from
+  web sources describing the base Chocolate).
+- Android bonds it over LE with services `BATTERY, Hogp,
+  03b80e5a-ede8-4b33-a751-6ce34ec4c700` -- so it offers HID-over-GATT AND
+  the standard BLE-MIDI service, and the MIDI UUID is exactly the one JUCE
+  scans for.
+- **The unit ships in HID KEYBOARD mode, not MIDI mode.** Android binds it as
+  three input devices (`FootCtrlPlus`, `FootCtrlPlus Keyboard`,
+  `FootCtrlPlus Consumer Control`, `Classes: KEYBOARD | ALPHAKEY | EXTERNAL`)
+  and `dumpsys midi` reports ZERO devices.
+- Consequence: JUCE's BLE-MIDI pairing dialogue finds NOTHING, and correctly
+  so. A BLE peripheral that is already connected stops advertising, so a scan
+  filtered on the MIDI service cannot see it. The empty list is not a bug.
+- Confirms the hard rule: pairing in Android's Bluetooth settings creates a
+  BOND but no MIDI ports. `dumpsys midi` stayed empty
+  (`Devices:` blank) until an app called `openBluetoothDevice()`.
+- Mode switching is done in M-Vave's **CubeSuite** app; no on-device button
+  combination is documented. Keyboard Mode B reportedly maps A/B/C/D to Page
+  Up / Page Down / Space / Enter.
+- **Not yet captured:** which keycodes this unit actually sends when stomped.
+  Two getevent attempts failed on tooling errors, not on the pedal. Because
+  the app learns whatever arrives, this is no longer blocking.
+
 ## Sources
 
 - [manuals.plus — Chocolate Plus manual pages](https://manuals.plus/asin/B0DSFWSD9M)
