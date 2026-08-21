@@ -102,6 +102,11 @@ private:
     // downloaded from TONE3000's repo), then done(true) on the msg thread.
     void ensureDemoTrack(int index, std::function<void(bool)> done);
     void setDemoActive(bool on);
+    // Starts/stops the DI loop running LIVE through the current tone (real-
+    // time inference, the same path audition uses) rather than a pre-rendered
+    // slot. This is what the DI tray drives, so a test track can be played
+    // from anywhere in the app against whatever tone is loaded.
+    void setDemoLivePlaying(bool on);
     void setLiveInputMuted(bool muted);   // browsing: don't amplify the mic
     void buildDemoLoop(double sampleRate);
 

@@ -44,3 +44,20 @@ glowing tone cards. All colours via `nam::ui::col` — no magic hex outside
 - Touch = press/drag/tap state machine; scroll gestures must never select.
   Empty-rect hit tests: `empty.expanded(k)` is a live region near origin.
 - JUCE 8: `Font::getStringWidth` is gone → `GlyphArrangement::getStringWidth`.
+
+## DI test-track tray (2026-08-20)
+
+`DiTrayPanel` + `AppShellDiTray.cpp`. Slides down from the TOP over every
+screen so a DI loop can be auditioned against the current tone from anywhere.
+
+- **Three states, deliberately.** Idle = a grab tab only. Collapsed = a slim
+  status strip that exists ONLY while audio plays. Expanded = 62%-capped,
+  scrolling. The middle state is what keeps the app from carrying a second
+  header row on every screen (CLAUDE.md allows one).
+- Idle/collapsed **inset** the host screen through `contentBounds()`; expanded
+  floats over it. Nothing ever covers the bottom nav.
+- Plays through `svc_.playDemoLive` (live engine, real-time inference), NOT a
+  pre-rendered slot, so it reflects the tone currently loaded. Guitar input is
+  muted for the duration, as audition does.
+- 34 tracks; the first 4 are bundled in the APK and the rest carry a `GET` tag
+  because they fetch once and cache.

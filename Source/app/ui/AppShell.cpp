@@ -240,6 +240,7 @@ AppShell::AppShell (dsp::ToneEngine& engine) : engine_ (engine) {
     };
     wireStacksScreens ();   // Home/Detail callbacks (AppShellStacks.cpp)
     wireControllers ();     // foot control (AppShellControls.cpp)
+    wireDiTray ();          // DI test-track tray (AppShellDiTray.cpp)
 
     play_->onTuner = [this] { toggleTuner (); };
     tuner_->onBack = [this] {
@@ -710,6 +711,8 @@ void AppShell::refreshProState () {
 }
 
 bool AppShell::handleBackButton () {
+    // The DI tray is the frontmost overlay when open, so BACK peels it first.
+    if (diTray_ != nullptr && diTray_->handleBack ()) return true;
     // Same dismissal as the sheet's own close button (onClose): busy state
     // deliberately survives this per the timeout fix, it just stops being
     // shown until the sheet is reopened.
@@ -897,6 +900,9 @@ void AppShell::setTunerPitch (float hz) {
 juce::Rectangle<int> AppShell::contentBounds () const {
     auto b = getLocalBounds ();
     b.removeFromBottom (navBar_.getHeight ());
+    // The DI tray reserves a strip at the top while it is idle/collapsed, so
+    // screens inset rather than have their own header hidden underneath it.
+    if (diTray_ != nullptr && !diTray_->isExpanded ()) b.removeFromTop (diTray_->contentInset ());
     return b;
 }
 
@@ -934,11 +940,16 @@ void AppShell::resized () {
         ioBufPill_ = pills.removeFromRight (70).withSizeKeepingCentre (70, 28);
     }
 
+    // contentBounds(), not `b`: it also subtracts whatever the DI tray
+    // reserves at the top. controllers_ is in the list because it is a screen
+    // like any other -- omitting it left it stale across a rotation.
+    const auto screenArea = contentBounds ();
     for (juce::Component* c :
          { (juce::Component*)play_.get (), (juce::Component*)stacksHome_.get (),
-           (juce::Component*)stacksDetail_.get () })
-        if (c != nullptr) c->setBounds (b);
+           (juce::Component*)stacksDetail_.get (), (juce::Component*)controllers_.get () })
+        if (c != nullptr) c->setBounds (screenArea);
     if (paywall_ != nullptr) paywall_->setBounds (getLocalBounds ());
+    layoutDiTray ();
 
     // The tuner overlay tracks the Play tuner panel, not the screen grid.
     if (tuner_ != nullptr && tunerOpen_) {

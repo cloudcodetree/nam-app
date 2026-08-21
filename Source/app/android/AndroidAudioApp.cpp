@@ -144,6 +144,7 @@ AndroidAudioApp::AndroidAudioApp() {
         });
     };
     browse.stopDemo = [this] { setDemoActive(false); };
+    browse.playDemoLive = [this](bool on) { setDemoLivePlaying(on); };
     browse.setCab = [this](int c) { setCab(c); };
     browse.isAuditionCached = [this](const std::string& toneId) {
         if (preRenderAuditions_)

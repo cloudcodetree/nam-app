@@ -3,6 +3,36 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-20** **DI test-track tray shipped**, designed in Claude Design
+  first (`NAM DI Tray Hi-Fi.dc.html`) and then implemented. It slides DOWN
+  from the top -- Chris's call, and it is the better edge: a bottom tray would
+  have competed with the nav, which is the app's one persistent chrome.
+  The top edge has its own hazard (a second header row on every screen, which
+  CLAUDE.md forbids), so the tray has THREE states instead of two: idle is
+  only a grab tab, the slim status strip exists ONLY while audio is actually
+  playing -- at which point it IS the functional control for the sound being
+  made -- and expanded is a 62%-capped scrolling panel. Idle/collapsed inset
+  the host screen via contentBounds() rather than overlaying it, so no
+  screen's back chevron is ever hidden.
+  Needed one new host service: `playDemoLive` -> `setDemoLivePlaying`, which
+  runs the DI loop through the LIVE engine (demoLive_ + demoOn_, the same
+  path audition uses) so you hear the test track through whatever tone is
+  loaded right now, on any screen. The guitar input is muted while a track
+  runs, matching audition -- hearing both at once makes the tone unjudgeable.
+  Two things worth remembering:
+  **(1)** The design claimed 37 tracks; the real catalog is **34**. The
+  earlier count had swept up the 3 `kCabs` entries. Implementation caught the
+  design's error, and the canvas was corrected to match.
+  **(2)** A paint bug that only showed on device: `paintCollapsed` called
+  `panel_.removeFromRight()` on the MEMBER rect, so the strip shrank a little
+  on every repaint until it rendered empty. Rect helpers that mutate must be
+  called on a local copy.
+  Process note: two attempted fixes silently no-op'd because clang-format
+  (JUCE spacing under Source/app/ui) had rewritten `f(` to `f (`, so the
+  python replace targets stopped matching. Format FIRST, then edit against
+  the formatted text -- or assert the replacement applied.
+  Verified on emulator-5554: idle tab -> expand -> pick track -> collapsed
+  strip shows the name -> pause returns to idle and stops the audio.
 - **2026-08-19** **BLE HID is now a first-class control transport**, built
   because Chris's Chocolate Plus turned out to ship in keyboard mode, not
   MIDI mode (see chocolate-plus.md OBSERVED). Android binds it as

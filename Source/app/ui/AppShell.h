@@ -13,6 +13,7 @@
 #include "app/ui/PaywallPanel.h"
 #include "app/ui/StacksHomeScreen.h"
 #include "app/ui/ControllersScreen.h"
+#include "app/ui/DiTrayPanel.h"
 #include "app/ui/StackDetailScreen.h"
 #include "app/ui/TunerScreen.h"
 #include "app/MidiControl.h"
@@ -90,6 +91,8 @@ public:
         std::function<void (int, std::function<void (bool)>)> setDemoTrack;
         std::function<void (int)> setCab;   // cab IR index (0 = none)
         std::function<void ()> stopDemo;
+        // DI tray: run the selected DI track live through the current tone.
+        std::function<void (bool)> playDemoLive;
         std::function<bool (std::string)> isAuditionCached;   // toneId, current riff
         std::function<bool (std::string)> isDownloaded;       // best-quality on disk
         std::function<bool (std::string)> isKept;             // in the tone deck
@@ -197,6 +200,9 @@ private:
     // keeps receiving stomps while the user is on Play or Stacks -- the whole
     // point of a foot controller.
     std::unique_ptr<nam::MidiControl> midi_;
+    // DI test-track tray: slides down from the top over every screen so a DI
+    // loop can be auditioned against the current tone from anywhere.
+    std::unique_ptr<DiTrayPanel> diTray_;
     std::unique_ptr<TunerScreen> tuner_;   // overlay above Play, not a screen
     // Invisible click-catcher under the tuner card: any tap outside the card
     // collapses it (nav taps stay live — the scrim covers content only).
@@ -359,6 +365,9 @@ private:
     void pushStacks ();
     void wireStacksScreens ();   // Home/Detail callbacks
     void wireControllers ();     // MidiControl + ControllersScreen (AppShellControls.cpp)
+    void wireDiTray ();          // DI tray + demo services (AppShellDiTray.cpp)
+    void startDiTrack (int index);
+    void layoutDiTray ();
     void runControlAction (nam::ControlAction);   // dispatch (AppShellControls.cpp)
     void pushControllerState ();                  // refresh the screen from MidiControl
     // BLE HID foot controllers arrive as a KEYBOARD, not a MIDI device (the

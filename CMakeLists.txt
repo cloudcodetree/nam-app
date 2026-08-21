@@ -140,6 +140,8 @@ if(NAM_BUILD_APP)
             Source/app/MidiControl.cpp
             Source/app/ui/ControllersScreen.cpp
             Source/app/ui/AppShellControls.cpp
+            Source/app/ui/DiTrayPanel.cpp
+            Source/app/ui/AppShellDiTray.cpp
             # TONE3000: OAuth2 PKCE + search/download (same code as desktop; the
             # loopback redirect works on Android — the on-device browser reaches
             # 127.0.0.1, so TONE3000's existing redirect_uri whitelist applies).
@@ -206,6 +208,8 @@ if(NAM_BUILD_APP)
             Source/app/MidiControl.cpp
             Source/app/ui/ControllersScreen.cpp
             Source/app/ui/AppShellControls.cpp
+            Source/app/ui/DiTrayPanel.cpp
+            Source/app/ui/AppShellDiTray.cpp
             Source/net/Pkce.cpp
             Source/net/Tone3000Api.cpp)
         target_include_directories(NamPlayer PRIVATE Source ${CMAKE_SOURCE_DIR}/extern/dr_wav

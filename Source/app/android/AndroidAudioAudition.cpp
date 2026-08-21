@@ -263,6 +263,18 @@ void AndroidAudioApp::setDemoActive(bool on) {
     if (!on) demoLive_.store(false, std::memory_order_relaxed);
 }
 
+void AndroidAudioApp::setDemoLivePlaying(bool on) {
+    if (!on) {
+        setDemoActive(false);
+        return;
+    }
+    // Restart from the top only when it was not already rolling, so toggling
+    // pause/play does not lose your place in the riff.
+    if (!demoOn_.load(std::memory_order_relaxed)) demoPos_.store(0, std::memory_order_relaxed);
+    demoLive_.store(true, std::memory_order_relaxed);
+    demoOn_.store(true, std::memory_order_relaxed);
+}
+
 void AndroidAudioApp::setLiveInputMuted(bool muted) {
     liveMuted_.store(muted || alwaysMuteLive_, std::memory_order_relaxed);
 }
