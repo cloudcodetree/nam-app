@@ -1,0 +1,452 @@
+<title>NAM Player Reimagined</title>
+<style>
+  :root{
+    --ground:#08070f; --panel:#0d0a16; --ink:#f2eee6;
+    --ink70:rgba(242,238,230,.70); --ink50:rgba(242,238,230,.50);
+    --ink35:rgba(242,238,230,.35); --ink12:rgba(242,238,230,.12);
+    --accent:#ff4d00; --accent-soft:#ff8a55; --amber:#ffb24d; --green:#3fae6a;
+    --display:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --ui:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--ground); color:var(--ink); font-family:var(--ui);
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-variant-numeric:tabular-nums}
+  .wrap{max-width:1180px;margin:0 auto;padding:56px 28px 40px}
+
+  .eyebrow{font:600 11px var(--ui);letter-spacing:.26em;color:var(--accent-soft);text-transform:uppercase}
+  h1{font:400 clamp(34px,5.4vw,58px)/1.04 var(--display);margin:16px 0 0;text-wrap:balance;letter-spacing:-.01em}
+  .sub{font-size:17px;line-height:1.62;color:var(--ink70);max-width:60ch;margin:18px 0 0}
+
+  .finding{
+    margin:34px 0 0;border-left:3px solid var(--accent);
+    background:linear-gradient(90deg,rgba(255,77,0,.09),transparent 72%);
+    padding:20px 22px;border-radius:0 12px 12px 0;max-width:74ch;
+  }
+  .finding p{margin:0;font-size:16px;line-height:1.6;color:var(--ink)}
+  .finding code{font:500 14px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--accent-soft)}
+  .finding .then{margin-top:12px;color:var(--ink70);font-size:15px}
+
+  h2{font:400 30px/1.15 var(--display);margin:64px 0 6px}
+  .lede{color:var(--ink50);font-size:15px;margin:0 0 26px;max-width:64ch;line-height:1.6}
+
+  /* device rail */
+  .rail{display:flex;gap:30px;overflow-x:auto;padding:6px 4px 26px;scroll-snap-type:x proximity}
+  .rail::-webkit-scrollbar{height:9px}
+  .rail::-webkit-scrollbar-thumb{background:var(--ink12);border-radius:99px}
+  figure{margin:0;flex:0 0 auto;width:390px;scroll-snap-align:start}
+  .phone{
+    width:390px;height:844px;border-radius:30px;overflow:hidden;position:relative;
+    background:radial-gradient(120% 55% at 50% 30%,#191430 0%,#0d0a1c 55%,#08070f 100%);
+    border:1px solid rgba(242,238,230,.14);
+    box-shadow:0 30px 70px rgba(0,0,0,.6),0 0 60px rgba(255,77,0,.05);
+    display:flex;flex-direction:column;
+  }
+  figcaption{margin-top:16px}
+  .cap-name{font:600 12px var(--ui);letter-spacing:.2em;text-transform:uppercase;color:var(--accent-soft)}
+  .cap-job{font-size:15px;color:var(--ink);margin-top:7px;line-height:1.5}
+  .cap-why{font-size:13.5px;color:var(--ink50);margin-top:9px;line-height:1.6}
+
+  /* in-phone primitives */
+  .scr{flex:1;display:flex;flex-direction:column;padding:18px 16px 0;overflow:hidden}
+  .ml{font:600 9px var(--ui);letter-spacing:.22em;color:rgba(242,238,230,.45)}
+  .nav{
+    position:absolute;left:0;right:0;bottom:0;height:72px;background:var(--ground);
+    border-top:1px solid rgba(242,238,230,.08);display:flex;align-items:center;
+    justify-content:space-around;padding-bottom:6px;
+  }
+  .nav i{display:flex;flex-direction:column;align-items:center;gap:5px;font-style:normal}
+  .nav i span:first-child{font-size:15px}
+  .nav i span:last-child{font:600 8px var(--ui);letter-spacing:.18em}
+  .off{color:rgba(242,238,230,.45)} .on{color:var(--accent)}
+
+  .rigname{font:400 36px/1.03 var(--display);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .truth{font:500 12px var(--ui);color:var(--ink70);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .chip38{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center}
+
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+  .tile{
+    border-radius:13px;padding:12px;min-height:76px;position:relative;overflow:hidden;
+    display:flex;flex-direction:column;justify-content:space-between;
+  }
+  .tile .bar{position:absolute;left:0;top:0;bottom:0;width:4px}
+  .tile .hd{display:flex;align-items:baseline;gap:7px;padding-left:6px}
+  .tile .num{font:600 8px var(--ui);letter-spacing:.16em}
+  .tile .nm{font:600 15px var(--ui)}
+  .tile .dl{font:500 9px var(--ui);padding-left:6px;line-height:1.35}
+  .t-live{border:1px solid rgba(255,77,0,.55);background:rgba(255,77,0,.10)}
+  .t-dim{border:1px solid var(--ink12);background:rgba(242,238,230,.03)}
+
+  .rigrow{
+    border-radius:12px;padding:11px;margin-bottom:7px;display:flex;align-items:center;
+    gap:11px;position:relative;overflow:hidden;
+  }
+  .thumb{width:52px;height:52px;border-radius:9px;background:rgba(242,238,230,.06);
+    border:1px solid rgba(242,238,230,.1);flex-shrink:0;margin-left:5px}
+  .chips{display:flex;gap:4px;margin-top:6px}
+  .chips b{width:16px;height:5px;border-radius:3px;display:block}
+  .swcirc{width:26px;height:26px;border-radius:50%;border:1px solid rgba(242,238,230,.25);
+    display:flex;align-items:center;justify-content:center;font:600 10px var(--ui);color:var(--ink70)}
+
+  .perf{display:flex;gap:8px;margin:10px 0 14px}
+  .perf span{flex:1;border-radius:12px;text-align:center;padding:14px 0;
+    font:600 10px var(--ui);letter-spacing:.16em}
+
+  .erow{border-bottom:1px solid rgba(242,238,230,.07);padding:11px 2px;
+    display:flex;align-items:center;gap:10px}
+  .erow .nm{width:56px;flex-shrink:0;font:600 10px var(--ui);letter-spacing:.1em}
+  .track{flex:1;height:4px;border-radius:2px;background:rgba(242,238,230,.1);position:relative}
+  .track b{position:absolute;left:0;height:4px;border-radius:2px;display:block}
+  .val{width:62px;text-align:right;flex-shrink:0;font:500 11px var(--ui)}
+
+  .note{
+    margin:16px 0 0;padding:14px 16px;border:1px solid var(--ink12);border-radius:12px;
+    font-size:13.5px;line-height:1.6;color:var(--ink70);max-width:70ch;background:rgba(242,238,230,.02)
+  }
+  .note strong{color:var(--ink);font-weight:600}
+  a{color:var(--accent-soft)}
+  @media (prefers-reduced-motion:no-preference){
+    figure{transition:transform .25s ease}
+    figure:hover{transform:translateY(-4px)}
+  }
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Design study &middot; 22 August 2026</div>
+  <h1>An amp that happens to have a screen</h1>
+  <p class="sub">NAM Player today is a tone browser that grew a rig editor, then had its stage half amputated. Three of four nav slots go to shopping; none to playing. These five screens put playing back at the centre.</p>
+
+  <div class="finding">
+    <p>A footswitch cannot change your sound without changing your screen. <code>applyStackToEngine()</code> returns early unless the rig editor is the visible screen &mdash; so a stomp has to open that screen for any sound to happen.</p>
+    <p class="then">Navigation isn&rsquo;t a side effect of the stomp. It <em>is</em> the mechanism. Underneath it: there is no &ldquo;live rig&rdquo; in this application &mdash; the live rig is a property of a screen being visible.</p>
+  </div>
+
+  <h2>The five screens</h2>
+  <p class="lede">Scroll sideways. Each frame is true size at 390&times;844, the small-screen case.</p>
+
+  <div class="rail">
+
+    <!-- ============ PLAY ============ -->
+    <figure>
+      <div class="phone">
+        <div class="scr">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+            <div style="min-width:0;flex:1">
+              <div class="rigname">Dirty Verse</div>
+              <div class="truth">Marshall 1959 SLP &rarr; Mesa 4x12 V30</div>
+            </div>
+            <div style="display:flex;gap:7px;flex-shrink:0;padding-top:4px">
+              <span class="chip38" style="border:1px solid rgba(255,77,0,.55);background:rgba(255,77,0,.12)">
+                <span style="display:grid;grid-template-columns:5px 5px;gap:3px">
+                  <b style="width:5px;height:5px;border-radius:50%;background:#ff8a55"></b><b style="width:5px;height:5px;border-radius:50%;background:#ff8a55"></b>
+                  <b style="width:5px;height:5px;border-radius:50%;background:#ff8a55"></b><b style="width:5px;height:5px;border-radius:50%;background:#ff8a55"></b>
+                </span>
+              </span>
+              <span class="chip38" style="border:1px solid rgba(242,238,230,.2);font-size:14px;color:var(--ink50)">&#9096;</span>
+            </div>
+          </div>
+
+          <div style="margin-top:20px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span class="ml">SCENES</span>
+              <span style="font:500 10px var(--ui);color:var(--ink35)">instant &middot; no reload</span>
+            </div>
+            <div class="tiles">
+              <div class="tile t-dim"><span class="bar"></span>
+                <span class="hd"><span class="num" style="color:var(--ink35)">BASE</span><span class="nm" style="color:var(--ink70)">Dirty Verse</span></span>
+                <span class="dl mono" style="color:rgba(242,238,230,.4)">rig defaults</span></div>
+              <div class="tile t-live"><span class="bar" style="background:var(--accent)"></span>
+                <span class="hd"><span class="num" style="color:var(--accent-soft)">2</span><span class="nm">Chorus</span></span>
+                <span class="dl mono" style="color:rgba(242,238,230,.75)">DLY 28% &middot; OUT &minus;2.0 dB</span></div>
+              <div class="tile t-dim"><span class="bar" style="background:rgba(242,238,230,.18)"></span>
+                <span class="hd"><span class="num" style="color:var(--ink35)">3</span><span class="nm" style="color:var(--ink70)">Solo</span></span>
+                <span class="dl mono" style="color:var(--ink50)">OUT +3.0 dB &middot; DLY 34%</span></div>
+              <div class="tile" style="border:1px dashed rgba(242,238,230,.2)">
+                <span class="hd"><span class="nm" style="color:var(--ink35)">+ SCENE</span></span>
+                <span class="dl" style="color:rgba(242,238,230,.3)">inherits everything</span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;flex:1;min-height:0;display:flex;flex-direction:column">
+            <span class="ml">RIGS</span>
+            <div style="margin-top:9px;overflow:hidden">
+              <div class="rigrow" style="border:1px solid rgba(255,77,0,.55);background:rgba(255,77,0,.10)">
+                <span class="bar" style="position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)"></span>
+                <span class="thumb"></span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px var(--ui)">Dirty Verse</span>
+                  <span class="chips"><b style="background:var(--amber)"></b><b style="background:var(--amber)"></b><b style="background:rgba(63,174,106,.8)"></b><b style="background:rgba(242,238,230,.2)"></b></span></span>
+              </div>
+              <div class="rigrow" style="border:1px solid var(--ink12)">
+                <span class="bar" style="position:absolute;left:0;top:0;bottom:0;width:4px;background:rgba(242,238,230,.18)"></span>
+                <span class="thumb"></span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px var(--ui);color:var(--ink70)">Clean Chime</span>
+                  <span class="chips"><b style="background:var(--amber)"></b><b style="background:var(--amber)"></b><b style="background:rgba(242,238,230,.2)"></b><b style="background:rgba(242,238,230,.2)"></b></span></span>
+                <span class="swcirc">A</span>
+              </div>
+              <div class="rigrow" style="border:1px solid var(--ink12)">
+                <span class="bar" style="position:absolute;left:0;top:0;bottom:0;width:4px;background:rgba(242,238,230,.18)"></span>
+                <span class="thumb"></span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 15px var(--ui);color:var(--ink70)">Fuzz Wall</span>
+                  <span class="chips"><b style="background:var(--amber)"></b><b style="background:var(--amber)"></b><b style="background:rgba(63,174,106,.8)"></b><b style="background:rgba(63,174,106,.8)"></b></span></span>
+                <span class="swcirc">B</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="perf">
+            <span style="border:1px solid rgba(255,77,0,.5);background:rgba(255,77,0,.09);color:var(--accent-soft)">MUTE</span>
+            <span style="border:1px solid rgba(242,238,230,.22);color:var(--ink70)">TUNER</span>
+            <span style="border:1px solid rgba(242,238,230,.22);color:var(--ink70)">BYPASS</span>
+          </div>
+        </div>
+        <div class="nav">
+          <i class="on"><span>&#9654;</span><span>PLAY</span></i>
+          <i class="off"><span>&#8801;</span><span>RIG</span></i>
+          <i class="off"><span>&#9678;</span><span></span></i>
+          <i class="off"><span>&#8981;</span><span>TONES</span></i>
+          <i class="off"><span>&#8943;</span><span>MORE</span></i>
+        </div>
+      </div>
+      <figcaption>
+        <div class="cap-name">Play</div>
+        <div class="cap-job">Which rig, which scene &mdash; answered in half a second at arm&rsquo;s length.</div>
+        <div class="cap-why">Scenes dominate because they&rsquo;re the only instant change. Position is the first cue: tile&nbsp;1 is top-left forever. Inactive tiles stay <em>dim, never off</em> &mdash; Quad Cortex turns them off and players report missing switches in the dark. Each tile carries a delta line, so &ldquo;what does this do&rdquo; needs no navigation.</div>
+      </figcaption>
+    </figure>
+
+    <!-- ============ RIG ============ -->
+    <figure>
+      <div class="phone">
+        <div class="scr">
+          <div style="display:flex;align-items:center;gap:11px">
+            <span style="font-size:19px;color:var(--ink70)">&lsaquo;</span>
+            <span style="flex:1;font:400 21px var(--display)">Dirty Verse</span>
+            <span style="font-size:17px;color:var(--ink50)">&#8942;</span>
+          </div>
+
+          <div style="margin-top:12px;border:1px solid rgba(255,77,0,.3);border-radius:11px;background:rgba(255,77,0,.05);padding:10px 12px;display:flex;align-items:center;gap:10px">
+            <span style="font:600 7px var(--ui);letter-spacing:.16em;color:var(--accent-soft);border:1px solid rgba(255,77,0,.4);border-radius:4px;padding:3px 5px">AUDIBLE</span>
+            <span style="flex:1;min-width:0;font:500 11px var(--ui);color:rgba(242,238,230,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Marshall 1959 SLP &rarr; Mesa 4x12 V30</span>
+            <span style="display:flex;gap:2px;align-items:flex-end;height:14px">
+              <b style="width:3px;height:9px;background:var(--green);display:block"></b>
+              <b style="width:3px;height:13px;background:#c8f051;display:block"></b>
+              <b style="width:3px;height:6px;background:rgba(242,238,230,.2);display:block"></b></span>
+          </div>
+
+          <div style="margin-top:14px;overflow:hidden;flex:1">
+            <span class="ml">CHAIN</span>
+            <div style="margin-top:8px">
+              <div class="rigrow" style="border:1px solid rgba(255,77,0,.35);background:rgba(255,77,0,.05);margin-bottom:6px">
+                <span style="width:40px;height:40px;border-radius:8px;background:rgba(242,238,230,.06);flex-shrink:0"></span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:600 7px var(--ui);letter-spacing:.18em;color:rgba(242,238,230,.4)">AMP</span>
+                  <span style="display:block;font:500 13px var(--ui);margin-top:3px">Marshall 1959 SLP</span></span>
+                <span style="font:600 7px var(--ui);letter-spacing:.13em;color:var(--accent-soft);border:1px solid rgba(255,77,0,.4);border-radius:99px;padding:3px 6px">AUDIBLE</span>
+              </div>
+              <div class="rigrow" style="border:1px solid rgba(255,77,0,.35);background:rgba(255,77,0,.05);margin-bottom:6px">
+                <span style="width:40px;height:40px;border-radius:8px;background:rgba(242,238,230,.06);flex-shrink:0"></span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:600 7px var(--ui);letter-spacing:.18em;color:rgba(242,238,230,.4)">CAB</span>
+                  <span style="display:block;font:500 13px var(--ui);margin-top:3px">Mesa 4x12 V30 &middot; IR 2048</span></span>
+                <span style="font:600 7px var(--ui);letter-spacing:.13em;color:var(--accent-soft);border:1px solid rgba(255,77,0,.4);border-radius:99px;padding:3px 6px">AUDIBLE</span>
+              </div>
+              <div class="rigrow" style="border:1px solid rgba(242,238,230,.1)">
+                <span style="width:40px;height:40px;border-radius:8px;background:rgba(242,238,230,.06);flex-shrink:0"></span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:600 7px var(--ui);letter-spacing:.18em;color:rgba(242,238,230,.4)">PEDAL</span>
+                  <span style="display:block;font:500 13px var(--ui);margin-top:3px;color:var(--ink50)">Klon Centaur</span></span>
+                <span style="font:600 7px var(--ui);letter-spacing:.13em;color:rgba(242,238,230,.4);border:1px solid rgba(242,238,230,.18);border-radius:99px;padding:3px 6px">STORED</span>
+              </div>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px">
+              <span class="ml">ENGINE</span>
+              <span style="font:500 10px var(--ui);color:var(--ink35)">&#9670; = set by this scene</span>
+            </div>
+            <div style="margin-top:6px">
+              <div class="erow"><span style="width:15px;font-size:11px;color:var(--green)"></span><span class="nm">IN</span>
+                <span class="track"><b style="width:58%;background:var(--accent)"></b></span><span class="val mono" style="color:rgba(242,238,230,.8)">+4.0 dB</span><span style="width:12px;text-align:center;font-size:8px;color:rgba(242,238,230,.25)">&#9671;</span></div>
+              <div class="erow"><span style="width:15px;font-size:11px;color:var(--green)">&#9211;</span><span class="nm">GATE</span>
+                <span class="track"><b style="width:27%;background:var(--accent)"></b></span><span class="val mono" style="color:rgba(242,238,230,.8)">&minus;58.0 dB</span><span style="width:12px;text-align:center;font-size:8px;color:rgba(242,238,230,.25)">&#9671;</span></div>
+              <div class="erow"><span style="width:15px;font-size:11px;color:var(--green)">&#9211;</span><span class="nm">EQ MID</span>
+                <span class="track"><b style="width:58%;background:var(--accent)"></b></span><span class="val mono" style="color:rgba(242,238,230,.8)">+2.0 dB</span><span style="width:12px;text-align:center;font-size:8px;color:var(--accent-soft)">&#9670;</span></div>
+              <div class="erow"><span style="width:15px;font-size:11px;color:var(--green)">&#9211;</span><span class="nm">CAB IR</span>
+                <span class="track"><b style="width:100%;background:var(--accent)"></b></span><span class="val mono" style="color:rgba(242,238,230,.8)">on</span><span style="width:12px;text-align:center;font-size:8px;color:rgba(242,238,230,.25)">&#9671;</span></div>
+              <div class="erow"><span style="width:15px;font-size:11px;color:var(--green)">&#9211;</span><span class="nm">DELAY</span>
+                <span class="track"><b style="width:28%;background:var(--accent)"></b></span><span class="val mono" style="color:rgba(242,238,230,.8)">28% mix</span><span style="width:12px;text-align:center;font-size:8px;color:var(--accent-soft)">&#9670;</span></div>
+              <div class="erow"><span style="width:15px;font-size:11px;color:rgba(242,238,230,.25)">&#9211;</span><span class="nm" style="color:rgba(242,238,230,.4)">REVERB</span>
+                <span class="track"><b style="width:16%;background:rgba(242,238,230,.18)"></b></span><span class="val mono" style="color:var(--ink35)">16% mix</span><span style="width:12px;text-align:center;font-size:8px;color:rgba(242,238,230,.25)">&#9671;</span></div>
+              <div class="erow"><span style="width:15px"></span><span class="nm">OUT</span>
+                <span class="track"><b style="width:46%;background:var(--accent)"></b></span><span class="val mono" style="color:rgba(242,238,230,.8)">&minus;2.0 dB</span><span style="width:12px;text-align:center;font-size:8px;color:var(--accent-soft)">&#9670;</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="nav">
+          <i class="off"><span>&#9654;</span><span>PLAY</span></i>
+          <i class="on"><span>&#8801;</span><span>RIG</span></i>
+          <i class="off"><span>&#9678;</span><span></span></i>
+          <i class="off"><span>&#8981;</span><span>TONES</span></i>
+          <i class="off"><span>&#8943;</span><span>MORE</span></i>
+        </div>
+      </div>
+      <figcaption>
+        <div class="cap-name">Rig</div>
+        <div class="cap-job">The chain, plus the engine layer that has never been exposed on mobile.</div>
+        <div class="cap-why">Every ENGINE row names a real <code style="color:var(--accent-soft)">ToneEngine</code> setter &mdash; including <strong style="color:var(--ink)">delay and reverb, which no mobile user has ever heard</strong>. Real units, always visible. Rows that are only stored say <em>STORED</em> rather than pretending. The diamond fills when this scene overrides a value: scoping is a visible consequence of tweaking, not Quad Cortex&rsquo;s hidden two-second long-press.</div>
+      </figcaption>
+    </figure>
+
+    <!-- ============ TONES ============ -->
+    <figure>
+      <div class="phone">
+        <div class="scr">
+          <div style="display:flex;gap:5px;background:rgba(242,238,230,.05);border-radius:99px;padding:4px">
+            <span style="flex:1;text-align:center;border-radius:99px;padding:9px 0;font:600 9px var(--ui);letter-spacing:.14em;color:var(--ink50)">MINE</span>
+            <span style="flex:1;text-align:center;border-radius:99px;padding:9px 0;font:600 9px var(--ui);letter-spacing:.14em;background:rgba(255,77,0,.14);color:var(--accent-soft)">SAVED</span>
+            <span style="flex:1;text-align:center;border-radius:99px;padding:9px 0;font:600 9px var(--ui);letter-spacing:.14em;color:var(--ink50)">TONE3000</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+            <span style="border:1px solid rgba(242,238,230,.2);border-radius:99px;padding:7px 14px;font:500 11px var(--ui);color:var(--ink70)">Filters</span>
+            <span style="font:500 10px var(--ui);color:var(--ink35)">offline &middot; showing downloaded</span>
+          </div>
+          <div style="margin-top:12px;overflow:hidden;flex:1">
+            <div class="rigrow" style="border:1px solid var(--ink12)"><span class="thumb" style="margin-left:0;width:50px;height:50px"></span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:500 14px var(--ui)">Vox AC30 Norm 160</span><span style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">A2 &middot; downloaded</span></span>
+              <span style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,77,0,.45);color:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:15px">+</span></div>
+            <div class="rigrow" style="border:1px solid var(--ink12)"><span class="thumb" style="margin-left:0;width:50px;height:50px"></span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:500 14px var(--ui)">MRSH JM50LD Crunch2</span><span style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">A2 &middot; downloaded</span></span>
+              <span style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,77,0,.45);color:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:15px">+</span></div>
+            <div class="rigrow" style="border:1px solid var(--ink12)"><span class="thumb" style="margin-left:0;width:50px;height:50px"></span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:500 14px var(--ui)">Fender Deluxe 5E3</span><span style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">A2 &middot; downloaded</span></span>
+              <span style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,77,0,.45);color:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:15px">+</span></div>
+            <div class="rigrow" style="border:1px solid var(--ink12)"><span class="thumb" style="margin-left:0;width:50px;height:50px"></span>
+              <span style="flex:1;min-width:0"><span style="display:block;font:500 14px var(--ui)">Mesa Boogie ST 4x12</span><span style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">IR &middot; downloaded</span></span>
+              <span style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,77,0,.45);color:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:15px">+</span></div>
+          </div>
+        </div>
+        <div class="nav">
+          <i class="off"><span>&#9654;</span><span>PLAY</span></i>
+          <i class="off"><span>&#8801;</span><span>RIG</span></i>
+          <i class="off"><span>&#9678;</span><span></span></i>
+          <i class="on"><span>&#8981;</span><span>TONES</span></i>
+          <i class="off"><span>&#8943;</span><span>MORE</span></i>
+        </div>
+      </div>
+      <figcaption>
+        <div class="cap-name">Tones</div>
+        <div class="cap-job">One screen, three sources &mdash; and the nav slot that PLAY moves into.</div>
+        <div class="cap-why">Browse, Favorites and Downloaded are <em>already one screen</em> with <code style="color:var(--accent-soft)">deckMode_</code> set to 0/1/2 &mdash; three nav slots spent on three values of one integer. Collapsing them costs nothing and frees the slot. The <strong style="color:var(--ink)">+</strong> adds straight to the live rig, so browse becomes the gear picker instead of duplicating it.</div>
+      </figcaption>
+    </figure>
+
+    <!-- ============ PEDAL ============ -->
+    <figure>
+      <div class="phone">
+        <div class="scr">
+          <div style="display:flex;align-items:center;gap:11px">
+            <span style="font-size:19px;color:var(--ink70)">&lsaquo;</span>
+            <span style="font:400 21px var(--display)">Pedal</span>
+          </div>
+          <div style="margin-top:12px;border:1px solid var(--ink12);border-radius:12px;padding:13px">
+            <div style="display:flex;align-items:center;gap:9px">
+              <b style="width:8px;height:8px;border-radius:50%;background:var(--green);display:block"></b>
+              <span style="flex:1;font:500 13px var(--ui)">FootCtrlPlus</span>
+              <span style="font:600 8px var(--ui);letter-spacing:.14em;color:rgba(242,238,230,.45)">KEYBOARD</span>
+            </div>
+            <div style="font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:8px;line-height:1.45">Keyboard mode sends no release, so hold and toggle are unavailable. Works while the app is open and the screen is on.</div>
+          </div>
+          <div style="margin-top:10px;border:1px solid rgba(255,178,77,.35);border-radius:12px;background:rgba(255,178,77,.06);padding:12px;display:flex;gap:10px">
+            <span style="font-size:13px;color:var(--amber)">&#9888;</span>
+            <span style="font:500 11px var(--ui);color:rgba(242,238,230,.75);line-height:1.45">CC 24 arrived 3 times and isn&rsquo;t bound. Did the pedal change bank?</span>
+          </div>
+          <div style="margin-top:14px;overflow:hidden;flex:1">
+            <span class="ml">ASSIGNMENTS</span>
+            <div style="margin-top:8px">
+              <div class="rigrow" style="border:1px solid var(--ink12)">
+                <span style="width:28px;height:28px;border-radius:8px;border:1px solid rgba(255,77,0,.5);display:flex;align-items:center;justify-content:center;font:600 11px var(--ui);color:var(--accent-soft)">A</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 13px var(--ui)">Scene 1 &middot; Base</span><span class="mono" style="display:block;font:500 9px var(--ui);color:rgba(242,238,230,.4);margin-top:3px">Key 65545</span></span>
+                <span style="font:600 7px var(--ui);letter-spacing:.12em;color:var(--green);border:1px solid rgba(63,174,106,.4);border-radius:99px;padding:3px 6px">INSTANT</span></div>
+              <div class="rigrow" style="border:1px solid var(--ink12)">
+                <span style="width:28px;height:28px;border-radius:8px;border:1px solid rgba(255,77,0,.5);display:flex;align-items:center;justify-content:center;font:600 11px var(--ui);color:var(--accent-soft)">B</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 13px var(--ui)">Scene 2 &middot; Chorus</span><span class="mono" style="display:block;font:500 9px var(--ui);color:rgba(242,238,230,.4);margin-top:3px">Key 65546</span></span>
+                <span style="font:600 7px var(--ui);letter-spacing:.12em;color:var(--green);border:1px solid rgba(63,174,106,.4);border-radius:99px;padding:3px 6px">INSTANT</span></div>
+              <div class="rigrow" style="border:1px solid var(--ink12)">
+                <span style="width:28px;height:28px;border-radius:8px;border:1px solid rgba(255,77,0,.5);display:flex;align-items:center;justify-content:center;font:600 11px var(--ui);color:var(--accent-soft)">C</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 13px var(--ui)">Scene 3 &middot; Solo</span><span class="mono" style="display:block;font:500 9px var(--ui);color:rgba(242,238,230,.4);margin-top:3px">Key 65547</span></span>
+                <span style="font:600 7px var(--ui);letter-spacing:.12em;color:var(--green);border:1px solid rgba(63,174,106,.4);border-radius:99px;padding:3px 6px">INSTANT</span></div>
+              <div class="rigrow" style="border:1px solid var(--ink12)">
+                <span style="width:28px;height:28px;border-radius:8px;border:1px solid rgba(255,77,0,.5);display:flex;align-items:center;justify-content:center;font:600 11px var(--ui);color:var(--accent-soft)">D</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 13px var(--ui)">Tuner + mute</span><span class="mono" style="display:block;font:500 9px var(--ui);color:rgba(242,238,230,.4);margin-top:3px">Key 65548</span></span>
+                <span style="font:600 7px var(--ui);letter-spacing:.12em;color:var(--green);border:1px solid rgba(63,174,106,.4);border-radius:99px;padding:3px 6px">INSTANT</span></div>
+              <div class="rigrow" style="border:1px solid var(--ink12)">
+                <span style="width:28px;height:28px;border-radius:8px;border:1px solid rgba(242,238,230,.18);display:flex;align-items:center;justify-content:center;font:600 11px var(--ui);color:var(--ink35)">&mdash;</span>
+                <span style="flex:1;min-width:0"><span style="display:block;font:500 13px var(--ui);color:var(--ink70)">Next rig</span><span class="mono" style="display:block;font:500 9px var(--ui);color:rgba(242,238,230,.4);margin-top:3px">unassigned</span></span>
+                <span style="font:600 7px var(--ui);letter-spacing:.12em;color:var(--amber);border:1px solid rgba(255,178,77,.4);border-radius:99px;padding:3px 6px">LOAD</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="nav">
+          <i class="off"><span>&#9654;</span><span>PLAY</span></i>
+          <i class="off"><span>&#8801;</span><span>RIG</span></i>
+          <i class="off"><span>&#9678;</span><span></span></i>
+          <i class="off"><span>&#8981;</span><span>TONES</span></i>
+          <i class="on"><span>&#8943;</span><span>MORE</span></i>
+        </div>
+      </div>
+      <figcaption>
+        <div class="cap-name">Pedal</div>
+        <div class="cap-job">Honest about the transport, and about what each action costs.</div>
+        <div class="cap-why">Every row carries <strong style="color:var(--green)">INSTANT</strong> or <strong style="color:var(--amber)">LOAD</strong>, driven off a compile-time enum attribute &mdash; add an action without classifying it and the build fails. The amber warning is the only defence against the Chocolate silently changing bank, after which A&ndash;D send different CCs and bindings fire the wrong thing with no trail.</div>
+      </figcaption>
+    </figure>
+
+    <!-- ============ GIG CHECK ============ -->
+    <figure>
+      <div class="phone">
+        <div class="scr">
+          <div style="display:flex;align-items:center;gap:11px">
+            <span style="font-size:19px;color:var(--ink70)">&lsaquo;</span>
+            <span style="font:400 21px var(--display)">Gig check</span>
+          </div>
+          <div style="font:500 11px var(--ui);color:rgba(242,238,230,.4);margin-top:6px">everything below is read from what the app already knows</div>
+          <div style="margin-top:16px;overflow:hidden;flex:1">
+            <div class="rigrow" style="border:1px solid var(--ink12);padding:13px">
+              <span style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(63,174,106,.5);background:rgba(63,174,106,.14);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--green)">&#10003;</span>
+              <span style="flex:1"><span style="display:block;font:500 13px var(--ui)">All rig models on disk</span><span class="mono" style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">6 of 6 &middot; nothing to download</span></span></div>
+            <div class="rigrow" style="border:1px solid var(--ink12);padding:13px">
+              <span style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(63,174,106,.5);background:rgba(63,174,106,.14);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--green)">&#10003;</span>
+              <span style="flex:1"><span style="display:block;font:500 13px var(--ui)">Pedal connected</span><span class="mono" style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">FootCtrlPlus &middot; keyboard mode</span></span></div>
+            <div class="rigrow" style="border:1px solid var(--ink12);padding:13px">
+              <span style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(63,174,106,.5);background:rgba(63,174,106,.14);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--green)">&#10003;</span>
+              <span style="flex:1"><span style="display:block;font:500 13px var(--ui)">Input device</span><span class="mono" style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">iRig HD X &middot; claimed</span></span></div>
+            <div class="rigrow" style="border:1px solid var(--ink12);padding:13px">
+              <span style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(63,174,106,.5);background:rgba(63,174,106,.14);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--green)">&#10003;</span>
+              <span style="flex:1"><span style="display:block;font:500 13px var(--ui)">Latency</span><span class="mono" style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">14 ms &middot; 192 frames</span></span></div>
+            <div class="rigrow" style="border:1px solid var(--ink12);padding:13px">
+              <span style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(63,174,106,.5);background:rgba(63,174,106,.14);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--green)">&#10003;</span>
+              <span style="flex:1"><span style="display:block;font:500 13px var(--ui)">CPU headroom</span><span class="mono" style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">61% &middot; 0 overruns</span></span></div>
+            <div class="rigrow" style="border:1px solid rgba(255,178,77,.4);background:rgba(255,178,77,.07);padding:13px">
+              <span style="width:22px;height:22px;border-radius:50%;border:1px solid rgba(255,178,77,.6);background:rgba(255,178,77,.14);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--amber)">!</span>
+              <span style="flex:1"><span style="display:block;font:500 13px var(--ui)">Battery</span><span class="mono" style="display:block;font:500 10px var(--ui);color:rgba(242,238,230,.45);margin-top:3px">28% &middot; ~40 min at this draw</span></span></div>
+          </div>
+        </div>
+        <div class="nav">
+          <i class="off"><span>&#9654;</span><span>PLAY</span></i>
+          <i class="off"><span>&#8801;</span><span>RIG</span></i>
+          <i class="off"><span>&#9678;</span><span></span></i>
+          <i class="off"><span>&#8981;</span><span>TONES</span></i>
+          <i class="on"><span>&#8943;</span><span>MORE</span></i>
+        </div>
+      </div>
+      <figcaption>
+        <div class="cap-name">Gig check</div>
+        <div class="cap-job">The preflight a player actually opens, built entirely from existing getters.</div>
+        <div class="cap-why">Nothing here needs new plumbing: <code style="color:var(--accent-soft)">isDownloaded</code>, <code style="color:var(--accent-soft)">hasOpenDevice</code>, the audio settings state, and <code style="color:var(--accent-soft)">cpuLoad()</code> / <code style="color:var(--accent-soft)">overCapacityCount()</code> &mdash; which already exist and are surfaced <em>nowhere</em>.</div>
+      </figcaption>
+    </figure>
+
+  </div>
+
+  <div class="note">
+    <strong>Rendering note.</strong> Fonts here stand in for Libre Caslon Display and Work Sans &mdash; the artifact sandbox blocks font CDNs, so these frames use a serif/sans pairing in the same roles. Colours, spacing and hierarchy are exact. The live versions are in your Claude Design project as <em>NAM Reimagined Hi-Fi</em>.
+  </div>
+</div>

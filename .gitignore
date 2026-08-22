@@ -27,3 +27,11 @@ Builds/Android/build/
 *.keystore
 Builds/Android/*.jks
 Builds/Android/**/*.jks
+
+# Competitor UI reference images: third-party copyrighted screenshots kept
+# locally as design study material. Not ours to redistribute.
+docs/superpowers/designs/refs/*.png
+docs/superpowers/designs/refs/*.jpg
+docs/superpowers/designs/refs/*.jpeg
+docs/superpowers/designs/refs/*.webp
+docs/superpowers/designs/refs/*.svg

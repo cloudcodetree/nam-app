@@ -1,0 +1,147 @@
+<title>How The Others Actually Work</title>
+<style>
+  :root{
+    --bg:#0b0a10; --card:#131119; --line:rgba(238,235,228,.11);
+    --ink:#eeebe4; --ink70:rgba(238,235,228,.70); --ink48:rgba(238,235,228,.48);
+    --accent:#ff5a1f; --accent2:#ffa06b; --good:#4fb477; --warn:#e8b04b;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  .wrap{max-width:920px;margin:0 auto;padding:60px 26px 90px}
+  .eyebrow{font:600 11px var(--sans);letter-spacing:.26em;text-transform:uppercase;color:var(--accent2)}
+  h1{font:400 clamp(32px,5vw,52px)/1.05 var(--serif);margin:14px 0 0;text-wrap:balance}
+  .sub{font-size:17px;line-height:1.65;color:var(--ink70);margin:18px 0 0;max-width:62ch}
+  h2{font:400 27px/1.2 var(--serif);margin:58px 0 4px}
+  h2 .n{font:600 11px var(--sans);letter-spacing:.2em;color:var(--accent);display:block;margin-bottom:9px}
+  p{font-size:15.5px;line-height:1.72;color:var(--ink70);max-width:66ch}
+  strong{color:var(--ink);font-weight:600}
+  em{color:var(--accent2);font-style:normal}
+  code{font:500 13.5px var(--mono);color:var(--accent2);background:rgba(255,90,31,.08);padding:1px 5px;border-radius:4px}
+  blockquote{
+    margin:22px 0;padding:16px 20px;border-left:3px solid var(--accent);
+    background:linear-gradient(90deg,rgba(255,90,31,.08),transparent 70%);
+    border-radius:0 10px 10px 0;
+  }
+  blockquote p{margin:0;color:var(--ink);font-size:16px}
+  blockquote cite{display:block;margin-top:9px;font-style:normal;font-size:13px;color:var(--ink48)}
+  .tw{overflow-x:auto;margin:24px 0;border:1px solid var(--line);border-radius:12px}
+  table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+  th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top;line-height:1.5}
+  th{font:600 10px var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--ink48);background:rgba(238,235,228,.03)}
+  td:first-child{color:var(--ink);font-weight:600;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  .tag{font:600 9px var(--sans);letter-spacing:.12em;padding:3px 7px;border-radius:99px;white-space:nowrap}
+  .t-inst{color:var(--good);border:1px solid rgba(79,180,119,.4)}
+  .t-load{color:var(--warn);border:1px solid rgba(232,176,75,.4)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:26px 0}
+  .card h3{font:600 12px var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--accent2);margin:0 0 12px}
+  .card p{margin:0 0 12px}
+  .card p:last-child{margin-bottom:0}
+  ul{padding-left:20px;max-width:66ch}
+  li{font-size:15.5px;line-height:1.7;color:var(--ink70);margin-bottom:11px}
+  li strong{color:var(--ink)}
+  .verdict{
+    margin:30px 0;padding:24px;border:1px solid rgba(255,90,31,.35);border-radius:14px;
+    background:rgba(255,90,31,.06)
+  }
+  .verdict h3{font:400 21px var(--serif);color:var(--ink);margin:0 0 12px}
+  .verdict p{color:var(--ink);max-width:none}
+  hr{border:none;border-top:1px solid var(--line);margin:52px 0}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Interaction study &middot; six modelers</div>
+  <h1>How the others actually work</h1>
+  <p class="sub">Not what they look like &mdash; what happens when you touch them. Drawn from manuals, firmware notes and owner complaints across HeadRush Prime, Quad Cortex, Nano Cortex, Helix Stadium, Darkglass Anagram and Dimehead.</p>
+
+  <h2><span class="n">01 &middot; The convergence</span>Every vendor built the same three tiers, for the same reason</h2>
+  <p>This is the most important structural fact in the whole study, and it isn&rsquo;t an aesthetic convention &mdash; it&rsquo;s a workaround for a physical cost.</p>
+
+  <div class="tw"><table>
+    <tr><th>Tier</th><th>What it is</th><th>Cost</th></tr>
+    <tr><td>Preset / Rig</td><td>The whole chain. Loading re-initialises every block.</td><td><span class="tag t-load">HAS A GAP</span></td></tr>
+    <tr><td>Scene / Snapshot</td><td>Parameter + bypass states <em>within</em> the loaded chain.</td><td><span class="tag t-inst">INSTANT</span></td></tr>
+    <tr><td>Stomp</td><td>One block&rsquo;s bypass, live under the foot.</td><td><span class="tag t-inst">INSTANT</span></td></tr>
+  </table></div>
+
+  <blockquote>
+    <p>Changing presets causes &ldquo;an expected split second of audio dropout, as switching between Presets re-initializes the whole signal chain.&rdquo;</p>
+    <cite>Neural DSP support &mdash; and this single sentence is why the scene tier exists at all</cite>
+  </blockquote>
+
+  <p>The middle tier was invented because the top tier is expensive. Scenes are gapless <em>precisely because everything is already loaded</em>. That is the entire trick, and it is available to us for free.</p>
+
+  <h2><span class="n">02 &middot; The rule</span>What a scene is <em>not</em> allowed to change</h2>
+  <p>Every vendor independently forbids the scene layer from touching anything that would force reallocation. They are explicit about it:</p>
+
+  <blockquote>
+    <p>&ldquo;All snapshots in a particular preset share the same models; you cannot, for example, add a US Deluxe Amp block in Snapshot 1 and switch its model to a Brit Plexi in Snapshot 2.&rdquo;</p>
+    <cite>Line 6 Helix manual</cite>
+  </blockquote>
+
+  <p>Nobody arrived at this by taste. They arrived at it because a scene that can swap a model is just a preset with extra steps &mdash; it reintroduces the gap, and then the tier has no reason to exist.</p>
+
+  <div class="verdict">
+    <h3>What this settles for us</h3>
+    <p><strong>A scene changes engine parameters and bypass states. It never touches the model or the IR.</strong> Different amp means different rig. That one rule makes every scene recall instant, allocation-free and incapable of failing &mdash; no load state, no crossfade problem, no failure path to design.</p>
+  </div>
+
+  <h2><span class="n">03 &middot; Switch budgets</span>Below six switches, everyone builds a mode system</h2>
+  <p>Switch counts in the wild: 3 (HX&nbsp;Stomp, Anagram), 4 (Dimehead, Nano Cortex&nbsp;&times;2, <strong>Chocolate Plus</strong>), 6 (Fractal FC-6, Morningstar MC6), 8&ndash;12 (Helix, Quad Cortex, HeadRush Prime).</p>
+
+  <div class="tw"><table>
+    <tr><th>Unit</th><th>How it stretches its switches</th></tr>
+    <tr><td>Quad Cortex</td><td>Four global modes &mdash; Preset / Scene / Stomp / <strong>Hybrid</strong>. Hybrid assigns a different mode to each <em>row</em>, so you don&rsquo;t have to pick one.</td></tr>
+    <tr><td>HeadRush Prime</td><td>Five modes across 12 switches; four corners spent on navigation. Mode changes by <strong>holding</strong> the top-right switch.</td></tr>
+    <tr><td>Helix Stadium</td><td>Capacitive touch as a third state: rest a toe to <em>jump the screen</em> to that switch&rsquo;s assignment without pressing it.</td></tr>
+    <tr><td>Anagram</td><td>Three switches, chords for banking. A+B previews the previous bank, B+C the next.</td></tr>
+    <tr><td>Nano Cortex</td><td>Two switches that are <em>also rotary encoders</em> &mdash; press, hold, and twist.</td></tr>
+  </table></div>
+
+  <div class="card">
+    <h3>The trap this sets for us</h3>
+    <p>The industry answer to a small switch count is a <strong>mode system</strong>, and every mode system is entered by a <em>hold</em> or a <em>chord</em>.</p>
+    <p>We can do neither. In HID keyboard mode the pedal sends no key-up, so <strong>hold is undetectable</strong>. And a two-switch chord may be swallowed by the pedal&rsquo;s own firmware as a bank change and never reach the app at all.</p>
+    <p>So we have four switches, no modes, and no gesture to change modes with &mdash; the scarcest budget in the study, with the fewest tools. Anything built on holds or chords is theatre.</p>
+  </div>
+
+  <p>Which forces the answer, and the answer is good: <strong>put all four switches on scenes.</strong> Four instant, gapless, cannot-fail actions. Rigs change by thumb between songs, where a gap is free. This is the one layout that spends a scarce budget on the tier that costs nothing.</p>
+
+  <h2><span class="n">04 &middot; Chain editing</span>Reordering is optional &mdash; two competitors ship without it</h2>
+  <p>We have been treating a reorderable chain as table stakes. The two products closest to ours don&rsquo;t have one:</p>
+
+  <ul>
+    <li><strong>Nano Cortex</strong> &mdash; &ldquo;the chain is FIXED and cannot be reordered anywhere, not on the device, not in the app.&rdquo; Seven fixed slots. Quad Cortex presets can&rsquo;t even be loaded, explicitly because of it.</li>
+    <li><strong>Dimehead</strong> &mdash; a NAM player with <em>no chain editing at all</em>. Editing means &ldquo;select what goes in each fixed slot and turn its knobs.&rdquo; 128 flat presets, no scenes, no modes, no layered abstraction. A deliberate simplicity choice.</li>
+    <li><strong>Free drag-reorder on a phone is the minority position</strong>, and where it exists it&rsquo;s paired with an unbounded chain &mdash; Mooer GE Labs offers unlimited drag-and-drop effects, and on an iPhone SE the amp labels are obscured by the effects below them.</li>
+  </ul>
+
+  <p>Our &uarr;&darr; buttons already sidestep the single most destructive defect in the corpus: on the Anagram, drag-to-reorder and swipe-to-scroll are the same gesture and the drag wins &mdash; <em>&ldquo;successful scrolling is more of a lottery.&rdquo;</em></p>
+
+  <h2><span class="n">05 &middot; The closest analogue</span>HeadRush already shipped our exact constraint</h2>
+  <blockquote>
+    <p>As of HeadRush OS v5.1, exactly <strong>one NAM file can be loaded natively per rig</strong>.</p>
+    <cite>HeadRush Prime / Core / Flex Prime firmware notes, August 2026</cite>
+  </blockquote>
+  <p>A $999 flagship with a 7-inch touchscreen landed on the same one-model-per-rig limit we have. It is not a deficiency to design around &mdash; it is the shape of the category. And their answer to it is instructive: the rig owns <em>everything else</em> &mdash; footswitch assignments, scene definitions, expression assignments, a colour, a tempo, a MIDI program number. The model is one ingredient; the rig is the performance unit.</p>
+
+  <div class="card">
+    <h3>Where we differ, and it matters</h3>
+    <p>In our app a rig is <code>{uid, name, chain, extra}</code>. It owns <strong>no engine parameters at all</strong> &mdash; gain and EQ are global and follow you across rig changes, and two rigs cannot be level-matched.</p>
+    <p>Every product in this study makes the preset own its parameters. That is the gap to close first, because scenes are meaningless until a rig owns something for a scene to override.</p>
+  </div>
+
+  <hr>
+
+  <h2><span class="n">06 &middot; Decisions</span>What this study actually settles</h2>
+  <ul>
+    <li><strong>Scenes flip engine nodes, never the model or IR.</strong> Industry-wide rule, arrived at independently by every vendor.</li>
+    <li><strong>All four switches go to scenes.</strong> We can&rsquo;t build a mode system, so we shouldn&rsquo;t need one.</li>
+    <li><strong>A rig must own its engine parameters.</strong> Currently it owns none. This blocks scenes, level-matching, and the claim that a rig is a sound.</li>
+    <li><strong>Keep the &uarr;&darr; reorder.</strong> Two close competitors ship no reordering at all; drag on a scroll surface is the corpus&rsquo;s worst defect.</li>
+    <li><strong>Nothing hides behind a hold or a chord.</strong> Not a preference &mdash; the hardware cannot express either.</li>
+  </ul>
+</div>
