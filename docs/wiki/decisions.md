@@ -3,6 +3,34 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-22** Ran a 9-agent research pass over HeadRush Prime/Core/Flex
+  Prime, Quad Cortex, Nano Cortex, Helix Stadium/XL, Darkglass Anagram and
+  Dimehead, plus lenses on stage-gear heuristics, mobile chain editing and
+  MIDI/expression binding UX. Full corpus:
+  `docs/superpowers/research/2026-08-22-modeler-ux-research.md`. Landed a
+  reusable `gear-usability` agent (`.claude/agents/`) and a five-screen design
+  (`NAM Rig Scene Editor Hi-Fi.dc.html`).
+  **The finding that changes our roadmap:** the synthesis asserted that with
+  ONE model + ONE IR "every audible change is a model swap -- there is no
+  cheap layer to hide behind", and killed scenes on that basis. It is FALSE.
+  `ToneEngine` already exposes gate, IR enable, 3-band EQ, delay, reverb,
+  in-gain, out-gain and whole-chain bypass as RT-safe instant setters --
+  **and delay/reverb are wired only to MainComponent.cpp (desktop), never to
+  the mobile UI.** The doctrine had confused StackModel's inert chain ROWS
+  with the engine's real fixed NODES. So scenes ARE buildable now, provided
+  they flip ENGINE NODES rather than chain rows.
+  Two more verified constraints worth keeping: **`Stack` carries no engine
+  parameters at all** (`{uid,name,chain,extra}`), so gain/EQ survive a rig
+  change and two rigs cannot be level-matched without a model change; and
+  **HID keyboard mode has no key-up**, so hold/long-press is undetectable on
+  the pedal as it ships and FirePolicy is inert for `ControlKind::Key`.
+  Also unbuilt and repeatedly requested by the evidence: a solo boost (free
+  via `setOutputDb`, already RT-safe), tuner-implies-mute, and rig rename --
+  every legibility rule is moot while names are "Rig 3".
+  Process lesson: the critique agent earned its keep. A quarter of the
+  synthesized principles restated what shipped on 2026-08-16/19, and the
+  central premise was wrong. Research fans out; a hostile reader is what makes
+  it usable.
 - **2026-08-20** **DI test-track tray shipped**, designed in Claude Design
   first (`NAM DI Tray Hi-Fi.dc.html`) and then implemented. It slides DOWN
   from the top -- Chris's call, and it is the better edge: a bottom tray would
