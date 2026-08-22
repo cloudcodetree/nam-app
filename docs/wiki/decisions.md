@@ -3,6 +3,23 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-22** **The swipe-card deck is NON-NEGOTIABLE.** Chris, flagging it
+  during the re-imagining work: "one thing I never want to lose is our
+  Tinder-like swipe option for browsing things." `layoutMode_ == 0` in
+  `PlayScreen.h:149` (swipe cards; 1 = detail list, 2/3 = grids), with
+  heart-tap / swipe-down to keep.
+  This is not a layout preference, it is the PRODUCT THESIS. The design system
+  states it outright -- tones are tracks with album artwork, you swipe prev
+  and next and heart the ones you keep, "a hi-fi music player, not a file
+  manager". Every competitor in the 2026-08-22 study browses tones as a LIST;
+  none of them swipes. It is the one interaction that is ours.
+  Binding consequence for any future IA change: the proposed TONES screen
+  (collapsing BROWSE/FAVORITES/DOWNLOADED into one segmented control) changes
+  which SOURCE is shown -- `deckMode_` -- and must NOT touch `layoutMode_`.
+  Source and layout are orthogonal and stay that way. The re-imagining's
+  suggestion that "four layout modes, two would do" is explicitly overruled
+  for mode 0; the grids are the negotiable ones, and they are Pro-gated
+  app-native value adds anyway.
 - **2026-08-22** The `gear-usability` agent re-imagined the app end to end.
   Design: `NAM Reimagined Hi-Fi.dc.html` (PLAY / RIG / TONES / PEDAL / GIG
   CHECK). **The finding is structural, not cosmetic: there is no "live rig" in

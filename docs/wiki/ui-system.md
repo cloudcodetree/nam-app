@@ -61,3 +61,17 @@ screen so a DI loop can be auditioned against the current tone from anywhere.
   muted for the duration, as audition does.
 - 34 tracks; the first 4 are bundled in the APK and the rest carry a `GET` tag
   because they fetch once and cache.
+
+## The swipe deck is the thesis (2026-08-22)
+
+`PlayScreen::layoutMode_ == 0` — swipe cards, heart-tap / swipe-down to keep.
+**Never remove it.** Chris: "one thing I never want to lose is our Tinder-like
+swipe option for browsing things."
+
+Tones are tracks with artwork; you swipe through them and keep the ones you
+like. Every competing modeler browses tones as a list — none of them swipes.
+It is the single interaction that is ours rather than borrowed.
+
+`deckMode_` (which source: browse / favorites / downloaded) and `layoutMode_`
+(how it is drawn: swipe / list / grids) are ORTHOGONAL. Any IA change may
+rearrange sources; none may take the swipe layout away.
