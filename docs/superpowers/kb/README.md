@@ -6,6 +6,20 @@ with. Collected 2026-08-22. **437,000 words of searchable text.**
 Purpose: so a design or architecture question gets answered from the vendor's
 own manual rather than from memory.
 
+## Who uses what
+
+The corpus is for **Claude Code**, which can grep. It is NOT for Claude Design.
+
+| Tool | Gets | Why |
+|---|---|---|
+| Claude Code | this corpus, `text/`, 437k words | it can search; it needs the exact manual paragraph |
+| Claude Design | `design-doctrine.md` + 22 curated UI screenshots, pushed into the Claude Design project | it cannot grep, and 437k words would drown it; it needs distilled rules and visual precedent |
+
+`design-doctrine.md` (also at `../designs/design-doctrine.md`) is the distillation
+— testable rules plus the antipattern checklist. When something here changes the
+doctrine, update BOTH: the doctrine file in the repo and the copy in the Claude
+Design project.
+
 ## How to use it
 
 Everything is extracted to plain text in `text/`. Grep it:
