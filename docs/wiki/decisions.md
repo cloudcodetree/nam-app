@@ -3,6 +3,37 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-22** The `gear-usability` agent re-imagined the app end to end.
+  Design: `NAM Reimagined Hi-Fi.dc.html` (PLAY / RIG / TONES / PEDAL / GIG
+  CHECK). **The finding is structural, not cosmetic: there is no "live rig" in
+  this application.** The live rig is a property of `StackDetailScreen` being
+  on screen -- `applyStackToEngine` early-returns unless
+  `current_ == stacksDetail_.get()` (AppShellStackApply.cpp:237), so
+  `stepStack` must call `openStackDetail()` to make any sound happen.
+  Navigation is not a side effect of a stomp; **navigation IS the mechanism.**
+  Every downstream pathology follows from that one fact: foot events yank you
+  into the editor mid-song, engine params are global instead of per-rig, and a
+  perform surface is literally unbuildable because it would have to BE the rig
+  editor to make sound. Fix the live-rig ownership and the app changes
+  character without a new pixel.
+  Two more verified: the cache-hit path calls `apply(localFile)` ->
+  `NamModel::load()` SYNCHRONOUSLY on the message thread
+  (AndroidToneServices.cpp:190) -- that is the real stomp-to-sound latency and
+  it is unmeasured; and `ApplyTimeout` is 30 s (AppShellStackApply.cpp:42), so
+  a failed load wedges rig switching for half a minute.
+  Proposed IA reclaims a nav slot for free: BROWSE/FAVORITES/DOWNLOADED are
+  already ONE screen with `deckMode_` 0/1/2, so they collapse to TONES and PLAY
+  moves in without touching the chrome contract.
+  Scene definition to build against: **a scene is a named SPARSE set of
+  overrides on one rig's engine parameters, and never touches the model or the
+  IR** -- so every recall is instant, allocation-free and cannot fail. Base +
+  override mask dissolves the Helix two-authorities bug by construction, and
+  scoping happens as a visible consequence of tweaking rather than behind Quad
+  Cortex's hidden 2-second long-press.
+  Needs decisions (NOT decided here): the perform lock vs CLAUDE.md's
+  "nav functional on every screen"; the nav relabel; and whether exposing
+  delay+reverb on mobile changes what NAM Player IS (a NAM+IR player vs a small
+  modeller). The DSP is written and RT-safe either way.
 - **2026-08-22** Ran a 9-agent research pass over HeadRush Prime/Core/Flex
   Prime, Quad Cortex, Nano Cortex, Helix Stadium/XL, Darkglass Anagram and
   Dimehead, plus lenses on stage-gear heuristics, mobile chain editing and
