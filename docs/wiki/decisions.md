@@ -3,6 +3,30 @@
 Newest first. One line per decision, with the WHY. Add an entry whenever a
 direction is chosen, reversed, or a constraint is discovered.
 
+- **2026-08-22** Built a competitor documentation knowledge base:
+  `docs/superpowers/kb/` -- 60 manuals, firmware changelogs and official guides
+  across Quad Cortex, Nano Cortex, HeadRush, Helix Stadium, Anagram and a
+  footswitch-UX set (Morningstar/Fractal/Dimehead), extracted to **437,000
+  words of greppable text**. Index committed; corpus gitignored as third-party
+  material. Required installing `poppler` (pdftotext) -- there was no PDF text
+  extractor on the machine, not even a macOS-native path.
+  **It immediately corrected a claim I had made.** I had stated the industry
+  rule as "a scene never touches the model OR the IR". The Helix Stadium 1.3
+  changelog says otherwise: *"Cab IRs Per Snapshot -- As with Helix/HX,
+  different Cab IRs in Stadium can now be recalled per snapshot"*, opt-in per
+  Cab block via a Snapshot Ctrl toggle, **off by default**.
+  So the real rule is narrower and more useful: **a scene may not change the
+  MODEL; an IR is a scoped, opt-in exception.** The reason is cost -- an IR is
+  a convolution buffer swap, a model is a neural-net load. That distinction
+  matters for us, because `ToneEngine::setImpulse` already takes a
+  `shared_ptr` under publish-then-retire, so IR-per-scene may be affordable
+  here for the same reason Line 6 decided it was affordable there. Worth
+  measuring before designing it in either direction.
+  Process note: 24 of the 60 documents are firmware changelogs, and they are
+  the highest-signal source in the set -- they record what shipped broken,
+  which manuals never do. Example: CorOS 4.0.0 added a user-configurable
+  *Hold Timing* menu (500ms-1s), a direct admission that a hardcoded gesture
+  timing was wrong.
 - **2026-08-22** **The swipe-card deck is NON-NEGOTIABLE.** Chris, flagging it
   during the re-imagining work: "one thing I never want to lose is our
   Tinder-like swipe option for browsing things." `layoutMode_ == 0` in

@@ -35,3 +35,10 @@ docs/superpowers/designs/refs/*.jpg
 docs/superpowers/designs/refs/*.jpeg
 docs/superpowers/designs/refs/*.webp
 docs/superpowers/designs/refs/*.svg
+
+# Competitor documentation KB: third-party manuals and changelogs kept locally
+# as study material. The README index is committed; the corpus is not.
+docs/superpowers/kb/src/
+docs/superpowers/kb/text/
+docs/superpowers/kb/_fetchlog.txt
+docs/superpowers/kb/_extractlog.txt
